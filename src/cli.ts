@@ -1,6 +1,8 @@
 #!/usr/bin/env bun
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { Command } from '@commander-js/extra-typings';
+import { version } from '../package.json';
 import { listCommand } from './commands/list.ts';
 import { addCommand } from './commands/add.ts';
 import { cloneCommand } from './commands/clone.ts';
@@ -8,14 +10,13 @@ import { removeCommand } from './commands/remove.ts';
 import { latestCommand } from './commands/latest.ts';
 import { adoptCommand } from './commands/adopt.ts';
 import { syncCommand } from './commands/sync.ts';
-import { print, printError } from './output.ts';
 
-type CommandOptions = {
+type CommandContext = {
   codeDir: string;
   configPath: string;
 };
 
-function getCommandOptions(): CommandOptions {
+function getCommandContext(): CommandContext {
   const codeDir = join(homedir(), 'code');
   return {
     codeDir,
@@ -23,95 +24,62 @@ function getCommandOptions(): CommandOptions {
   };
 }
 
-function printUsage(): void {
-  print(`repos - Git repository manager
+const program = new Command()
+  .name('repos')
+  .description('Git repository manager')
+  .version(version, '-v, --version');
 
-Usage: repos <command> [options]
+program
+  .command('list')
+  .description('List all tracked repositories')
+  .action(async () => {
+    await listCommand(getCommandContext());
+  });
 
-Commands:
-  list              List all tracked repositories
-  add <url>         Clone a repo and add it to tracking
-  clone [name]      Clone repos from config (all or specific)
-  remove <name>     Remove a repo from tracking
-    --delete        Also delete the directory
-  latest            Pull all repos (parallel)
-  adopt             Add existing repos to config
-  sync              Adopt existing + clone missing repos
+program
+  .command('add')
+  .description('Clone a repo and add it to tracking')
+  .argument('<url>', 'Git repository URL')
+  .action(async (url) => {
+    await addCommand(getCommandContext(), url);
+  });
 
-Examples:
-  repos add git@github.com:user/repo.git
-  repos clone
-  repos clone my-repo
-  repos remove my-repo --delete
-  repos sync`);
-}
+program
+  .command('clone')
+  .description('Clone repos from config (all or specific)')
+  .argument('[name]', 'Specific repo name to clone')
+  .action(async (name) => {
+    await cloneCommand(getCommandContext(), name);
+  });
 
-async function main(): Promise<void> {
-  const args = process.argv.slice(2);
-  const command = args[0];
+program
+  .command('remove')
+  .description('Remove a repo from tracking')
+  .argument('<name>', 'Repo name to remove')
+  .option('-d, --delete', 'Also delete the directory')
+  .action(async (name, options) => {
+    await removeCommand(getCommandContext(), name, options.delete ?? false);
+  });
 
-  if (!command || command === '--help' || command === '-h') {
-    printUsage();
-    return;
-  }
+program
+  .command('latest')
+  .description('Pull all repos (parallel)')
+  .action(async () => {
+    await latestCommand(getCommandContext());
+  });
 
-  const options = getCommandOptions();
+program
+  .command('adopt')
+  .description('Add existing repos to config')
+  .action(async () => {
+    await adoptCommand(getCommandContext());
+  });
 
-  switch (command) {
-    case 'list':
-      await listCommand(options);
-      break;
+program
+  .command('sync')
+  .description('Adopt existing + clone missing repos')
+  .action(async () => {
+    await syncCommand(getCommandContext());
+  });
 
-    case 'add': {
-      const url = args[1];
-      if (!url) {
-        printError('Error: URL required');
-        printError('Usage: repos add <url>');
-        process.exit(1);
-      }
-      await addCommand(options, url);
-      break;
-    }
-
-    case 'clone': {
-      const name = args[1];
-      await cloneCommand(options, name);
-      break;
-    }
-
-    case 'remove': {
-      const name = args[1];
-      if (!name) {
-        printError('Error: repo name required');
-        printError('Usage: repos remove <name> [--delete]');
-        process.exit(1);
-      }
-      const deleteDir = args.includes('--delete');
-      await removeCommand(options, name, deleteDir);
-      break;
-    }
-
-    case 'latest':
-      await latestCommand(options);
-      break;
-
-    case 'adopt':
-      await adoptCommand(options);
-      break;
-
-    case 'sync':
-      await syncCommand(options);
-      break;
-
-    default:
-      printError(`Unknown command: ${command}`);
-      printUsage();
-      process.exit(1);
-  }
-}
-
-main().catch((err: unknown) => {
-  const message = err instanceof Error ? err.message : 'Unknown error';
-  printError(`Fatal error: ${message}`);
-  process.exit(1);
-});
+program.parse();

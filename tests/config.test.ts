@@ -14,61 +14,59 @@ import type { ReposConfig, RepoEntry } from '../src/types.ts';
 
 describe('extractRepoName', () => {
   test('extracts name from SSH URL with .git suffix', () => {
-    const result = extractRepoName('git@github.com:user/my-repo.git');
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.data).toBe('my-repo');
-    }
+    expect(extractRepoName('git@github.com:user/my-repo.git')).toEqual({
+      success: true,
+      data: 'my-repo',
+    });
   });
 
   test('extracts name from SSH URL without .git suffix', () => {
-    const result = extractRepoName('git@github.com:user/my-repo');
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.data).toBe('my-repo');
-    }
+    expect(extractRepoName('git@github.com:user/my-repo')).toEqual({
+      success: true,
+      data: 'my-repo',
+    });
   });
 
   test('extracts name from HTTPS URL with .git suffix', () => {
-    const result = extractRepoName('https://github.com/user/my-repo.git');
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.data).toBe('my-repo');
-    }
+    expect(extractRepoName('https://github.com/user/my-repo.git')).toEqual({
+      success: true,
+      data: 'my-repo',
+    });
   });
 
   test('extracts name from HTTPS URL without .git suffix', () => {
-    const result = extractRepoName('https://github.com/user/my-repo');
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.data).toBe('my-repo');
-    }
+    expect(extractRepoName('https://github.com/user/my-repo')).toEqual({
+      success: true,
+      data: 'my-repo',
+    });
   });
 
   test('extracts name from GitLab SSH URL', () => {
-    const result = extractRepoName('git@gitlab.com:group/subgroup/project.git');
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.data).toBe('project');
-    }
+    expect(extractRepoName('git@gitlab.com:group/subgroup/project.git')).toEqual({
+      success: true,
+      data: 'project',
+    });
   });
 
   test('extracts name from self-hosted git URL', () => {
-    const result = extractRepoName('git@git.company.com:team/service.git');
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.data).toBe('service');
-    }
+    expect(extractRepoName('git@git.company.com:team/service.git')).toEqual({
+      success: true,
+      data: 'service',
+    });
   });
 
   test('returns error for empty URL', () => {
-    const result = extractRepoName('');
-    expect(result.success).toBe(false);
+    expect(extractRepoName('')).toEqual({
+      success: false,
+      error: 'URL is empty',
+    });
   });
 
   test('returns error for URL without repo name', () => {
-    const result = extractRepoName('https://github.com/');
-    expect(result.success).toBe(false);
+    expect(extractRepoName('https://github.com/')).toEqual({
+      success: false,
+      error: 'Could not extract repo name from URL',
+    });
   });
 });
 
@@ -82,9 +80,9 @@ describe('config manipulation functions', () => {
   describe('addRepoToConfig', () => {
     test('adds repo to empty config', () => {
       const emptyConfig = { repos: [] } satisfies ReposConfig;
-      const result = addRepoToConfig(emptyConfig, sampleRepo);
-      expect(result.repos).toHaveLength(1);
-      expect(result.repos[0]).toEqual(sampleRepo);
+      expect(addRepoToConfig(emptyConfig, sampleRepo)).toEqual({
+        repos: [sampleRepo],
+      });
     });
 
     test('adds repo to existing config', () => {
@@ -94,55 +92,57 @@ describe('config manipulation functions', () => {
         url: 'git@github.com:user/another-repo.git',
         branch: 'develop',
       } satisfies RepoEntry;
-      const result = addRepoToConfig(configWithRepo, newRepo);
-      expect(result.repos).toHaveLength(2);
-      expect(result.repos[1]).toEqual(newRepo);
+      expect(addRepoToConfig(configWithRepo, newRepo)).toEqual({
+        repos: [sampleRepo, newRepo],
+      });
     });
 
     test('does not mutate original config', () => {
       const emptyConfig = { repos: [] } satisfies ReposConfig;
       addRepoToConfig(emptyConfig, sampleRepo);
-      expect(emptyConfig.repos).toHaveLength(0);
+      expect(emptyConfig).toEqual({ repos: [] });
     });
   });
 
   describe('removeRepoFromConfig', () => {
     test('removes repo by name', () => {
       const configWithRepo = { repos: [sampleRepo] } satisfies ReposConfig;
-      const result = removeRepoFromConfig(configWithRepo, 'test-repo');
-      expect(result.repos).toHaveLength(0);
+      expect(removeRepoFromConfig(configWithRepo, 'test-repo')).toEqual({
+        repos: [],
+      });
     });
 
     test('returns unchanged config if repo not found', () => {
       const configWithRepo = { repos: [sampleRepo] } satisfies ReposConfig;
-      const result = removeRepoFromConfig(configWithRepo, 'nonexistent');
-      expect(result.repos).toHaveLength(1);
+      expect(removeRepoFromConfig(configWithRepo, 'nonexistent')).toEqual({
+        repos: [sampleRepo],
+      });
     });
 
     test('does not mutate original config', () => {
       const configWithRepo = { repos: [sampleRepo] } satisfies ReposConfig;
       removeRepoFromConfig(configWithRepo, 'test-repo');
-      expect(configWithRepo.repos).toHaveLength(1);
+      expect(configWithRepo).toEqual({ repos: [sampleRepo] });
     });
   });
 
   describe('updateRepoBranch', () => {
     test('updates branch for existing repo', () => {
       const configWithRepo = { repos: [sampleRepo] } satisfies ReposConfig;
-      const result = updateRepoBranch(configWithRepo, 'test-repo', 'develop');
-      expect(result.repos[0].branch).toBe('develop');
+      expect(updateRepoBranch(configWithRepo, 'test-repo', 'develop')).toEqual({
+        repos: [{ ...sampleRepo, branch: 'develop' }],
+      });
     });
 
     test('returns unchanged config if repo not found', () => {
       const configWithRepo = { repos: [sampleRepo] } satisfies ReposConfig;
-      const result = updateRepoBranch(configWithRepo, 'nonexistent', 'develop');
-      expect(result).toEqual(configWithRepo);
+      expect(updateRepoBranch(configWithRepo, 'nonexistent', 'develop')).toEqual(configWithRepo);
     });
 
     test('does not mutate original config', () => {
       const configWithRepo = { repos: [sampleRepo] } satisfies ReposConfig;
       updateRepoBranch(configWithRepo, 'test-repo', 'develop');
-      expect(configWithRepo.repos[0].branch).toBe('main');
+      expect(configWithRepo).toEqual({ repos: [sampleRepo] });
     });
   });
 
@@ -175,11 +175,10 @@ describe('config file operations', () => {
 
   describe('readConfig', () => {
     test('returns empty config if file does not exist', async () => {
-      const result = await readConfig(testConfigPath);
-      expect(result.success).toBe(true);
-      if (result.success) {
-        expect(result.data.repos).toHaveLength(0);
-      }
+      expect(await readConfig(testConfigPath)).toEqual({
+        success: true,
+        data: { repos: [] },
+      });
     });
 
     test('reads existing config file', async () => {
@@ -190,19 +189,19 @@ describe('config file operations', () => {
       } satisfies ReposConfig;
       await Bun.write(testConfigPath, JSON.stringify(config, null, 2));
 
-      const result = await readConfig(testConfigPath);
-      expect(result.success).toBe(true);
-      if (result.success) {
-        expect(result.data.repos).toHaveLength(1);
-        expect(result.data.repos[0].name).toBe('test');
-      }
+      expect(await readConfig(testConfigPath)).toEqual({
+        success: true,
+        data: config,
+      });
     });
 
     test('returns error for invalid JSON', async () => {
       await Bun.write(testConfigPath, 'not valid json');
 
-      const result = await readConfig(testConfigPath);
-      expect(result.success).toBe(false);
+      expect(await readConfig(testConfigPath)).toEqual({
+        success: false,
+        error: 'Failed to parse config file',
+      });
     });
   });
 
@@ -214,15 +213,15 @@ describe('config file operations', () => {
         ],
       } satisfies ReposConfig;
 
-      const result = await writeConfig(testConfigPath, config);
-      expect(result.success).toBe(true);
+      expect(await writeConfig(testConfigPath, config)).toEqual({
+        success: true,
+        data: undefined,
+      });
 
-      const readResult = await readConfig(testConfigPath);
-      expect(readResult.success).toBe(true);
-      if (readResult.success) {
-        expect(readResult.data.repos).toHaveLength(1);
-        expect(readResult.data.repos[0].name).toBe('test');
-      }
+      expect(await readConfig(testConfigPath)).toEqual({
+        success: true,
+        data: config,
+      });
     });
 
     test('overwrites existing config', async () => {
@@ -236,11 +235,10 @@ describe('config file operations', () => {
       await writeConfig(testConfigPath, config1);
       await writeConfig(testConfigPath, config2);
 
-      const readResult = await readConfig(testConfigPath);
-      expect(readResult.success).toBe(true);
-      if (readResult.success) {
-        expect(readResult.data.repos[0].name).toBe('new');
-      }
+      expect(await readConfig(testConfigPath)).toEqual({
+        success: true,
+        data: config2,
+      });
     });
   });
 });

@@ -44,6 +44,8 @@ bun test              # Run all tests
 bun test:watch        # Watch mode
 ```
 
+ALWAYS write assertions on the complete output of a function or command for example `expect(result).toBe(...)` instead of `expect(result.status).toBe(...)` or `expect(result).toContain(...)`
+
 ## Publishing
 
 Uses changesets for versioning:

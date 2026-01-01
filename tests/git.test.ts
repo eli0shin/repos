@@ -13,14 +13,17 @@ import {
 
 describe('runGitCommand', () => {
   test('runs git version successfully', async () => {
-    const result = await runGitCommand(['--version']);
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain('git version');
+    expect(await runGitCommand(['--version'])).toEqual({
+      stdout: expect.stringMatching(/^git version \d+\.\d+\.\d+/),
+      stderr: '',
+      exitCode: 0,
+    });
   });
 
   test('returns non-zero exit code for invalid command', async () => {
     const result = await runGitCommand(['invalid-command-that-does-not-exist']);
     expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toMatch(/not a git command/i);
   });
 });
 
@@ -71,26 +74,25 @@ describe('getCurrentBranch', () => {
   });
 
   test('returns current branch name', async () => {
-    const result = await getCurrentBranch(testDir);
-    expect(result.success).toBe(true);
-    if (result.success) {
-      // Default branch could be 'main' or 'master' depending on git config
-      expect(result.data === 'main' || result.data === 'master').toBe(true);
-    }
+    expect(await getCurrentBranch(testDir)).toSatisfy(
+      (r: { success: boolean; data?: string }) =>
+        r.success === true && (r.data === 'main' || r.data === 'master')
+    );
   });
 
   test('returns branch name after checkout', async () => {
     await runGitCommand(['checkout', '-b', 'feature'], testDir);
-    const result = await getCurrentBranch(testDir);
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.data).toBe('feature');
-    }
+    expect(await getCurrentBranch(testDir)).toEqual({
+      success: true,
+      data: 'feature',
+    });
   });
 
   test('returns error for non-git directory', async () => {
-    const result = await getCurrentBranch('/tmp');
-    expect(result.success).toBe(false);
+    expect(await getCurrentBranch('/tmp')).toEqual({
+      success: false,
+      error: expect.stringMatching(/fatal|not a git repository/i),
+    });
   });
 });
 
@@ -114,20 +116,17 @@ describe('findGitRepos', () => {
 
   test('finds all git repos in directory', async () => {
     const repos = await findGitRepos(testDir);
-    expect(repos).toHaveLength(2);
-    expect(repos).toContain('repo1');
-    expect(repos).toContain('repo2');
+    expect(repos.sort()).toEqual(['repo1', 'repo2']);
   });
 
   test('does not include non-git directories', async () => {
     const repos = await findGitRepos(testDir);
-    expect(repos).not.toContain('not-a-repo');
+    expect(repos.sort()).toEqual(['repo1', 'repo2']);
   });
 
   test('returns empty array for directory with no repos', async () => {
     await mkdir(join(testDir, 'empty'), { recursive: true });
-    const repos = await findGitRepos(join(testDir, 'empty'));
-    expect(repos).toHaveLength(0);
+    expect(await findGitRepos(join(testDir, 'empty'))).toEqual([]);
   });
 });
 
@@ -148,16 +147,17 @@ describe('getRemoteUrl', () => {
       ['remote', 'add', 'origin', 'git@github.com:user/repo.git'],
       testDir
     );
-    const result = await getRemoteUrl(testDir);
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.data).toBe('git@github.com:user/repo.git');
-    }
+    expect(await getRemoteUrl(testDir)).toEqual({
+      success: true,
+      data: 'git@github.com:user/repo.git',
+    });
   });
 
   test('returns error when no remote', async () => {
-    const result = await getRemoteUrl(testDir);
-    expect(result.success).toBe(false);
+    expect(await getRemoteUrl(testDir)).toEqual({
+      success: false,
+      error: 'No remote origin found',
+    });
   });
 });
 
@@ -185,12 +185,11 @@ describe('cloneRepo', () => {
   test('clones a repository successfully', async () => {
     const targetDir = join(testDir, 'cloned');
     const result = await cloneRepo(sourceDir, targetDir);
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(
-        result.data.branch === 'main' || result.data.branch === 'master'
-      ).toBe(true);
-    }
+    expect(result).toSatisfy(
+      (r: { success: boolean; data?: { branch: string } }) =>
+        r.success === true &&
+        (r.data?.branch === 'main' || r.data?.branch === 'master')
+    );
     expect(await isGitRepo(targetDir)).toBe(true);
   });
 
@@ -199,8 +198,10 @@ describe('cloneRepo', () => {
     await mkdir(targetDir, { recursive: true });
     await Bun.write(join(targetDir, 'file.txt'), 'exists');
 
-    const result = await cloneRepo(sourceDir, targetDir);
-    expect(result.success).toBe(false);
+    expect(await cloneRepo(sourceDir, targetDir)).toEqual({
+      success: false,
+      error: 'Target directory already exists and is not empty',
+    });
   });
 });
 
@@ -235,12 +236,16 @@ describe('pullCurrentBranch', () => {
     await runGitCommand(['commit', '-m', 'initial'], localDir);
     await runGitCommand(['push', '-u', 'origin', 'HEAD'], localDir);
 
-    const result = await pullCurrentBranch(localDir);
-    expect(result.success).toBe(true);
+    expect(await pullCurrentBranch(localDir)).toEqual({
+      success: true,
+      data: { updated: false },
+    });
   });
 
   test('returns error for non-git directory', async () => {
-    const result = await pullCurrentBranch(testDir);
-    expect(result.success).toBe(false);
+    expect(await pullCurrentBranch(testDir)).toEqual({
+      success: false,
+      error: expect.stringMatching(/fatal|not a git repository/i),
+    });
   });
 });

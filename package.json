@@ -37,5 +37,9 @@
     "typescript": "^5.9.3"
   },
   "author": "@eli0shin",
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "@commander-js/extra-typings": "^14.0.0",
+    "commander": "^14.0.2"
+  }
 }
