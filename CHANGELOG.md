@@ -1,5 +1,11 @@
 # repos
 
+## 0.2.3
+
+### Patch Changes
+
+- [#6](https://github.com/eli0shin/repos/pull/6) [`da59340`](https://github.com/eli0shin/repos/commit/da593401dd709c9486a503f7405872e2f001a3f1) Thanks [@eli0shin](https://github.com/eli0shin)! - Consolidate release workflow into single job to fix binary publishing. Binaries are now built and uploaded in the same workflow run after changesets creates a release, avoiding GitHub's limitation where GITHUB_TOKEN events don't trigger other workflows.
+
 ## 0.2.2
 
 ### Patch Changes
