@@ -13,7 +13,8 @@
     "format": "prettier --check .",
     "format:fix": "prettier --write .",
     "test": "bun test",
-    "test:watch": "bun test tests/ --watch"
+    "test:watch": "bun test tests/ --watch",
+    "prepare": "husky"
   },
   "devDependencies": {
     "@changesets/changelog-github": "^0.5.2",
@@ -24,6 +25,8 @@
     "eslint": "^9.39.2",
     "eslint-for-ai": "^1.0.10",
     "eslint-import-resolver-typescript": "^4.4.4",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.2.7",
     "prettier": "^3.7.4",
     "typescript": "^5.9.3"
   },
@@ -32,5 +35,14 @@
   "dependencies": {
     "@commander-js/extra-typings": "^14.0.0",
     "commander": "^14.0.2"
+  },
+  "lint-staged": {
+    "*.{ts,js,mjs}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md}": [
+      "prettier --write"
+    ]
   }
 }
