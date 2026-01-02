@@ -1,5 +1,11 @@
 # repos
 
+## 0.2.1
+
+### Patch Changes
+
+- [#2](https://github.com/eli0shin/repos/pull/2) [`7b2cb84`](https://github.com/eli0shin/repos/commit/7b2cb84811811af069d9c47e70b760c375a32cd3) Thanks [@eli0shin](https://github.com/eli0shin)! - Fix release workflow to actually publish binaries to GitHub releases. Split binary building into a separate workflow triggered by release events and use bun cross-compilation from a single Linux runner instead of a matrix build.
+
 ## 0.2.0
 
 ### Minor Changes
