@@ -1,5 +1,11 @@
 # repos
 
+## 0.2.2
+
+### Patch Changes
+
+- [#4](https://github.com/eli0shin/repos/pull/4) [`544c4bf`](https://github.com/eli0shin/repos/commit/544c4bf36734a312f4c1b314bce8177683147bff) Thanks [@eli0shin](https://github.com/eli0shin)! - Add privatePackages configuration to enable changesets to create git tags for private packages, fixing GitHub release creation in the release workflow.
+
 ## 0.2.1
 
 ### Patch Changes
