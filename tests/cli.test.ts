@@ -114,4 +114,3 @@ describe('CLI remove command', () => {
     });
   });
 });
-

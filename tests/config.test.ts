@@ -42,7 +42,9 @@ describe('extractRepoName', () => {
   });
 
   test('extracts name from GitLab SSH URL', () => {
-    expect(extractRepoName('git@gitlab.com:group/subgroup/project.git')).toEqual({
+    expect(
+      extractRepoName('git@gitlab.com:group/subgroup/project.git')
+    ).toEqual({
       success: true,
       data: 'project',
     });
@@ -136,7 +138,9 @@ describe('config manipulation functions', () => {
 
     test('returns unchanged config if repo not found', () => {
       const configWithRepo = { repos: [sampleRepo] } satisfies ReposConfig;
-      expect(updateRepoBranch(configWithRepo, 'nonexistent', 'develop')).toEqual(configWithRepo);
+      expect(
+        updateRepoBranch(configWithRepo, 'nonexistent', 'develop')
+      ).toEqual(configWithRepo);
     });
 
     test('does not mutate original config', () => {
