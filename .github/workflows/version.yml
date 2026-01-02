@@ -1,0 +1,80 @@
+name: Version
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      published: ${{ steps.changesets.outputs.published }}
+      publishedPackages: ${{ steps.changesets.outputs.publishedPackages }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Build
+        run: bun run build
+
+      - name: Test
+        run: bun run test
+
+      - name: Create Release Pull Request or Publish
+        id: changesets
+        uses: changesets/action@v1
+        with:
+          version: bunx changeset version
+          publish: echo "Release created"
+          title: 'chore: version packages'
+          createGithubReleases: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-binaries:
+    needs: version
+    if: needs.version.outputs.published == 'true'
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: bun-linux-x64
+            artifact: repos-linux-x64
+          - os: ubuntu-latest
+            target: bun-linux-arm64
+            artifact: repos-linux-arm64
+          - os: macos-latest
+            target: bun-darwin-arm64
+            artifact: repos-darwin-arm64
+          - os: macos-13
+            target: bun-darwin-x64
+            artifact: repos-darwin-x64
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Build binary
+        run: bun build src/cli.ts --compile --target=${{ matrix.target }} --outfile ${{ matrix.artifact }}
+
+      - name: Get version
+        id: version
+        run: echo "version=$(jq -r .version package.json)" >> $GITHUB_OUTPUT
+
+      - name: Upload to release
+        run: gh release upload "repos@${{ steps.version.outputs.version }}" ${{ matrix.artifact }} --clobber
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

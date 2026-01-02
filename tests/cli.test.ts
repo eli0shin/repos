@@ -53,6 +53,7 @@ Commands:
   latest                   Pull all repos (parallel)
   adopt                    Add existing repos to config
   sync                     Adopt existing + clone missing repos
+  update                   Update repos CLI to latest version
   help [command]           display help for command
 `;
 

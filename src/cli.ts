@@ -10,6 +10,7 @@ import { removeCommand } from './commands/remove.ts';
 import { latestCommand } from './commands/latest.ts';
 import { adoptCommand } from './commands/adopt.ts';
 import { syncCommand } from './commands/sync.ts';
+import { updateCommand } from './commands/update.ts';
 
 type CommandContext = {
   codeDir: string;
@@ -80,6 +81,13 @@ program
   .description('Adopt existing + clone missing repos')
   .action(async () => {
     await syncCommand(getCommandContext());
+  });
+
+program
+  .command('update')
+  .description('Update repos CLI to latest version')
+  .action(async () => {
+    await updateCommand();
   });
 
 program.parse();

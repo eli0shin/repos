@@ -11,10 +11,15 @@ import {
   pullCurrentBranch,
 } from '../src/git.ts';
 
+function matchString(regex: RegExp): string {
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+  return expect.stringMatching(regex) as unknown as string;
+}
+
 describe('runGitCommand', () => {
   test('runs git version successfully', async () => {
     expect(await runGitCommand(['--version'])).toEqual({
-      stdout: expect.stringMatching(/^git version \d+\.\d+\.\d+/),
+      stdout: matchString(/^git version \d+\.\d+\.\d+/),
       stderr: '',
       exitCode: 0,
     });
@@ -91,7 +96,7 @@ describe('getCurrentBranch', () => {
   test('returns error for non-git directory', async () => {
     expect(await getCurrentBranch('/tmp')).toEqual({
       success: false,
-      error: expect.stringMatching(/fatal|not a git repository/i),
+      error: matchString(/fatal|not a git repository/i),
     });
   });
 });
@@ -245,7 +250,7 @@ describe('pullCurrentBranch', () => {
   test('returns error for non-git directory', async () => {
     expect(await pullCurrentBranch(testDir)).toEqual({
       success: false,
-      error: expect.stringMatching(/fatal|not a git repository/i),
+      error: matchString(/fatal|not a git repository/i),
     });
   });
 });
