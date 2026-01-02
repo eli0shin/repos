@@ -1,15 +1,10 @@
-import { join } from 'node:path';
+import type { CommandContext } from '../cli.ts';
 import { readConfig, findRepo } from '../config.ts';
 import { cloneRepo, isGitRepo } from '../git.ts';
 import { print, printError } from '../output.ts';
 
-type CloneContext = {
-  codeDir: string;
-  configPath: string;
-};
-
 export async function cloneCommand(
-  ctx: CloneContext,
+  ctx: CommandContext,
   name?: string
 ): Promise<void> {
   const configResult = await readConfig(ctx.configPath);
@@ -32,14 +27,13 @@ export async function cloneCommand(
       process.exit(1);
     }
 
-    const targetDir = join(ctx.codeDir, repo.name);
-    if (await isGitRepo(targetDir)) {
+    if (await isGitRepo(repo.path)) {
       print(`"${repo.name}" already exists, skipping`);
       return;
     }
 
     print(`Cloning ${repo.name}...`);
-    const result = await cloneRepo(repo.url, targetDir);
+    const result = await cloneRepo(repo.url, repo.path);
     if (!result.success) {
       printError(`Error cloning ${repo.name}: ${result.error}`);
       process.exit(1);
@@ -52,15 +46,13 @@ export async function cloneCommand(
   let skipped = 0;
 
   for (const repo of repos) {
-    const targetDir = join(ctx.codeDir, repo.name);
-
-    if (await isGitRepo(targetDir)) {
+    if (await isGitRepo(repo.path)) {
       skipped++;
       continue;
     }
 
     print(`Cloning ${repo.name}...`);
-    const result = await cloneRepo(repo.url, targetDir);
+    const result = await cloneRepo(repo.url, repo.path);
     if (!result.success) {
       printError(`Error cloning ${repo.name}: ${result.error}`);
       continue;

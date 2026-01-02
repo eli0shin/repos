@@ -1,8 +1,7 @@
 #!/usr/bin/env bun
-import { homedir } from 'node:os';
-import { join } from 'node:path';
 import { Command } from '@commander-js/extra-typings';
 import { version } from '../package.json';
+import { getConfigPath } from './config.ts';
 import { listCommand } from './commands/list.ts';
 import { addCommand } from './commands/add.ts';
 import { cloneCommand } from './commands/clone.ts';
@@ -12,16 +11,13 @@ import { adoptCommand } from './commands/adopt.ts';
 import { syncCommand } from './commands/sync.ts';
 import { updateCommand } from './commands/update.ts';
 
-type CommandContext = {
-  codeDir: string;
+export type CommandContext = {
   configPath: string;
 };
 
 function getCommandContext(): CommandContext {
-  const codeDir = join(homedir(), 'code');
   return {
-    codeDir,
-    configPath: join(codeDir, 'repos.json'),
+    configPath: getConfigPath(),
   };
 }
 

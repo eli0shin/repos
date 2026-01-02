@@ -1,8 +1,10 @@
 import { describe, expect, test, beforeEach, afterEach } from 'bun:test';
 import { mkdir, rm } from 'node:fs/promises';
+import { homedir } from 'node:os';
 import { join } from 'node:path';
 import {
   extractRepoName,
+  getConfigPath,
   readConfig,
   writeConfig,
   addRepoToConfig,
@@ -11,6 +13,30 @@ import {
   findRepo,
 } from '../src/config.ts';
 import type { ReposConfig, RepoEntry } from '../src/types.ts';
+
+describe('getConfigPath', () => {
+  const originalXdgConfigHome = process.env.XDG_CONFIG_HOME;
+
+  afterEach(() => {
+    if (originalXdgConfigHome === undefined) {
+      delete process.env.XDG_CONFIG_HOME;
+    } else {
+      process.env.XDG_CONFIG_HOME = originalXdgConfigHome;
+    }
+  });
+
+  test('uses XDG_CONFIG_HOME when set', () => {
+    process.env.XDG_CONFIG_HOME = '/custom/config';
+    expect(getConfigPath()).toBe('/custom/config/repos/config.json');
+  });
+
+  test('falls back to ~/.config when XDG_CONFIG_HOME not set', () => {
+    delete process.env.XDG_CONFIG_HOME;
+    expect(getConfigPath()).toBe(
+      join(homedir(), '.config', 'repos', 'config.json')
+    );
+  });
+});
 
 describe('extractRepoName', () => {
   test('extracts name from SSH URL with .git suffix', () => {
@@ -77,6 +103,7 @@ describe('config manipulation functions', () => {
     name: 'test-repo',
     url: 'git@github.com:user/test-repo.git',
     branch: 'main',
+    path: '/home/user/code/test-repo',
   } satisfies RepoEntry;
 
   describe('addRepoToConfig', () => {
@@ -93,6 +120,7 @@ describe('config manipulation functions', () => {
         name: 'another-repo',
         url: 'git@github.com:user/another-repo.git',
         branch: 'develop',
+        path: '/home/user/code/another-repo',
       } satisfies RepoEntry;
       expect(addRepoToConfig(configWithRepo, newRepo)).toEqual({
         repos: [sampleRepo, newRepo],
@@ -188,7 +216,12 @@ describe('config file operations', () => {
     test('reads existing config file', async () => {
       const config = {
         repos: [
-          { name: 'test', url: 'git@github.com:user/test.git', branch: 'main' },
+          {
+            name: 'test',
+            url: 'git@github.com:user/test.git',
+            branch: 'main',
+            path: '/home/user/code/test',
+          },
         ],
       } satisfies ReposConfig;
       await Bun.write(testConfigPath, JSON.stringify(config, null, 2));
@@ -210,10 +243,32 @@ describe('config file operations', () => {
   });
 
   describe('writeConfig', () => {
+    test('creates parent directories if they do not exist', async () => {
+      const nestedPath = join(testDir, 'nested', 'deep', 'config.json');
+      const config = {
+        repos: [{ name: 'test', url: 'u', branch: 'b', path: '/p/test' }],
+      } satisfies ReposConfig;
+
+      expect(await writeConfig(nestedPath, config)).toEqual({
+        success: true,
+        data: undefined,
+      });
+
+      expect(await readConfig(nestedPath)).toEqual({
+        success: true,
+        data: config,
+      });
+    });
+
     test('writes config to file', async () => {
       const config = {
         repos: [
-          { name: 'test', url: 'git@github.com:user/test.git', branch: 'main' },
+          {
+            name: 'test',
+            url: 'git@github.com:user/test.git',
+            branch: 'main',
+            path: '/home/user/code/test',
+          },
         ],
       } satisfies ReposConfig;
 
@@ -230,10 +285,10 @@ describe('config file operations', () => {
 
     test('overwrites existing config', async () => {
       const config1 = {
-        repos: [{ name: 'old', url: 'u', branch: 'b' }],
+        repos: [{ name: 'old', url: 'u', branch: 'b', path: '/p/old' }],
       } satisfies ReposConfig;
       const config2 = {
-        repos: [{ name: 'new', url: 'u', branch: 'b' }],
+        repos: [{ name: 'new', url: 'u', branch: 'b', path: '/p/new' }],
       } satisfies ReposConfig;
 
       await writeConfig(testConfigPath, config1);

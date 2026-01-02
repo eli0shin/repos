@@ -1,14 +1,9 @@
-import { join } from 'node:path';
+import type { CommandContext } from '../cli.ts';
 import { readConfig } from '../config.ts';
 import { isGitRepo, getCurrentBranch } from '../git.ts';
 import { print, printError } from '../output.ts';
 
-type ListContext = {
-  codeDir: string;
-  configPath: string;
-};
-
-export async function listCommand(ctx: ListContext): Promise<void> {
+export async function listCommand(ctx: CommandContext): Promise<void> {
   const result = await readConfig(ctx.configPath);
 
   if (!result.success) {
@@ -26,14 +21,13 @@ export async function listCommand(ctx: ListContext): Promise<void> {
   print('Tracked repositories:\n');
 
   for (const repo of repos) {
-    const repoPath = join(ctx.codeDir, repo.name);
-    const exists = await isGitRepo(repoPath);
+    const exists = await isGitRepo(repo.path);
 
     let status: string;
     let currentBranch = repo.branch;
 
     if (exists) {
-      const branchResult = await getCurrentBranch(repoPath);
+      const branchResult = await getCurrentBranch(repo.path);
       if (branchResult.success) {
         currentBranch = branchResult.data;
       }
@@ -43,6 +37,6 @@ export async function listCommand(ctx: ListContext): Promise<void> {
     }
 
     print(`  ${repo.name} (${repo.branch}) ${status}`);
-    print(`    ${repo.url}`);
+    print(`    ${repo.path}`);
   }
 }
