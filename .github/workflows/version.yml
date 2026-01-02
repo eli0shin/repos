@@ -34,3 +34,52 @@ jobs:
           createGithubReleases: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check if release needs binaries
+        id: check-release
+        run: |
+          VERSION="v$(jq -r .version package.json)"
+          if gh release view "$VERSION" &>/dev/null; then
+            ASSET_COUNT=$(gh release view "$VERSION" --json assets --jq '.assets | length')
+            if [ "$ASSET_COUNT" -eq 0 ]; then
+              echo "Release exists with no binaries, will upload"
+              echo "needs_binaries=true" >> $GITHUB_OUTPUT
+              echo "version=$VERSION" >> $GITHUB_OUTPUT
+            else
+              echo "Release already has $ASSET_COUNT assets, skipping"
+              echo "needs_binaries=false" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "No release found for $VERSION"
+            echo "needs_binaries=false" >> $GITHUB_OUTPUT
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build linux-x64
+        if: steps.check-release.outputs.needs_binaries == 'true'
+        run: bun build src/cli.ts --compile --target=bun-linux-x64 --outfile repos-linux-x64
+
+      - name: Build linux-arm64
+        if: steps.check-release.outputs.needs_binaries == 'true'
+        run: bun build src/cli.ts --compile --target=bun-linux-arm64 --outfile repos-linux-arm64
+
+      - name: Build darwin-x64
+        if: steps.check-release.outputs.needs_binaries == 'true'
+        run: bun build src/cli.ts --compile --target=bun-darwin-x64 --outfile repos-darwin-x64
+
+      - name: Build darwin-arm64
+        if: steps.check-release.outputs.needs_binaries == 'true'
+        run: bun build src/cli.ts --compile --target=bun-darwin-arm64 --outfile repos-darwin-arm64
+
+      - name: Upload binaries to release
+        if: steps.check-release.outputs.needs_binaries == 'true'
+        run: |
+          gh release upload "${{ steps.check-release.outputs.version }}" \
+            repos-linux-x64 \
+            repos-linux-arm64 \
+            repos-darwin-x64 \
+            repos-darwin-arm64 \
+            --clobber
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
