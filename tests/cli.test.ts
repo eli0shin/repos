@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { version } from '../package.json';
 
 // Helper to run CLI and capture output
 async function runCli(
@@ -22,7 +23,7 @@ async function runCli(
 describe('CLI version flag', () => {
   test('--version outputs version from package.json', async () => {
     expect(await runCli(['--version'])).toEqual({
-      stdout: '0.1.0\n',
+      stdout: `${version}\n`,
       stderr: '',
       exitCode: 0,
     });
@@ -30,7 +31,7 @@ describe('CLI version flag', () => {
 
   test('-v outputs version from package.json', async () => {
     expect(await runCli(['-v'])).toEqual({
-      stdout: '0.1.0\n',
+      stdout: `${version}\n`,
       stderr: '',
       exitCode: 0,
     });
