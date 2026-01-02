@@ -1,5 +1,5 @@
-import { join } from 'node:path';
 import { rm } from 'node:fs/promises';
+import type { CommandContext } from '../cli.ts';
 import {
   readConfig,
   writeConfig,
@@ -9,13 +9,8 @@ import {
 import { isGitRepo } from '../git.ts';
 import { print, printError } from '../output.ts';
 
-type RemoveContext = {
-  codeDir: string;
-  configPath: string;
-};
-
 export async function removeCommand(
-  ctx: RemoveContext,
+  ctx: CommandContext,
   name: string,
   deleteDir: boolean
 ): Promise<void> {
@@ -41,12 +36,11 @@ export async function removeCommand(
   print(`Removed "${name}" from config`);
 
   if (deleteDir) {
-    const repoPath = join(ctx.codeDir, name);
-    if (await isGitRepo(repoPath)) {
-      await rm(repoPath, { recursive: true, force: true });
-      print(`Deleted directory: ${repoPath}`);
+    if (await isGitRepo(repo.path)) {
+      await rm(repo.path, { recursive: true, force: true });
+      print(`Deleted directory: ${repo.path}`);
     } else {
-      print(`Directory not found or not a git repo: ${repoPath}`);
+      print(`Directory not found or not a git repo: ${repo.path}`);
     }
   }
 }

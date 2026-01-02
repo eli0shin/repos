@@ -1,4 +1,5 @@
 import { join } from 'node:path';
+import type { CommandContext } from '../cli.ts';
 import {
   extractRepoName,
   readConfig,
@@ -9,12 +10,10 @@ import {
 import { cloneRepo } from '../git.ts';
 import { print, printError } from '../output.ts';
 
-type AddContext = {
-  codeDir: string;
-  configPath: string;
-};
-
-export async function addCommand(ctx: AddContext, url: string): Promise<void> {
+export async function addCommand(
+  ctx: CommandContext,
+  url: string
+): Promise<void> {
   const nameResult = extractRepoName(url);
   if (!nameResult.success) {
     printError(`Error: ${nameResult.error}`);
@@ -33,7 +32,7 @@ export async function addCommand(ctx: AddContext, url: string): Promise<void> {
     process.exit(1);
   }
 
-  const targetDir = join(ctx.codeDir, name);
+  const targetDir = join(process.cwd(), name);
   print(`Cloning ${url} to ${targetDir}...`);
 
   const cloneResult = await cloneRepo(url, targetDir);
@@ -46,6 +45,7 @@ export async function addCommand(ctx: AddContext, url: string): Promise<void> {
     name,
     url,
     branch: cloneResult.data.branch,
+    path: targetDir,
   });
 
   const writeResult = await writeConfig(ctx.configPath, newConfig);

@@ -1,13 +1,8 @@
-import { join } from 'node:path';
+import type { CommandContext } from '../cli.ts';
 import { readConfig, writeConfig, updateRepoBranch } from '../config.ts';
 import { isGitRepo, getCurrentBranch, pullCurrentBranch } from '../git.ts';
 import { print, printError } from '../output.ts';
 import type { ReposConfig } from '../types.ts';
-
-type LatestContext = {
-  codeDir: string;
-  configPath: string;
-};
 
 type PullResult = {
   name: string;
@@ -18,7 +13,7 @@ type PullResult = {
   branchChanged?: boolean;
 };
 
-export async function latestCommand(ctx: LatestContext): Promise<void> {
+export async function latestCommand(ctx: CommandContext): Promise<void> {
   const configResult = await readConfig(ctx.configPath);
   if (!configResult.success) {
     printError(`Error reading config: ${configResult.error}`);
@@ -35,18 +30,16 @@ export async function latestCommand(ctx: LatestContext): Promise<void> {
   print(`Pulling ${repos.length} repo(s) in parallel...\n`);
 
   const pullPromises = repos.map(async (repo): Promise<PullResult> => {
-    const repoPath = join(ctx.codeDir, repo.name);
-
-    if (!(await isGitRepo(repoPath))) {
+    if (!(await isGitRepo(repo.path))) {
       return { name: repo.name, success: false, error: 'not cloned' };
     }
 
-    const pullResult = await pullCurrentBranch(repoPath);
+    const pullResult = await pullCurrentBranch(repo.path);
     if (!pullResult.success) {
       return { name: repo.name, success: false, error: pullResult.error };
     }
 
-    const branchResult = await getCurrentBranch(repoPath);
+    const branchResult = await getCurrentBranch(repo.path);
     if (!branchResult.success) {
       return {
         name: repo.name,

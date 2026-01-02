@@ -1,4 +1,15 @@
+import { mkdir } from 'node:fs/promises';
+import { homedir } from 'node:os';
+import { dirname, join } from 'node:path';
 import type { RepoEntry, ReposConfig, OperationResult } from './types.ts';
+
+export function getConfigPath(): string {
+  const xdgConfigHome = process.env.XDG_CONFIG_HOME;
+  const configDir = xdgConfigHome
+    ? join(xdgConfigHome, 'repos')
+    : join(homedir(), '.config', 'repos');
+  return join(configDir, 'config.json');
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -9,7 +20,8 @@ function isRepoEntry(value: unknown): value is RepoEntry {
   return (
     typeof value.name === 'string' &&
     typeof value.url === 'string' &&
-    typeof value.branch === 'string'
+    typeof value.branch === 'string' &&
+    typeof value.path === 'string'
   );
 }
 
@@ -70,6 +82,7 @@ export async function writeConfig(
   config: ReposConfig
 ): Promise<OperationResult> {
   try {
+    await mkdir(dirname(configPath), { recursive: true });
     await Bun.write(configPath, JSON.stringify(config, null, 2) + '\n');
     return { success: true, data: undefined };
   } catch (err) {

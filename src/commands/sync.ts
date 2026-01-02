@@ -1,4 +1,5 @@
 import { join } from 'node:path';
+import type { CommandContext } from '../cli.ts';
 import {
   readConfig,
   writeConfig,
@@ -15,29 +16,25 @@ import {
 import { print, printError } from '../output.ts';
 import type { ReposConfig } from '../types.ts';
 
-type SyncContext = {
-  codeDir: string;
-  configPath: string;
-};
-
-export async function syncCommand(ctx: SyncContext): Promise<void> {
+export async function syncCommand(ctx: CommandContext): Promise<void> {
   const configResult = await readConfig(ctx.configPath);
   if (!configResult.success) {
     printError(`Error reading config: ${configResult.error}`);
     process.exit(1);
   }
 
+  const cwd = process.cwd();
   let config: ReposConfig = configResult.data;
   let adopted = 0;
   let cloned = 0;
 
   print('Scanning for untracked repos...\n');
 
-  const repoNames = await findGitRepos(ctx.codeDir);
+  const repoNames = await findGitRepos(cwd);
   const newRepos = repoNames.filter((name) => !findRepo(config, name));
 
   for (const name of newRepos) {
-    const repoPath = join(ctx.codeDir, name);
+    const repoPath = join(cwd, name);
 
     const urlResult = await getRemoteUrl(repoPath);
     if (!urlResult.success) {
@@ -55,6 +52,7 @@ export async function syncCommand(ctx: SyncContext): Promise<void> {
       name,
       url: urlResult.data,
       branch: branchResult.data,
+      path: repoPath,
     });
 
     print(`  ✓ adopted ${name} (${branchResult.data})`);
@@ -63,15 +61,19 @@ export async function syncCommand(ctx: SyncContext): Promise<void> {
 
   print('\nCloning missing repos...\n');
 
-  for (const repo of config.repos) {
-    const targetDir = join(ctx.codeDir, repo.name);
+  // Only clone repos whose paths are within the current directory
+  const cwdPrefix = cwd + '/';
+  const reposToClone = config.repos.filter(
+    (repo) => repo.path.startsWith(cwdPrefix) || repo.path === cwd
+  );
 
-    if (await isGitRepo(targetDir)) {
+  for (const repo of reposToClone) {
+    if (await isGitRepo(repo.path)) {
       continue;
     }
 
     print(`  Cloning ${repo.name}...`);
-    const result = await cloneRepo(repo.url, targetDir);
+    const result = await cloneRepo(repo.url, repo.path);
     if (!result.success) {
       print(`  ✗ ${repo.name}: ${result.error}`);
       continue;
