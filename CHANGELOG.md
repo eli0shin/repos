@@ -1,5 +1,11 @@
 # repos
 
+## 0.2.4
+
+### Patch Changes
+
+- [#8](https://github.com/eli0shin/repos/pull/8) [`67f68eb`](https://github.com/eli0shin/repos/commit/67f68eb0f17025df0ea59faf71cd74d95b022bbd) Thanks [@eli0shin](https://github.com/eli0shin)! - Refactor config and repo location handling to be flexible instead of hardcoded. Config now uses XDG-compliant path (`~/.config/repos/config.json`) with `XDG_CONFIG_HOME` support. Each repo entry stores its absolute path, and commands work relative to the current directory instead of assuming `~/code`.
+
 ## 0.2.3
 
 ### Patch Changes
