@@ -2,7 +2,12 @@ import { mkdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { listWorktrees } from './git.ts';
-import type { RepoEntry, ReposConfig, OperationResult } from './types.ts';
+import type {
+  RepoEntry,
+  ReposConfig,
+  OperationResult,
+  UpdateBehavior,
+} from './types.ts';
 
 export function getConfigPath(): string {
   const xdgConfigHome = process.env.XDG_CONFIG_HOME;
@@ -26,10 +31,32 @@ function isRepoEntry(value: unknown): value is RepoEntry {
   );
 }
 
+function isValidUpdateBehavior(value: unknown): boolean {
+  return value === 'auto' || value === 'notify' || value === 'off';
+}
+
 function isReposConfig(value: unknown): value is ReposConfig {
   if (!isRecord(value)) return false;
   if (!Array.isArray(value.repos)) return false;
-  return value.repos.every(isRepoEntry);
+  if (!value.repos.every(isRepoEntry)) return false;
+
+  if (value.config !== undefined) {
+    if (!isRecord(value.config)) return false;
+    if (
+      value.config.updateBehavior !== undefined &&
+      !isValidUpdateBehavior(value.config.updateBehavior)
+    ) {
+      return false;
+    }
+    if (
+      value.config.updateCheckIntervalHours !== undefined &&
+      typeof value.config.updateCheckIntervalHours !== 'number'
+    ) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 export function extractRepoName(url: string): OperationResult<string> {
@@ -97,6 +124,7 @@ export function addRepoToConfig(
   repo: RepoEntry
 ): ReposConfig {
   return {
+    ...config,
     repos: [...config.repos, repo],
   };
 }
@@ -106,6 +134,7 @@ export function removeRepoFromConfig(
   name: string
 ): ReposConfig {
   return {
+    ...config,
     repos: config.repos.filter((r) => r.name !== name),
   };
 }
@@ -148,4 +177,12 @@ export function getWorktreePath(repoPath: string, branch: string): string {
   const repoName = basename(repoPath);
   const safeBranch = branch.replace(/\//g, '-');
   return join(parentDir, `${repoName}-${safeBranch}`);
+}
+
+export function getUpdateBehavior(config: ReposConfig): UpdateBehavior {
+  return config.config?.updateBehavior ?? 'auto';
+}
+
+export function getUpdateCheckInterval(config: ReposConfig): number {
+  return config.config?.updateCheckIntervalHours ?? 24;
 }

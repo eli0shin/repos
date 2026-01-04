@@ -1,7 +1,12 @@
 #!/usr/bin/env bun
 import { Command } from '@commander-js/extra-typings';
 import { version } from '../package.json';
-import { getConfigPath } from './config.ts';
+import {
+  getConfigPath,
+  readConfig,
+  getUpdateBehavior,
+  getUpdateCheckInterval,
+} from './config.ts';
 import { listCommand } from './commands/list.ts';
 import { addCommand } from './commands/add.ts';
 import { cloneCommand } from './commands/clone.ts';
@@ -14,6 +19,15 @@ import { workCommand } from './commands/work.ts';
 import { cleanCommand } from './commands/clean.ts';
 import { rebaseCommand } from './commands/rebase.ts';
 import { initCommand, initPrintCommand } from './commands/init.ts';
+import { runUpdaterWorker } from './updater-worker.ts';
+import { handleAutoUpdate, printUpdateMessage } from './auto-update.ts';
+import type { UpdateBehavior } from './types.ts';
+
+// Handle update worker mode early
+if (process.argv[2] === '--update-worker') {
+  await runUpdaterWorker();
+  process.exit(0);
+}
 
 export type CommandContext = {
   configPath: string;
@@ -24,6 +38,31 @@ function getCommandContext(): CommandContext {
     configPath: getConfigPath(),
   };
 }
+
+type UpdateConfig = {
+  behavior: UpdateBehavior;
+  checkIntervalHours: number;
+};
+
+async function getUpdateConfigFromFile(): Promise<UpdateConfig> {
+  const configPath = getConfigPath();
+  const result = await readConfig(configPath);
+  if (!result.success) {
+    return { behavior: 'auto', checkIntervalHours: 24 };
+  }
+  return {
+    behavior: getUpdateBehavior(result.data),
+    checkIntervalHours: getUpdateCheckInterval(result.data),
+  };
+}
+
+// Start auto-update check (non-blocking)
+const updateConfig = await getUpdateConfigFromFile();
+const autoUpdateResult = await handleAutoUpdate(
+  version,
+  updateConfig.behavior,
+  updateConfig.checkIntervalHours
+).catch(() => ({ message: undefined }));
 
 const program = new Command()
   .name('repos')
@@ -130,5 +169,9 @@ program
       await initCommand(options.force ?? false);
     }
   });
+
+program.hook('postAction', () => {
+  printUpdateMessage(autoUpdateResult.message);
+});
 
 program.parse();
