@@ -1,5 +1,11 @@
 import { homedir } from 'node:os';
-import { existsSync, readFileSync, appendFileSync, mkdirSync } from 'node:fs';
+import {
+  existsSync,
+  readFileSync,
+  appendFileSync,
+  writeFileSync,
+  mkdirSync,
+} from 'node:fs';
 import { basename, join, dirname } from 'node:path';
 import { print, printError } from '../output.ts';
 
@@ -42,7 +48,26 @@ export function initPrintCommand(): void {
   }
 }
 
-export async function initCommand(): Promise<void> {
+function removeExistingBlock(content: string): string {
+  const marker = '# repos CLI work command';
+  const markerIndex = content.indexOf(marker);
+  if (markerIndex === -1) return content;
+
+  // Find start (include preceding newline if exists)
+  const start =
+    markerIndex > 0 && content[markerIndex - 1] === '\n'
+      ? markerIndex - 1
+      : markerIndex;
+
+  // Find end (after the eval/source line + newline)
+  const afterMarker = content.indexOf('\n', markerIndex);
+  const afterInitLine = content.indexOf('\n', afterMarker + 1);
+  const end = afterInitLine !== -1 ? afterInitLine + 1 : content.length;
+
+  return content.slice(0, start) + content.slice(end);
+}
+
+export async function initCommand(force = false): Promise<void> {
   const shell = process.env.SHELL || '/bin/bash';
   const shellName = basename(shell);
   const home = homedir();
@@ -68,12 +93,20 @@ export async function initCommand(): Promise<void> {
   }
 
   // Check if already configured
+  let isUpdate = false;
   if (existsSync(configFile)) {
     const content = readFileSync(configFile, 'utf-8');
     if (content.includes('repos init')) {
-      print(`Already configured in ${configFile}`);
-      print(`Restart your shell or run: source ${configFile}`);
-      return;
+      if (force) {
+        // Remove existing block and continue to re-add
+        const newContent = removeExistingBlock(content);
+        writeFileSync(configFile, newContent);
+        isUpdate = true;
+      } else {
+        print(`Already configured in ${configFile}`);
+        print(`Restart your shell or run: source ${configFile}`);
+        return;
+      }
     }
   } else {
     // Create parent directories if they don't exist (for fish config)
@@ -87,6 +120,8 @@ export async function initCommand(): Promise<void> {
   const block = `\n# repos CLI work command\n${initLine}\n`;
   appendFileSync(configFile, block);
 
-  print(`Added repos init to ${configFile}`);
+  print(
+    `${isUpdate ? 'Updated' : 'Added'} repos init ${isUpdate ? 'in' : 'to'} ${configFile}`
+  );
   print(`Restart your shell or run: source ${configFile}`);
 }

@@ -122,11 +122,12 @@ program
   .command('init')
   .description('Configure shell for work command')
   .option('--print', 'Output shell function instead of configuring')
+  .option('--force', 'Update existing configuration')
   .action(async (options) => {
     if (options.print) {
       initPrintCommand();
     } else {
-      await initCommand();
+      await initCommand(options.force ?? false);
     }
   });
 
