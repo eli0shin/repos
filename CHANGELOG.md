@@ -1,5 +1,11 @@
 # repos
 
+## 0.3.1
+
+### Patch Changes
+
+- [#13](https://github.com/eli0shin/repos/pull/13) [`0660dee`](https://github.com/eli0shin/repos/commit/0660dee2c6cacd4f704c479f00a6b9dabd2a83b3) Thanks [@eli0shin](https://github.com/eli0shin)! - Fix bare repository and worktree detection in the adopt command. Bare repos are now correctly identified and adopted with the `bare: true` flag, and worktrees are no longer incorrectly adopted as separate repositories. Also fixes the shell wrapper to properly cd into new worktrees by sending status messages to stderr.
+
 ## 0.3.0
 
 ### Minor Changes
