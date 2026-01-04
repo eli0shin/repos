@@ -16,6 +16,7 @@ import { rebaseCommand } from '../src/commands/rebase.ts';
 import { writeConfig } from '../src/config.ts';
 import type { ReposConfig } from '../src/types.ts';
 import { mockProcessExit, type MockExit } from './utils.ts';
+import { anyString } from './helpers.ts';
 
 // Helper to create a test repo with commits
 async function createTestRepo(dir: string): Promise<void> {
@@ -390,14 +391,16 @@ describe('worktree workflow integration', () => {
     await cleanCommand(ctx, 'feature', 'bare');
     expect(await isGitRepo(worktreePath)).toBe(false);
 
-    // Verify worktree is removed from list
-    const worktreesResult = await listWorktrees(bareDir);
-    expect(worktreesResult.success).toBe(true);
-    if (worktreesResult.success) {
-      const featureWorktree = worktreesResult.data.find(
-        (w) => w.branch === 'feature'
-      );
-      expect(featureWorktree).toBeUndefined();
-    }
+    // Verify worktree is removed from list (only main worktree remains)
+    expect(await listWorktrees(bareDir)).toEqual({
+      success: true,
+      data: [
+        {
+          path: anyString(),
+          branch: anyString(),
+          isMain: true,
+        },
+      ],
+    });
   });
 });

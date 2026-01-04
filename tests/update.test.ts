@@ -92,11 +92,17 @@ describe('fetchLatestVersion', () => {
       new Response(JSON.stringify({ tag_name: 'v2.0.0' }), { status: 200 })
     );
 
-    const result = await fetchLatestVersion();
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.data.version).toBe('2.0.0');
-    }
+    const currentPlatform = platform() === 'darwin' ? 'darwin' : 'linux';
+    const currentArch = arch() === 'arm64' ? 'arm64' : 'x64';
+    const expectedBinary = `repos-${currentPlatform}-${currentArch}`;
+
+    expect(await fetchLatestVersion()).toEqual({
+      success: true,
+      data: {
+        version: '2.0.0',
+        downloadUrl: `https://github.com/eli0shin/repos/releases/latest/download/${expectedBinary}`,
+      },
+    });
   });
 
   test('returns error on 404', async () => {

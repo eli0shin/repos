@@ -39,7 +39,7 @@ export async function workCommand(
   if (worktreesResult.success) {
     const existing = worktreesResult.data.find((wt) => wt.branch === branch);
     if (existing) {
-      // Output path as last line for shell wrapper to cd into
+      // Output path to stdout for shell wrapper to cd into
       print(existing.path);
       return;
     }
@@ -49,7 +49,8 @@ export async function workCommand(
   await ensureRefspecConfig(repo.path);
 
   const worktreePath = getWorktreePath(repo.path, branch);
-  print(`Creating worktree for "${branch}"...`);
+  // Status messages go to stderr so shell wrapper can capture clean path from stdout
+  printError(`Creating worktree for "${branch}"...`);
 
   const result = await createWorktree(repo.path, worktreePath, branch);
   if (!result.success) {
@@ -57,7 +58,7 @@ export async function workCommand(
     process.exit(1);
   }
 
-  print(`Created worktree "${repo.name}-${branch.replace(/\//g, '-')}"`);
-  // Output path as last line for shell wrapper to cd into
+  printError(`Created worktree "${repo.name}-${branch.replace(/\//g, '-')}"`);
+  // Output path to stdout for shell wrapper to cd into
   print(worktreePath);
 }

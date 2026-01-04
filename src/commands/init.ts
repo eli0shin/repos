@@ -5,18 +5,12 @@ import { print, printError } from '../output.ts';
 
 const BASH_ZSH_FUNCTION = `
 work() {
-  local output
-  output=$(repos work "$@" 2>&1)
+  local path
+  path=$(repos work "$@")
   local exit_code=$?
-  if [ $exit_code -eq 0 ]; then
-    local path=$(echo "$output" | tail -n1)
-    if [ -d "$path" ]; then
-      cd "$path"
-    else
-      echo "$output"
-    fi
+  if [ $exit_code -eq 0 ] && [ -d "$path" ]; then
+    cd "$path"
   else
-    echo "$output" >&2
     return $exit_code
   fi
 }
@@ -24,17 +18,11 @@ work() {
 
 const FISH_FUNCTION = `
 function work
-  set -l output (repos work $argv 2>&1)
+  set -l path (repos work $argv)
   set -l exit_code $status
-  if test $exit_code -eq 0
-    set -l path (echo $output | tail -n1)
-    if test -d $path
-      cd $path
-    else
-      echo $output
-    end
+  if test $exit_code -eq 0; and test -d "$path"
+    cd $path
   else
-    echo $output >&2
     return $exit_code
   end
 end

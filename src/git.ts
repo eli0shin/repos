@@ -102,6 +102,10 @@ export async function cloneRepo(
   return { success: true, data: { branch: branchResult.data } };
 }
 
+export async function isGitRepoOrBare(dir: string): Promise<boolean> {
+  return (await isGitRepo(dir)) || (await isBareRepo(dir));
+}
+
 export async function findGitRepos(parentDir: string): Promise<string[]> {
   try {
     const entries = await readdir(parentDir, { withFileTypes: true });
@@ -110,7 +114,7 @@ export async function findGitRepos(parentDir: string): Promise<string[]> {
     for (const entry of entries) {
       if (entry.isDirectory()) {
         const fullPath = join(parentDir, entry.name);
-        if (await isGitRepo(fullPath)) {
+        if (await isGitRepoOrBare(fullPath)) {
           repos.push(entry.name);
         }
       }
