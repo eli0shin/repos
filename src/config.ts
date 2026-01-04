@@ -48,6 +48,12 @@ function isReposConfig(value: unknown): value is ReposConfig {
     ) {
       return false;
     }
+    if (
+      value.config.updateCheckIntervalHours !== undefined &&
+      typeof value.config.updateCheckIntervalHours !== 'number'
+    ) {
+      return false;
+    }
   }
 
   return true;
@@ -175,4 +181,8 @@ export function getWorktreePath(repoPath: string, branch: string): string {
 
 export function getUpdateBehavior(config: ReposConfig): UpdateBehavior {
   return config.config?.updateBehavior ?? 'auto';
+}
+
+export function getUpdateCheckInterval(config: ReposConfig): number {
+  return config.config?.updateCheckIntervalHours ?? 24;
 }

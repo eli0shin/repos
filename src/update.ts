@@ -19,6 +19,10 @@ export function getBinaryName(p: Platform, a: Architecture): string {
   return `repos-${p}-${a}`;
 }
 
+export function isPrerelease(version: string): boolean {
+  return version.includes('-');
+}
+
 export function isNewerVersion(current: string, latest: string): boolean {
   const parse = (v: string) => v.split('.').map(Number);
   const [curMajor, curMinor, curPatch] = parse(current);

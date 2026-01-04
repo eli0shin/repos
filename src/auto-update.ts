@@ -23,6 +23,7 @@ function defaultSpawn(args: string[]): void {
 export async function handleAutoUpdate(
   currentVersion: string,
   updateBehavior: UpdateBehavior,
+  checkIntervalHours = 24,
   statePath: string = getUpdateStatePath(),
   spawnFn: SpawnFn = defaultSpawn
 ): Promise<AutoUpdateResult> {
@@ -42,7 +43,7 @@ export async function handleAutoUpdate(
   }
 
   // Check cooldown
-  if (!shouldCheckForUpdate(state)) {
+  if (!shouldCheckForUpdate(state, checkIntervalHours)) {
     return { message };
   }
 

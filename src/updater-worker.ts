@@ -2,6 +2,7 @@ import { dirname } from 'node:path';
 import {
   fetchLatestVersion,
   isNewerVersion,
+  isPrerelease,
   downloadBinary,
   replaceBinary,
 } from './update.ts';
@@ -28,11 +29,17 @@ export async function runUpdaterWorker(): Promise<void> {
   try {
     const releaseResult = await fetchLatestVersion();
     if (!releaseResult.success) {
-      await updateTimestamp(statePath);
+      // Don't update timestamp on fetch failure - retry sooner
       return;
     }
 
     const { version: latestVersion, downloadUrl } = releaseResult.data;
+
+    // Skip prerelease versions
+    if (isPrerelease(latestVersion)) {
+      await updateTimestamp(statePath);
+      return;
+    }
 
     if (!isNewerVersion(currentVersion, latestVersion)) {
       await updateTimestamp(statePath);
@@ -64,7 +71,7 @@ export async function runUpdaterWorker(): Promise<void> {
 
     await updateTimestamp(statePath);
   } catch {
-    await updateTimestamp(statePath);
+    // Don't update timestamp on errors - retry sooner
   }
 }
 

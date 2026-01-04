@@ -9,6 +9,7 @@ export type UpdateBehavior = 'auto' | 'notify' | 'off';
 
 export type ReposConfigSettings = {
   updateBehavior?: UpdateBehavior;
+  updateCheckIntervalHours?: number;
 };
 
 export type ReposConfig = {

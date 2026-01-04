@@ -1,7 +1,12 @@
 #!/usr/bin/env bun
 import { Command } from '@commander-js/extra-typings';
 import { version } from '../package.json';
-import { getConfigPath, readConfig, getUpdateBehavior } from './config.ts';
+import {
+  getConfigPath,
+  readConfig,
+  getUpdateBehavior,
+  getUpdateCheckInterval,
+} from './config.ts';
 import { listCommand } from './commands/list.ts';
 import { addCommand } from './commands/add.ts';
 import { cloneCommand } from './commands/clone.ts';
@@ -34,16 +39,30 @@ function getCommandContext(): CommandContext {
   };
 }
 
-async function getUpdateBehaviorFromConfig(): Promise<UpdateBehavior> {
+type UpdateConfig = {
+  behavior: UpdateBehavior;
+  checkIntervalHours: number;
+};
+
+async function getUpdateConfigFromFile(): Promise<UpdateConfig> {
   const configPath = getConfigPath();
   const result = await readConfig(configPath);
-  if (!result.success) return 'auto';
-  return getUpdateBehavior(result.data);
+  if (!result.success) {
+    return { behavior: 'auto', checkIntervalHours: 24 };
+  }
+  return {
+    behavior: getUpdateBehavior(result.data),
+    checkIntervalHours: getUpdateCheckInterval(result.data),
+  };
 }
 
 // Start auto-update check (non-blocking)
-const updateBehavior = await getUpdateBehaviorFromConfig();
-const autoUpdateResult = await handleAutoUpdate(version, updateBehavior);
+const updateConfig = await getUpdateConfigFromFile();
+const autoUpdateResult = await handleAutoUpdate(
+  version,
+  updateConfig.behavior,
+  updateConfig.checkIntervalHours
+).catch(() => ({ message: undefined }));
 
 const program = new Command()
   .name('repos')

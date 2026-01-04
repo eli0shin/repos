@@ -4,10 +4,29 @@ import { join } from 'node:path';
 import { arch, platform } from 'node:os';
 import {
   getBinaryName,
+  isPrerelease,
   isNewerVersion,
   fetchLatestVersion,
   replaceBinary,
 } from '../src/update.ts';
+
+describe('isPrerelease', () => {
+  test('returns false for stable version', () => {
+    expect(isPrerelease('1.0.0')).toBe(false);
+  });
+
+  test('returns true for beta version', () => {
+    expect(isPrerelease('1.0.0-beta.1')).toBe(true);
+  });
+
+  test('returns true for alpha version', () => {
+    expect(isPrerelease('2.0.0-alpha')).toBe(true);
+  });
+
+  test('returns true for rc version', () => {
+    expect(isPrerelease('1.2.3-rc.2')).toBe(true);
+  });
+});
 
 describe('getBinaryName', () => {
   test('returns repos-darwin-x64 for darwin x64', () => {

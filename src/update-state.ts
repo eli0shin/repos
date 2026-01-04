@@ -2,11 +2,12 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { OperationResult, UpdateState } from './types.ts';
 
-const DEFAULT_STATE_PATH = join(homedir(), '.repos-update-state');
-const COOLDOWN_MS = 24 * 60 * 60 * 1000; // 24 hours
-
 export function getUpdateStatePath(): string {
-  return DEFAULT_STATE_PATH;
+  const xdgStateHome = process.env.XDG_STATE_HOME;
+  if (xdgStateHome) {
+    return join(xdgStateHome, 'repos-update-state');
+  }
+  return join(homedir(), '.repos-update-state');
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -19,7 +20,7 @@ function isUpdateState(value: unknown): value is UpdateState {
 }
 
 export async function readUpdateState(
-  statePath: string = DEFAULT_STATE_PATH
+  statePath: string = getUpdateStatePath()
 ): Promise<OperationResult<UpdateState | null>> {
   const file = Bun.file(statePath);
 
@@ -50,7 +51,11 @@ export async function writeUpdateState(
   }
 }
 
-export function shouldCheckForUpdate(state: UpdateState | null): boolean {
+export function shouldCheckForUpdate(
+  state: UpdateState | null,
+  intervalHours = 24
+): boolean {
   if (!state) return true;
-  return Date.now() - state.lastCheckedAt >= COOLDOWN_MS;
+  const cooldownMs = intervalHours * 60 * 60 * 1000;
+  return Date.now() - state.lastCheckedAt >= cooldownMs;
 }
