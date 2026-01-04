@@ -1,16 +1,13 @@
 import type { CommandContext } from '../cli.ts';
-import { readConfig, writeConfig, updateRepoBranch } from '../config.ts';
-import { isGitRepo, getCurrentBranch, pullCurrentBranch } from '../git.ts';
+import { readConfig } from '../config.ts';
+import { isGitRepo, pullCurrentBranch } from '../git.ts';
 import { print, printError } from '../output.ts';
-import type { ReposConfig } from '../types.ts';
 
 type PullResult = {
   name: string;
   success: boolean;
   error?: string;
   updated?: boolean;
-  branch?: string;
-  branchChanged?: boolean;
 };
 
 export async function latestCommand(ctx: CommandContext): Promise<void> {
@@ -39,53 +36,22 @@ export async function latestCommand(ctx: CommandContext): Promise<void> {
       return { name: repo.name, success: false, error: pullResult.error };
     }
 
-    const branchResult = await getCurrentBranch(repo.path);
-    if (!branchResult.success) {
-      return {
-        name: repo.name,
-        success: true,
-        updated: pullResult.data.updated,
-      };
-    }
-
     return {
       name: repo.name,
       success: true,
       updated: pullResult.data.updated,
-      branch: branchResult.data,
-      branchChanged: branchResult.data !== repo.branch,
     };
   });
 
   const results = await Promise.all(pullPromises);
 
-  let config: ReposConfig = configResult.data;
-  let configChanged = false;
-
   for (const result of results) {
     if (result.success) {
       const status = result.updated ? 'updated' : 'up to date';
-      const branchInfo = result.branchChanged
-        ? ` (branch changed to ${result.branch})`
-        : '';
-      print(`  ✓ ${result.name}: ${status}${branchInfo}`);
-
-      if (result.branchChanged && result.branch) {
-        config = updateRepoBranch(config, result.name, result.branch);
-        configChanged = true;
-      }
+      print(`  ✓ ${result.name}: ${status}`);
     } else {
       print(`  ✗ ${result.name}: ${result.error}`);
     }
-  }
-
-  if (configChanged) {
-    const writeResult = await writeConfig(ctx.configPath, config);
-    if (!writeResult.success) {
-      printError(`\nError saving config: ${writeResult.error}`);
-      process.exit(1);
-    }
-    print('\nConfig updated with new branch names');
   }
 
   const succeeded = results.filter((r) => r.success).length;

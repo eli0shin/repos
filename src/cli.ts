@@ -10,6 +10,10 @@ import { latestCommand } from './commands/latest.ts';
 import { adoptCommand } from './commands/adopt.ts';
 import { syncCommand } from './commands/sync.ts';
 import { updateCommand } from './commands/update.ts';
+import { workCommand } from './commands/work.ts';
+import { cleanCommand } from './commands/clean.ts';
+import { rebaseCommand } from './commands/rebase.ts';
+import { initCommand, initPrintCommand } from './commands/init.ts';
 
 export type CommandContext = {
   configPath: string;
@@ -37,8 +41,9 @@ program
   .command('add')
   .description('Clone a repo and add it to tracking')
   .argument('<url>', 'Git repository URL')
-  .action(async (url) => {
-    await addCommand(getCommandContext(), url);
+  .option('--bare', 'Clone as bare repository for worktree use')
+  .action(async (url, options) => {
+    await addCommand(getCommandContext(), url, { bare: options.bare });
   });
 
 program
@@ -84,6 +89,45 @@ program
   .description('Update repos CLI to latest version')
   .action(async () => {
     await updateCommand();
+  });
+
+program
+  .command('work')
+  .description('Create a worktree for a branch')
+  .argument('<branch>', 'Branch name for the worktree')
+  .argument('[repo-name]', 'Repo name (optional if inside a tracked repo)')
+  .action(async (branch, repoName) => {
+    await workCommand(getCommandContext(), branch, repoName);
+  });
+
+program
+  .command('clean')
+  .description('Remove a worktree')
+  .argument('<branch>', 'Branch name of the worktree to remove')
+  .argument('[repo-name]', 'Repo name (optional if inside a tracked repo)')
+  .action(async (branch, repoName) => {
+    await cleanCommand(getCommandContext(), branch, repoName);
+  });
+
+program
+  .command('rebase')
+  .description('Rebase a worktree branch on the default branch')
+  .argument('[branch]', 'Branch name to rebase (optional if inside a worktree)')
+  .argument('[repo-name]', 'Repo name (optional if inside a tracked repo)')
+  .action(async (branch, repoName) => {
+    await rebaseCommand(getCommandContext(), branch, repoName);
+  });
+
+program
+  .command('init')
+  .description('Configure shell for work command')
+  .option('--print', 'Output shell function instead of configuring')
+  .action(async (options) => {
+    if (options.print) {
+      initPrintCommand();
+    } else {
+      await initCommand();
+    }
   });
 
 program.parse();

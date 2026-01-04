@@ -7,12 +7,17 @@ import {
   addRepoToConfig,
   findRepo,
 } from '../config.ts';
-import { cloneRepo } from '../git.ts';
+import { cloneRepo, cloneBare } from '../git.ts';
 import { print, printError } from '../output.ts';
+
+type AddOptions = {
+  bare?: boolean;
+};
 
 export async function addCommand(
   ctx: CommandContext,
-  url: string
+  url: string,
+  options: AddOptions = {}
 ): Promise<void> {
   const nameResult = extractRepoName(url);
   if (!nameResult.success) {
@@ -33,26 +38,51 @@ export async function addCommand(
   }
 
   const targetDir = join(process.cwd(), name);
-  print(`Cloning ${url} to ${targetDir}...`);
 
-  const cloneResult = await cloneRepo(url, targetDir);
-  if (!cloneResult.success) {
-    printError(`Error cloning: ${cloneResult.error}`);
-    process.exit(1);
+  if (options.bare) {
+    print(`Cloning ${url} (bare) to ${targetDir}...`);
+
+    const cloneResult = await cloneBare(url, targetDir);
+    if (!cloneResult.success) {
+      printError(`Error cloning: ${cloneResult.error}`);
+      process.exit(1);
+    }
+
+    const newConfig = addRepoToConfig(configResult.data, {
+      name,
+      url,
+      path: targetDir,
+      bare: true,
+    });
+
+    const writeResult = await writeConfig(ctx.configPath, newConfig);
+    if (!writeResult.success) {
+      printError(`Error saving config: ${writeResult.error}`);
+      process.exit(1);
+    }
+
+    print(`Added "${name}" as bare clone`);
+  } else {
+    print(`Cloning ${url} to ${targetDir}...`);
+
+    const cloneResult = await cloneRepo(url, targetDir);
+    if (!cloneResult.success) {
+      printError(`Error cloning: ${cloneResult.error}`);
+      process.exit(1);
+    }
+
+    const newConfig = addRepoToConfig(configResult.data, {
+      name,
+      url,
+      path: targetDir,
+    });
+
+    const writeResult = await writeConfig(ctx.configPath, newConfig);
+    if (!writeResult.success) {
+      printError(`Error saving config: ${writeResult.error}`);
+      process.exit(1);
+    }
+
+    print(`Added "${name}"`);
   }
-
-  const newConfig = addRepoToConfig(configResult.data, {
-    name,
-    url,
-    branch: cloneResult.data.branch,
-    path: targetDir,
-  });
-
-  const writeResult = await writeConfig(ctx.configPath, newConfig);
-  if (!writeResult.success) {
-    printError(`Error saving config: ${writeResult.error}`);
-    process.exit(1);
-  }
-
-  print(`Added "${name}" on branch "${cloneResult.data.branch}"`);
 }

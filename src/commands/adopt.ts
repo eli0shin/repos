@@ -6,12 +6,7 @@ import {
   addRepoToConfig,
   findRepo,
 } from '../config.ts';
-import {
-  findGitRepos,
-  getCurrentBranch,
-  getRemoteUrl,
-  isGitRepo,
-} from '../git.ts';
+import { findGitRepos, getRemoteUrl, isGitRepo } from '../git.ts';
 import { print, printError } from '../output.ts';
 import type { ReposConfig } from '../types.ts';
 
@@ -52,16 +47,9 @@ async function adoptSingleRepo(
     process.exit(1);
   }
 
-  const branchResult = await getCurrentBranch(repoPath);
-  if (!branchResult.success) {
-    printError('Error: Could not get current branch');
-    process.exit(1);
-  }
-
   const newConfig = addRepoToConfig(config, {
     name,
     url: urlResult.data,
-    branch: branchResult.data,
     path: repoPath,
   });
 
@@ -71,7 +59,7 @@ async function adoptSingleRepo(
     process.exit(1);
   }
 
-  print(`Adopted "${name}" on branch "${branchResult.data}"`);
+  print(`Adopted "${name}"`);
 }
 
 async function adoptMultipleRepos(
@@ -107,20 +95,13 @@ async function adoptMultipleRepos(
       continue;
     }
 
-    const branchResult = await getCurrentBranch(repoPath);
-    if (!branchResult.success) {
-      print(`  ✗ ${name}: couldn't get branch`);
-      continue;
-    }
-
     config = addRepoToConfig(config, {
       name,
       url: urlResult.data,
-      branch: branchResult.data,
       path: repoPath,
     });
 
-    print(`  ✓ ${name} (${branchResult.data})`);
+    print(`  ✓ ${name}`);
     adopted++;
   }
 

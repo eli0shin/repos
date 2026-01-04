@@ -1,6 +1,6 @@
 import type { CommandContext } from '../cli.ts';
 import { readConfig } from '../config.ts';
-import { isGitRepo, getCurrentBranch } from '../git.ts';
+import { isGitRepo, listWorktrees } from '../git.ts';
 import { print, printError } from '../output.ts';
 
 export async function listCommand(ctx: CommandContext): Promise<void> {
@@ -22,21 +22,23 @@ export async function listCommand(ctx: CommandContext): Promise<void> {
 
   for (const repo of repos) {
     const exists = await isGitRepo(repo.path);
+    const bareLabel = repo.bare ? ' (bare)' : '';
+    const status = exists ? '✓' : '✗ not cloned';
 
-    let status: string;
-    let currentBranch = repo.branch;
-
-    if (exists) {
-      const branchResult = await getCurrentBranch(repo.path);
-      if (branchResult.success) {
-        currentBranch = branchResult.data;
-      }
-      status = currentBranch === repo.branch ? '✓' : `⚠ on ${currentBranch}`;
-    } else {
-      status = '✗ not cloned';
-    }
-
-    print(`  ${repo.name} (${repo.branch}) ${status}`);
+    print(`  ${repo.name}${bareLabel} ${status}`);
     print(`    ${repo.path}`);
+
+    // Show worktrees if repo exists
+    if (exists) {
+      const worktreesResult = await listWorktrees(repo.path);
+      if (worktreesResult.success) {
+        const nonMainWorktrees = worktreesResult.data.filter(
+          (wt) => !wt.isMain
+        );
+        for (const wt of nonMainWorktrees) {
+          print(`      ↳ ${wt.branch}: ${wt.path}`);
+        }
+      }
+    }
   }
 }
