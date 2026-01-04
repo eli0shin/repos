@@ -9,7 +9,6 @@ import {
   writeConfig,
   addRepoToConfig,
   removeRepoFromConfig,
-  updateRepoBranch,
   findRepo,
 } from '../src/config.ts';
 import type { ReposConfig, RepoEntry } from '../src/types.ts';
@@ -102,7 +101,6 @@ describe('config manipulation functions', () => {
   const sampleRepo = {
     name: 'test-repo',
     url: 'git@github.com:user/test-repo.git',
-    branch: 'main',
     path: '/home/user/code/test-repo',
   } satisfies RepoEntry;
 
@@ -119,7 +117,6 @@ describe('config manipulation functions', () => {
       const newRepo = {
         name: 'another-repo',
         url: 'git@github.com:user/another-repo.git',
-        branch: 'develop',
         path: '/home/user/code/another-repo',
       } satisfies RepoEntry;
       expect(addRepoToConfig(configWithRepo, newRepo)).toEqual({
@@ -152,28 +149,6 @@ describe('config manipulation functions', () => {
     test('does not mutate original config', () => {
       const configWithRepo = { repos: [sampleRepo] } satisfies ReposConfig;
       removeRepoFromConfig(configWithRepo, 'test-repo');
-      expect(configWithRepo).toEqual({ repos: [sampleRepo] });
-    });
-  });
-
-  describe('updateRepoBranch', () => {
-    test('updates branch for existing repo', () => {
-      const configWithRepo = { repos: [sampleRepo] } satisfies ReposConfig;
-      expect(updateRepoBranch(configWithRepo, 'test-repo', 'develop')).toEqual({
-        repos: [{ ...sampleRepo, branch: 'develop' }],
-      });
-    });
-
-    test('returns unchanged config if repo not found', () => {
-      const configWithRepo = { repos: [sampleRepo] } satisfies ReposConfig;
-      expect(
-        updateRepoBranch(configWithRepo, 'nonexistent', 'develop')
-      ).toEqual(configWithRepo);
-    });
-
-    test('does not mutate original config', () => {
-      const configWithRepo = { repos: [sampleRepo] } satisfies ReposConfig;
-      updateRepoBranch(configWithRepo, 'test-repo', 'develop');
       expect(configWithRepo).toEqual({ repos: [sampleRepo] });
     });
   });
@@ -219,8 +194,43 @@ describe('config file operations', () => {
           {
             name: 'test',
             url: 'git@github.com:user/test.git',
+            path: '/home/user/code/test',
+          },
+        ],
+      } satisfies ReposConfig;
+      await Bun.write(testConfigPath, JSON.stringify(config, null, 2));
+
+      expect(await readConfig(testConfigPath)).toEqual({
+        success: true,
+        data: config,
+      });
+    });
+
+    test('reads config with legacy branch field (backwards compatible)', async () => {
+      const legacyConfig = {
+        repos: [
+          {
+            name: 'test',
+            url: 'git@github.com:user/test.git',
             branch: 'main',
             path: '/home/user/code/test',
+          },
+        ],
+      };
+      await Bun.write(testConfigPath, JSON.stringify(legacyConfig, null, 2));
+
+      const result = await readConfig(testConfigPath);
+      expect(result.success).toBe(true);
+    });
+
+    test('reads config with bare repo', async () => {
+      const config = {
+        repos: [
+          {
+            name: 'test',
+            url: 'git@github.com:user/test.git',
+            path: '/home/user/code/test',
+            bare: true,
           },
         ],
       } satisfies ReposConfig;
@@ -246,7 +256,7 @@ describe('config file operations', () => {
     test('creates parent directories if they do not exist', async () => {
       const nestedPath = join(testDir, 'nested', 'deep', 'config.json');
       const config = {
-        repos: [{ name: 'test', url: 'u', branch: 'b', path: '/p/test' }],
+        repos: [{ name: 'test', url: 'u', path: '/p/test' }],
       } satisfies ReposConfig;
 
       expect(await writeConfig(nestedPath, config)).toEqual({
@@ -266,7 +276,6 @@ describe('config file operations', () => {
           {
             name: 'test',
             url: 'git@github.com:user/test.git',
-            branch: 'main',
             path: '/home/user/code/test',
           },
         ],
@@ -285,10 +294,10 @@ describe('config file operations', () => {
 
     test('overwrites existing config', async () => {
       const config1 = {
-        repos: [{ name: 'old', url: 'u', branch: 'b', path: '/p/old' }],
+        repos: [{ name: 'old', url: 'u', path: '/p/old' }],
       } satisfies ReposConfig;
       const config2 = {
-        repos: [{ name: 'new', url: 'u', branch: 'b', path: '/p/new' }],
+        repos: [{ name: 'new', url: 'u', path: '/p/new' }],
       } satisfies ReposConfig;
 
       await writeConfig(testConfigPath, config1);

@@ -6,13 +6,7 @@ import {
   addRepoToConfig,
   findRepo,
 } from '../config.ts';
-import {
-  findGitRepos,
-  getCurrentBranch,
-  getRemoteUrl,
-  cloneRepo,
-  isGitRepo,
-} from '../git.ts';
+import { findGitRepos, getRemoteUrl, cloneRepo, isGitRepo } from '../git.ts';
 import { print, printError } from '../output.ts';
 import type { ReposConfig } from '../types.ts';
 
@@ -42,20 +36,13 @@ export async function syncCommand(ctx: CommandContext): Promise<void> {
       continue;
     }
 
-    const branchResult = await getCurrentBranch(repoPath);
-    if (!branchResult.success) {
-      print(`  ✗ ${name}: couldn't get branch`);
-      continue;
-    }
-
     config = addRepoToConfig(config, {
       name,
       url: urlResult.data,
-      branch: branchResult.data,
       path: repoPath,
     });
 
-    print(`  ✓ adopted ${name} (${branchResult.data})`);
+    print(`  ✓ adopted ${name}`);
     adopted++;
   }
 

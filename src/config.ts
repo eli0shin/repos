@@ -1,6 +1,7 @@
 import { mkdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
+import { listWorktrees } from './git.ts';
 import type { RepoEntry, ReposConfig, OperationResult } from './types.ts';
 
 export function getConfigPath(): string {
@@ -20,8 +21,8 @@ function isRepoEntry(value: unknown): value is RepoEntry {
   return (
     typeof value.name === 'string' &&
     typeof value.url === 'string' &&
-    typeof value.branch === 'string' &&
-    typeof value.path === 'string'
+    typeof value.path === 'string' &&
+    (value.bare === undefined || typeof value.bare === 'boolean')
   );
 }
 
@@ -109,24 +110,42 @@ export function removeRepoFromConfig(
   };
 }
 
-export function updateRepoBranch(
-  config: ReposConfig,
-  name: string,
-  branch: string
-): ReposConfig {
-  const repo = config.repos.find((r) => r.name === name);
-  if (!repo) {
-    return config;
-  }
-
-  return {
-    repos: config.repos.map((r) => (r.name === name ? { ...r, branch } : r)),
-  };
-}
-
 export function findRepo(
   config: ReposConfig,
   name: string
 ): RepoEntry | undefined {
   return config.repos.find((r) => r.name === name);
+}
+
+export async function findRepoFromCwd(
+  config: ReposConfig,
+  cwd: string
+): Promise<RepoEntry | undefined> {
+  // First check if cwd is directly a tracked repo path or inside one
+  for (const repo of config.repos) {
+    if (cwd === repo.path || cwd.startsWith(repo.path + '/')) {
+      return repo;
+    }
+  }
+
+  // Check if cwd is inside a worktree of a tracked repo
+  for (const repo of config.repos) {
+    const worktreesResult = await listWorktrees(repo.path);
+    if (worktreesResult.success) {
+      for (const wt of worktreesResult.data) {
+        if (cwd === wt.path || cwd.startsWith(wt.path + '/')) {
+          return repo;
+        }
+      }
+    }
+  }
+
+  return undefined;
+}
+
+export function getWorktreePath(repoPath: string, branch: string): string {
+  const parentDir = dirname(repoPath);
+  const repoName = basename(repoPath);
+  const safeBranch = branch.replace(/\//g, '-');
+  return join(parentDir, `${repoName}-${safeBranch}`);
 }

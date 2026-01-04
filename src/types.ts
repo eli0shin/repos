@@ -1,8 +1,8 @@
 export type RepoEntry = {
   name: string;
   url: string;
-  branch: string;
   path: string;
+  bare?: boolean;
 };
 
 export type ReposConfig = {

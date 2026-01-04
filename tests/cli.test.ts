@@ -43,19 +43,23 @@ const HELP_OUTPUT = `Usage: repos [options] [command]
 Git repository manager
 
 Options:
-  -v, --version            output the version number
-  -h, --help               display help for command
+  -v, --version                output the version number
+  -h, --help                   display help for command
 
 Commands:
-  list                     List all tracked repositories
-  add <url>                Clone a repo and add it to tracking
-  clone [name]             Clone repos from config (all or specific)
-  remove [options] <name>  Remove a repo from tracking
-  latest                   Pull all repos (parallel)
-  adopt                    Add existing repos to config
-  sync                     Adopt existing + clone missing repos
-  update                   Update repos CLI to latest version
-  help [command]           display help for command
+  list                         List all tracked repositories
+  add [options] <url>          Clone a repo and add it to tracking
+  clone [name]                 Clone repos from config (all or specific)
+  remove [options] <name>      Remove a repo from tracking
+  latest                       Pull all repos (parallel)
+  adopt                        Add existing repos to config
+  sync                         Adopt existing + clone missing repos
+  update                       Update repos CLI to latest version
+  work <branch> [repo-name]    Create a worktree for a branch
+  clean <branch> [repo-name]   Remove a worktree
+  rebase [branch] [repo-name]  Rebase a worktree branch on the default branch
+  init [options]               Configure shell for work command
+  help [command]               display help for command
 `;
 
 const REMOVE_HELP_OUTPUT = `Usage: repos remove [options] <name>
