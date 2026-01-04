@@ -539,6 +539,32 @@ describe('createWorktree and removeWorktree', () => {
     // Verify worktree is gone
     expect(await isGitRepo(worktreeDir)).toBe(false);
   });
+
+  test('new branch worktree does not track origin/main', async () => {
+    // Clone as bare
+    const bareDir = join(testDir, 'bare.git');
+    await cloneBare(sourceDir, bareDir);
+
+    // Ensure refspec is configured
+    await ensureRefspecConfig(bareDir);
+
+    // Create worktree for a branch that doesn't exist on remote
+    const worktreeDir = join(testDir, 'worktree-new-branch');
+    const createResult = await createWorktree(
+      bareDir,
+      worktreeDir,
+      'new-feature-branch'
+    );
+    expect(createResult).toEqual({ success: true, data: undefined });
+
+    // Verify the branch has no upstream tracking
+    const trackingResult = await runGitCommand(
+      ['config', 'branch.new-feature-branch.remote'],
+      worktreeDir
+    );
+    // Should fail or return empty - no tracking configured
+    expect(trackingResult.exitCode).not.toBe(0);
+  });
 });
 
 describe('fetchOrigin', () => {

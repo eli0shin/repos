@@ -263,11 +263,12 @@ export async function createWorktree(
     if (!defaultBranchResult.success) {
       return { success: false, error: defaultBranchResult.error };
     }
-    // Create new branch from origin/<default> with tracking
+    // Create new branch from origin/<default> without tracking
+    // (branch doesn't exist on remote yet, so no tracking until pushed)
     args = [
       'worktree',
       'add',
-      '--track',
+      '--no-track',
       '-b',
       branch,
       worktreePath,
