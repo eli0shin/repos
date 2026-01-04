@@ -1,5 +1,11 @@
 # repos
 
+## 0.3.3
+
+### Patch Changes
+
+- [#17](https://github.com/eli0shin/repos/pull/17) [`5908411`](https://github.com/eli0shin/repos/commit/5908411e3491cf99f2568adf8fb451603d5d91ad) Thanks [@eli0shin](https://github.com/eli0shin)! - Fix worktree creation to not set upstream tracking to origin/main when creating a new branch that doesn't exist on the remote. New branches now have no tracking until pushed.
+
 ## 0.3.2
 
 ### Patch Changes
