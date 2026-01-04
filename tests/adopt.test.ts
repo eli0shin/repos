@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { runGitCommand, cloneBare } from '../src/git.ts';
 import { adoptCommand } from '../src/commands/adopt.ts';
 import { readConfig, writeConfig } from '../src/config.ts';
+import { arrayContaining } from './helpers.ts';
 
 // Helper to create a test repo with commits and remote
 async function createTestRepo(dir: string): Promise<void> {
@@ -93,12 +94,19 @@ describe('repos adopt with bare repos', () => {
 
     // Verify bare repo was adopted (not the worktrees)
     const configResult = await readConfig(configPath);
-    expect(configResult.success).toBe(true);
-    if (configResult.success) {
-      expect(configResult.data.repos.length).toBe(1);
-      expect(configResult.data.repos[0].name).toBe('project.git');
-      expect(configResult.data.repos[0].bare).toBe(true);
-    }
+    expect(configResult).toEqual({
+      success: true,
+      data: {
+        repos: [
+          {
+            name: 'project.git',
+            url: sourceDir,
+            path: realpathSync(bareDir),
+            bare: true,
+          },
+        ],
+      },
+    });
   });
 
   test('does not adopt worktrees inside bare repo as separate repos', async () => {
@@ -125,12 +133,19 @@ describe('repos adopt with bare repos', () => {
 
     // Verify only the bare repo was adopted, not the worktrees
     const configResult = await readConfig(configPath);
-    expect(configResult.success).toBe(true);
-    if (configResult.success) {
-      expect(configResult.data.repos.length).toBe(1);
-      expect(configResult.data.repos[0].name).toBe('project.git');
-      expect(configResult.data.repos[0].bare).toBe(true);
-    }
+    expect(configResult).toEqual({
+      success: true,
+      data: {
+        repos: [
+          {
+            name: 'project.git',
+            url: sourceDir,
+            path: realpathSync(bareDir),
+            bare: true,
+          },
+        ],
+      },
+    });
   });
 
   test('skips sibling directories that are worktrees of a bare repo', async () => {
@@ -160,21 +175,24 @@ describe('repos adopt with bare repos', () => {
 
     // Verify bare repo and regular repo adopted, sibling worktree skipped
     const configResult = await readConfig(configPath);
-    expect(configResult.success).toBe(true);
-    if (configResult.success) {
-      const repoNames = configResult.data.repos.map((r) => r.name).sort();
-      expect(repoNames).toEqual(['other-repo', 'project.git']);
-
-      const bareRepo = configResult.data.repos.find(
-        (r) => r.name === 'project.git'
-      );
-      expect(bareRepo?.bare).toBe(true);
-
-      const regularRepoEntry = configResult.data.repos.find(
-        (r) => r.name === 'other-repo'
-      );
-      expect(regularRepoEntry?.bare).toBeUndefined();
-    }
+    expect(configResult).toEqual({
+      success: true,
+      data: {
+        repos: arrayContaining([
+          {
+            name: 'project.git',
+            url: sourceDir,
+            path: realpathSync(bareDir),
+            bare: true,
+          },
+          {
+            name: 'other-repo',
+            url: 'git@github.com:user/other-repo.git',
+            path: realpathSync(regularRepo),
+          },
+        ]),
+      },
+    });
   });
 
   test('adopts regular repo with bare: undefined (not set)', async () => {
@@ -193,11 +211,17 @@ describe('repos adopt with bare repos', () => {
 
     // Verify regular repo does not have bare flag
     const configResult = await readConfig(configPath);
-    expect(configResult.success).toBe(true);
-    if (configResult.success) {
-      expect(configResult.data.repos.length).toBe(1);
-      expect(configResult.data.repos[0].name).toBe('regular-repo');
-      expect(configResult.data.repos[0].bare).toBeUndefined();
-    }
+    expect(configResult).toEqual({
+      success: true,
+      data: {
+        repos: [
+          {
+            name: 'regular-repo',
+            url: 'git@github.com:user/regular-repo.git',
+            path: realpathSync(regularRepo),
+          },
+        ],
+      },
+    });
   });
 });

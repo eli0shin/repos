@@ -12,6 +12,7 @@ import {
   findRepo,
 } from '../src/config.ts';
 import type { ReposConfig, RepoEntry } from '../src/types.ts';
+import { objectContaining } from './helpers.ts';
 
 describe('getConfigPath', () => {
   const originalXdgConfigHome = process.env.XDG_CONFIG_HOME;
@@ -220,7 +221,18 @@ describe('config file operations', () => {
       await Bun.write(testConfigPath, JSON.stringify(legacyConfig, null, 2));
 
       const result = await readConfig(testConfigPath);
-      expect(result.success).toBe(true);
+      expect(result).toEqual({
+        success: true,
+        data: {
+          repos: [
+            objectContaining({
+              name: 'test',
+              url: 'git@github.com:user/test.git',
+              path: '/home/user/code/test',
+            }),
+          ],
+        },
+      });
     });
 
     test('reads config with bare repo', async () => {

@@ -21,10 +21,7 @@ import {
   ensureRefspecConfig,
 } from '../src/git.ts';
 
-function matchString(regex: RegExp): string {
-  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
-  return expect.stringMatching(regex) as unknown as string;
-}
+import { anyString, arrayContaining, matchString } from './helpers.ts';
 
 describe('runGitCommand', () => {
   test('runs git version successfully', async () => {
@@ -437,13 +434,17 @@ describe('listWorktrees', () => {
     await runGitCommand(['commit', '-m', 'initial'], repoDir);
 
     const result = await listWorktrees(repoDir);
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.data.length).toBe(1);
-      // On macOS, /tmp is symlinked to /private/tmp, so check end of path
-      expect(result.data[0].path).toEndWith('repos-test-worktrees/repo');
-      expect(result.data[0].isMain).toBe(true);
-    }
+    // On macOS, /tmp is symlinked to /private/tmp, so check end of path
+    expect(result).toEqual({
+      success: true,
+      data: [
+        {
+          path: matchString(/repos-test-worktrees\/repo$/),
+          branch: anyString(),
+          isMain: true,
+        },
+      ],
+    });
   });
 
   test('lists worktrees for a bare repo with worktree', async () => {
@@ -469,18 +470,22 @@ describe('listWorktrees', () => {
     );
 
     const result = await listWorktrees(bareDir);
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.data.length).toBe(2);
-      const mainWorktree = result.data.find((w) => w.isMain);
-      const featureWorktree = result.data.find((w) => w.branch === 'feature');
-      expect(mainWorktree).toBeDefined();
-      expect(featureWorktree).toBeDefined();
-      // On macOS, /tmp is symlinked to /private/tmp, so check end of path
-      expect(featureWorktree?.path).toEndWith(
-        'repos-test-worktrees/worktree-feature'
-      );
-    }
+    // On macOS, /tmp is symlinked to /private/tmp, so check end of path
+    expect(result).toEqual({
+      success: true,
+      data: arrayContaining([
+        {
+          path: anyString(),
+          branch: anyString(),
+          isMain: true,
+        },
+        {
+          path: matchString(/repos-test-worktrees\/worktree-feature$/),
+          branch: 'feature',
+          isMain: false,
+        },
+      ]),
+    });
   });
 });
 
