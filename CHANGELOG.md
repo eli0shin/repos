@@ -1,5 +1,11 @@
 # repos
 
+## 0.4.0
+
+### Minor Changes
+
+- [#19](https://github.com/eli0shin/repos/pull/19) [`4392d1b`](https://github.com/eli0shin/repos/commit/4392d1b2599d45791107487fc9d1c1f1a5bf3f44) Thanks [@eli0shin](https://github.com/eli0shin)! - Add configurable auto-update system that checks for updates in the background on every command (with 24-hour cooldown). Supports three modes: `auto` (silent install), `notify` (show message), and `off` (disabled), configurable via `config.updateBehavior` in repos.json.
+
 ## 0.3.3
 
 ### Patch Changes
