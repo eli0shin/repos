@@ -6,7 +6,13 @@ import {
   addRepoToConfig,
   findRepo,
 } from '../config.ts';
-import { findGitRepos, getRemoteUrl, isGitRepo } from '../git.ts';
+import {
+  findGitRepos,
+  getRemoteUrl,
+  isGitRepo,
+  isBareRepo,
+  listWorktrees,
+} from '../git.ts';
 import { print, printError } from '../output.ts';
 import type { ReposConfig } from '../types.ts';
 
@@ -19,9 +25,15 @@ export async function adoptCommand(ctx: CommandContext): Promise<void> {
 
   const cwd = process.cwd();
 
-  // If current directory is a git repo, adopt just that repo
+  // If current directory is a bare repo, adopt it
+  if (await isBareRepo(cwd)) {
+    await adoptSingleRepo(ctx.configPath, configResult.data, cwd, true);
+    return;
+  }
+
+  // If current directory is a regular git repo, adopt just that repo
   if (await isGitRepo(cwd)) {
-    await adoptSingleRepo(ctx.configPath, configResult.data, cwd);
+    await adoptSingleRepo(ctx.configPath, configResult.data, cwd, false);
     return;
   }
 
@@ -32,7 +44,8 @@ export async function adoptCommand(ctx: CommandContext): Promise<void> {
 async function adoptSingleRepo(
   configPath: string,
   config: ReposConfig,
-  repoPath: string
+  repoPath: string,
+  bare: boolean
 ): Promise<void> {
   const name = basename(repoPath);
 
@@ -51,6 +64,7 @@ async function adoptSingleRepo(
     name,
     url: urlResult.data,
     path: repoPath,
+    ...(bare ? { bare: true } : {}),
   });
 
   const writeResult = await writeConfig(configPath, newConfig);
@@ -74,7 +88,35 @@ async function adoptMultipleRepos(
     return;
   }
 
-  const newRepos = repoNames.filter((name) => !findRepo(initialConfig, name));
+  // First pass: identify bare repos and collect their worktree paths (excluding the bare repo itself)
+  const worktreePaths = new Set<string>();
+  const bareRepos = new Set<string>();
+
+  for (const name of repoNames) {
+    const repoPath = join(directory, name);
+    if (await isBareRepo(repoPath)) {
+      bareRepos.add(name);
+      const worktreesResult = await listWorktrees(repoPath);
+      if (worktreesResult.success) {
+        for (const wt of worktreesResult.data) {
+          // Skip the main/bare entry itself - only collect non-main worktrees
+          if (!wt.isMain) {
+            worktreePaths.add(wt.path);
+          }
+        }
+      }
+    }
+  }
+
+  // Filter out repos that are worktrees of bare repos
+  const filteredRepos = repoNames.filter((name) => {
+    const repoPath = join(directory, name);
+    return !worktreePaths.has(repoPath);
+  });
+
+  const newRepos = filteredRepos.filter(
+    (name) => !findRepo(initialConfig, name)
+  );
 
   if (newRepos.length === 0) {
     print('All repos are already tracked');
@@ -95,10 +137,12 @@ async function adoptMultipleRepos(
       continue;
     }
 
+    const isBare = bareRepos.has(name);
     config = addRepoToConfig(config, {
       name,
       url: urlResult.data,
       path: repoPath,
+      ...(isBare ? { bare: true } : {}),
     });
 
     print(`  ✓ ${name}`);

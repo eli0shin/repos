@@ -143,6 +143,20 @@ describe('findGitRepos', () => {
     await mkdir(join(testDir, 'empty'), { recursive: true });
     expect(await findGitRepos(join(testDir, 'empty'))).toEqual([]);
   });
+
+  test('finds bare repos in directory', async () => {
+    const bareDir = join(testDir, 'bare.git');
+    await runGitCommand(['init', '--bare', bareDir]);
+    const repos = await findGitRepos(testDir);
+    expect(repos.sort()).toEqual(['bare.git', 'repo1', 'repo2']);
+  });
+
+  test('finds both bare and regular repos', async () => {
+    const bareDir = join(testDir, 'project.git');
+    await runGitCommand(['init', '--bare', bareDir]);
+    const repos = await findGitRepos(testDir);
+    expect(repos.sort()).toEqual(['project.git', 'repo1', 'repo2']);
+  });
 });
 
 describe('getRemoteUrl', () => {
