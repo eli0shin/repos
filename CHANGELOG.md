@@ -1,5 +1,13 @@
 # repos
 
+## 0.3.2
+
+### Patch Changes
+
+- [#15](https://github.com/eli0shin/repos/pull/15) [`635531c`](https://github.com/eli0shin/repos/commit/635531c19f1982a9c0d375dea1a9e166d081f46e) Thanks [@eli0shin](https://github.com/eli0shin)! - Add `--force` flag to `repos init` command that allows users to update their existing shell configuration when the init script changes, instead of requiring manual config file editing.
+
+- [#15](https://github.com/eli0shin/repos/pull/15) [`635531c`](https://github.com/eli0shin/repos/commit/635531c19f1982a9c0d375dea1a9e166d081f46e) Thanks [@eli0shin](https://github.com/eli0shin)! - Fix bare repository and worktree detection in the adopt command. Bare repos are now correctly identified and adopted with the `bare: true` flag, and worktrees are no longer incorrectly adopted as separate repositories. Also fixes the shell wrapper to properly cd into new worktrees by sending status messages to stderr.
+
 ## 0.3.1
 
 ### Patch Changes
