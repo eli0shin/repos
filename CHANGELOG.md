@@ -1,5 +1,11 @@
 # repos
 
+## 0.3.0
+
+### Minor Changes
+
+- [#11](https://github.com/eli0shin/repos/pull/11) [`ae7bc4a`](https://github.com/eli0shin/repos/commit/ae7bc4a646c5978165c365040bafdc2cda1f2863) Thanks [@eli0shin](https://github.com/eli0shin)! - Add worktree management commands (`work`, `clean`, `rebase`, `init`) and bare repository support. Simplify config by removing per-repo branch tracking.
+
 ## 0.2.4
 
 ### Patch Changes
