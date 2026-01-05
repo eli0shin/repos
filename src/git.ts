@@ -397,3 +397,87 @@ export async function ensureRefspecConfig(
 
   return { success: true, data: undefined };
 }
+
+export async function fetchWithPrune(
+  repoDir: string
+): Promise<OperationResult> {
+  const result = await runGitCommand(['fetch', '--prune'], repoDir);
+
+  if (result.exitCode !== 0) {
+    return { success: false, error: result.stderr || 'Failed to fetch' };
+  }
+
+  return { success: true, data: undefined };
+}
+
+export type BranchUpstreamStatus = 'gone' | 'tracking' | 'local';
+
+export async function getBranchUpstreamStatus(
+  repoDir: string,
+  branch: string
+): Promise<OperationResult<BranchUpstreamStatus>> {
+  // Get upstream and track status for the branch
+  const result = await runGitCommand(
+    [
+      'for-each-ref',
+      '--format=%(upstream) %(upstream:track)',
+      `refs/heads/${branch}`,
+    ],
+    repoDir
+  );
+
+  if (result.exitCode !== 0) {
+    return {
+      success: false,
+      error: result.stderr || 'Failed to get branch status',
+    };
+  }
+
+  const output = result.stdout.trim();
+
+  // Empty output means no upstream configured (local-only branch)
+  if (output === '') {
+    return { success: true, data: 'local' };
+  }
+
+  // Check if upstream is gone
+  if (output.includes('[gone]')) {
+    return { success: true, data: 'gone' };
+  }
+
+  // Has upstream and it exists
+  return { success: true, data: 'tracking' };
+}
+
+export async function isBranchContentMerged(
+  repoDir: string,
+  branch: string,
+  targetBranch: string
+): Promise<OperationResult<boolean>> {
+  // Use git cherry to detect if branch commits have been applied to target
+  // Works for squash merges, rebase merges, and cherry-picks
+  const result = await runGitCommand(
+    ['cherry', `origin/${targetBranch}`, branch],
+    repoDir
+  );
+
+  if (result.exitCode !== 0) {
+    return {
+      success: false,
+      error: result.stderr || 'Failed to check cherry status',
+    };
+  }
+
+  // Empty output means no commits to compare (branch is at same point or merged)
+  if (result.stdout === '') {
+    return { success: true, data: true };
+  }
+
+  // Lines starting with + are commits NOT yet applied
+  // Lines starting with - are commits already applied (equivalent patch exists)
+  // If any line starts with +, the branch has unapplied commits
+  const lines = result.stdout.split('\n').filter(Boolean);
+  const hasUnappliedCommits = lines.some((line) => line.startsWith('+'));
+
+  return { success: true, data: !hasUnappliedCommits };
+}

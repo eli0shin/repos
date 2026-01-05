@@ -58,6 +58,7 @@ Commands:
   work <branch> [repo-name]    Create a worktree for a branch
   clean <branch> [repo-name]   Remove a worktree
   rebase [branch] [repo-name]  Rebase a worktree branch on the default branch
+  cleanup [options]            Remove worktrees for merged or deleted branches
   init [options]               Configure shell for work command
   help [command]               display help for command
 `;
