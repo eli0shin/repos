@@ -117,13 +117,11 @@ describe('repos cleanup command', () => {
     await runGitCommand(['add', '.'], worktreePath);
     await runGitCommand(['commit', '-m', 'feature work'], worktreePath);
 
+    // Push to origin with tracking (required for cleanup to recognize as tracking)
+    await runGitCommand(['push', '-u', 'origin', 'feature'], worktreePath);
+
     // Merge feature into main on the source (simulating PR merge)
-    // First fetch the feature branch from the worktree into sourceDir
-    await runGitCommand(['fetch', worktreePath, 'feature'], sourceDir);
-    await runGitCommand(
-      ['merge', 'FETCH_HEAD', '-m', 'merge feature'],
-      sourceDir
-    );
+    await runGitCommand(['merge', 'feature', '-m', 'merge feature'], sourceDir);
 
     // Fetch to get the merged main
     await runGitCommand(['fetch', 'origin'], bareDir);
@@ -347,6 +345,71 @@ describe('repos cleanup command', () => {
     await rm(sourceDir2, { recursive: true, force: true });
   });
 
+  test('does not remove worktree for unpushed branch with commits', async () => {
+    // Clone as bare
+    const bareDir = join(testDir, 'bare.git');
+    await cloneBare(sourceDir, bareDir);
+
+    // Create worktree WITHOUT pushing
+    const worktreePath = join(testDir, 'bare.git-feature');
+    await runGitCommand(
+      ['worktree', 'add', '-b', 'feature', worktreePath],
+      bareDir
+    );
+
+    // Make a commit but don't push
+    await runGitCommand(
+      ['config', 'user.email', 'test@test.com'],
+      worktreePath
+    );
+    await runGitCommand(['config', 'user.name', 'Test'], worktreePath);
+    await Bun.write(join(worktreePath, 'feature.txt'), 'feature');
+    await runGitCommand(['add', '.'], worktreePath);
+    await runGitCommand(['commit', '-m', 'feature work'], worktreePath);
+
+    // Create config
+    const config = {
+      repos: [{ name: 'bare', url: sourceDir, path: bareDir, bare: true }],
+    } satisfies ReposConfig;
+    await writeConfig(configPath, config);
+
+    // Run cleanup
+    const ctx = { configPath };
+    await cleanupCommand(ctx, { dryRun: false });
+
+    // Verify worktree still exists (not pushed, should not be cleaned)
+    expect(await isGitRepo(worktreePath)).toBe(true);
+  });
+
+  test('does not remove fresh worktree with no commits', async () => {
+    // Clone as bare
+    const bareDir = join(testDir, 'bare.git');
+    await cloneBare(sourceDir, bareDir);
+
+    // Create worktree with no additional commits (just branched from main)
+    const worktreePath = join(testDir, 'bare.git-feature');
+    await runGitCommand(
+      ['worktree', 'add', '-b', 'feature', worktreePath],
+      bareDir
+    );
+
+    // No commits made - this is a fresh branch at same point as main
+    // git cherry would return empty, which could be misinterpreted as "merged"
+
+    // Create config
+    const config = {
+      repos: [{ name: 'bare', url: sourceDir, path: bareDir, bare: true }],
+    } satisfies ReposConfig;
+    await writeConfig(configPath, config);
+
+    // Run cleanup
+    const ctx = { configPath };
+    await cleanupCommand(ctx, { dryRun: false });
+
+    // Verify worktree still exists (fresh branch, should not be cleaned)
+    expect(await isGitRepo(worktreePath)).toBe(true);
+  });
+
   test('does not remove worktree with active remote branch', async () => {
     // Clone as bare
     const bareDir = join(testDir, 'bare.git');
@@ -408,6 +471,9 @@ describe('repos cleanup command', () => {
     await runGitCommand(['add', '.'], worktreePath);
     await runGitCommand(['commit', '-m', 'feature work'], worktreePath);
 
+    // Push to origin with tracking (required for cleanup to recognize as tracking)
+    await runGitCommand(['push', '-u', 'origin', 'feature'], worktreePath);
+
     // Simulate squash merge: apply the same changes to main with a different commit
     await Bun.write(join(sourceDir, 'feature.txt'), 'feature content');
     await runGitCommand(['add', '.'], sourceDir);
@@ -461,8 +527,8 @@ describe('repos cleanup command', () => {
     await runGitCommand(['add', '.'], worktreePath);
     await runGitCommand(['commit', '-m', 'feature commit 2'], worktreePath);
 
-    // Push feature to origin so sourceDir has the commits
-    await runGitCommand(['push', 'origin', 'feature'], worktreePath);
+    // Push feature to origin with tracking so sourceDir has the commits
+    await runGitCommand(['push', '-u', 'origin', 'feature'], worktreePath);
 
     // Simulate rebase merge: cherry-pick the commits onto main in sourceDir
     // The feature branch now exists locally in sourceDir (from the push)
