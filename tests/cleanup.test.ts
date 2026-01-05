@@ -190,7 +190,10 @@ describe('repos cleanup command', () => {
     expect(await isGitRepo(worktreePath)).toBe(true);
 
     // Verify warning was output
-    expect(capture.output.join('')).toContain('uncommitted changes');
+    expect(capture.output.join('')).toBe(
+      'Skipped bare/feature: uncommitted changes (upstream-gone)\n' +
+        'Skipped 1 worktree(s) with uncommitted changes\n'
+    );
   });
 
   test('skips main worktree', async () => {
@@ -264,7 +267,11 @@ describe('repos cleanup command', () => {
     expect(await isGitRepo(worktreePath)).toBe(true);
 
     // Verify output mentions what would be removed
-    expect(capture.output.join('')).toContain('feature');
+    expect(capture.output.join('')).toBe(
+      'Would remove bare/feature (upstream deleted)\n' +
+        '\n' +
+        'Would remove 1 worktree(s) (1 upstream deleted)\n'
+    );
   });
 
   test('works across multiple repos', async () => {

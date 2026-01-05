@@ -435,11 +435,6 @@ export async function getBranchUpstreamStatus(
 
   const output = result.stdout.trim();
 
-  // No output means branch doesn't exist
-  if (!output && output !== '') {
-    return { success: false, error: `Branch ${branch} not found` };
-  }
-
   // Empty output means no upstream configured (local-only branch)
   if (output === '') {
     return { success: true, data: 'local' };
@@ -452,34 +447,6 @@ export async function getBranchUpstreamStatus(
 
   // Has upstream and it exists
   return { success: true, data: 'tracking' };
-}
-
-export async function isBranchMergedInto(
-  repoDir: string,
-  branch: string,
-  targetBranch: string
-): Promise<OperationResult<boolean>> {
-  // Check if branch is an ancestor of target (meaning it's merged)
-  const result = await runGitCommand(
-    ['merge-base', '--is-ancestor', branch, `origin/${targetBranch}`],
-    repoDir
-  );
-
-  // Exit code 0 means branch IS an ancestor (merged)
-  // Exit code 1 means branch is NOT an ancestor (not merged)
-  // Other exit codes are errors
-  if (result.exitCode === 0) {
-    return { success: true, data: true };
-  }
-
-  if (result.exitCode === 1) {
-    return { success: true, data: false };
-  }
-
-  return {
-    success: false,
-    error: result.stderr || 'Failed to check merge status',
-  };
 }
 
 export async function isBranchContentMerged(
