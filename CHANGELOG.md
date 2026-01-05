@@ -1,5 +1,11 @@
 # repos
 
+## 0.5.0
+
+### Minor Changes
+
+- [#21](https://github.com/eli0shin/repos/pull/21) [`1cc15de`](https://github.com/eli0shin/repos/commit/1cc15deae20bd7e32376a428bd9615007002e83c) Thanks [@eli0shin](https://github.com/eli0shin)! - Add `repos cleanup` command to remove worktrees for branches that have been merged or deleted upstream. Detects regular merges, squash merges, and rebase merges using `git cherry` for accurate content-based comparison.
+
 ## 0.4.0
 
 ### Minor Changes
