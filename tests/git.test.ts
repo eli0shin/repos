@@ -19,6 +19,7 @@ import {
   rebaseOnBranch,
   cloneBare,
   ensureRefspecConfig,
+  localBranchExists,
 } from '../src/git.ts';
 
 import { anyString, arrayContaining, matchString } from './helpers.ts';
@@ -648,5 +649,85 @@ describe('rebaseOnBranch', () => {
 
     const result = await rebaseOnBranch(localDir, defaultBranchResult.data);
     expect(result).toEqual({ success: true, data: undefined });
+  });
+});
+
+describe('localBranchExists', () => {
+  const testDir = '/tmp/repos-test-local-branch-exists';
+
+  beforeEach(async () => {
+    await mkdir(testDir, { recursive: true });
+    await runGitCommand(['init'], testDir);
+    await runGitCommand(['config', 'user.email', 'test@test.com'], testDir);
+    await runGitCommand(['config', 'user.name', 'Test'], testDir);
+    await Bun.write(join(testDir, 'test.txt'), 'test');
+    await runGitCommand(['add', '.'], testDir);
+    await runGitCommand(['commit', '-m', 'initial'], testDir);
+  });
+
+  afterEach(async () => {
+    await rm(testDir, { recursive: true, force: true });
+  });
+
+  test('returns true for existing branch', async () => {
+    await runGitCommand(['checkout', '-b', 'feature-branch'], testDir);
+    expect(await localBranchExists(testDir, 'feature-branch')).toBe(true);
+  });
+
+  test('returns false for non-existing branch', async () => {
+    expect(await localBranchExists(testDir, 'nonexistent-branch')).toBe(false);
+  });
+});
+
+describe('createWorktree with existing local branch', () => {
+  const testDir = '/tmp/repos-test-worktree-existing-branch';
+  const sourceDir = '/tmp/repos-test-worktree-existing-branch-source';
+
+  beforeEach(async () => {
+    await mkdir(testDir, { recursive: true });
+    // Create source repo
+    await mkdir(sourceDir, { recursive: true });
+    await runGitCommand(['init'], sourceDir);
+    await runGitCommand(['config', 'user.email', 'test@test.com'], sourceDir);
+    await runGitCommand(['config', 'user.name', 'Test'], sourceDir);
+    await Bun.write(join(sourceDir, 'test.txt'), 'test');
+    await runGitCommand(['add', '.'], sourceDir);
+    await runGitCommand(['commit', '-m', 'initial'], sourceDir);
+  });
+
+  afterEach(async () => {
+    await rm(testDir, { recursive: true, force: true });
+    await rm(sourceDir, { recursive: true, force: true });
+  });
+
+  test('creates worktree for branch that already exists locally', async () => {
+    // Clone as bare
+    const bareDir = join(testDir, 'bare.git');
+    await cloneBare(sourceDir, bareDir);
+    await ensureRefspecConfig(bareDir);
+
+    // Create a branch via worktree first
+    const tempWorktreeDir = join(testDir, 'temp-worktree');
+    await createWorktree(bareDir, tempWorktreeDir, 'existing-branch');
+
+    // Remove the worktree but keep the branch
+    await removeWorktree(bareDir, tempWorktreeDir);
+
+    // Verify branch exists locally
+    expect(await localBranchExists(bareDir, 'existing-branch')).toBe(true);
+
+    // Now try to create a worktree for the same branch - this should succeed
+    const worktreeDir = join(testDir, 'worktree-existing');
+    const createResult = await createWorktree(
+      bareDir,
+      worktreeDir,
+      'existing-branch'
+    );
+    expect(createResult).toEqual({ success: true, data: undefined });
+
+    // Verify worktree exists and is on correct branch
+    expect(await isGitRepo(worktreeDir)).toBe(true);
+    const branchResult = await getCurrentBranch(worktreeDir);
+    expect(branchResult).toEqual({ success: true, data: 'existing-branch' });
   });
 });

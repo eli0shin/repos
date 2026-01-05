@@ -77,12 +77,14 @@ async function processWorktree(
     return null;
   }
 
-  // Check if upstream is gone
+  // Check upstream status
   const upstreamResult = await getBranchUpstreamStatus(
     repo.path,
     worktree.branch
   );
-  const upstreamGone = upstreamResult.success && upstreamResult.data === 'gone';
+  const upstreamStatus = upstreamResult.success ? upstreamResult.data : null;
+  const upstreamGone = upstreamStatus === 'gone';
+  const isTracking = upstreamStatus === 'tracking';
 
   // Check if merged into default branch (works for squash/rebase merges too)
   const mergedResult = await isBranchContentMerged(
@@ -92,8 +94,12 @@ async function processWorktree(
   );
   const isMerged = mergedResult.success && mergedResult.data === true;
 
-  // Skip if neither condition is met
-  if (!upstreamGone && !isMerged) {
+  // Cleanup conditions:
+  // 1. Remote branch was deleted (upstream-gone)
+  // 2. Branch is tracking remote AND merged (unpushed branches won't be tracking)
+  const shouldCleanup = upstreamGone || (isTracking && isMerged);
+
+  if (!shouldCleanup) {
     return null;
   }
 
