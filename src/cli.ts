@@ -17,6 +17,7 @@ import { syncCommand } from './commands/sync.ts';
 import { updateCommand } from './commands/update.ts';
 import { workCommand } from './commands/work.ts';
 import { cleanCommand } from './commands/clean.ts';
+import { cleanupCommand } from './commands/cleanup.ts';
 import { rebaseCommand } from './commands/rebase.ts';
 import { initCommand, initPrintCommand } from './commands/init.ts';
 import { runUpdaterWorker } from './updater-worker.ts';
@@ -155,6 +156,16 @@ program
   .argument('[repo-name]', 'Repo name (optional if inside a tracked repo)')
   .action(async (branch, repoName) => {
     await rebaseCommand(getCommandContext(), branch, repoName);
+  });
+
+program
+  .command('cleanup')
+  .description('Remove worktrees for merged or deleted branches')
+  .option('--dry-run', 'Show what would be removed without removing')
+  .action(async (options) => {
+    await cleanupCommand(getCommandContext(), {
+      dryRun: options.dryRun ?? false,
+    });
   });
 
 program
