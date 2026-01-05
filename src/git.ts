@@ -227,11 +227,40 @@ export async function listWorktrees(
   return { success: true, data: worktrees };
 }
 
+export async function localBranchExists(
+  repoDir: string,
+  branch: string
+): Promise<boolean> {
+  const result = await runGitCommand(
+    ['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`],
+    repoDir
+  );
+  return result.exitCode === 0;
+}
+
 export async function createWorktree(
   repoDir: string,
   worktreePath: string,
   branch: string
 ): Promise<OperationResult> {
+  // Check if local branch exists first
+  const localExists = await localBranchExists(repoDir, branch);
+
+  if (localExists) {
+    // Branch exists locally - checkout existing branch (no -b flag)
+    const args = ['worktree', 'add', worktreePath, branch];
+    const result = await runGitCommand(args, repoDir);
+
+    if (result.exitCode !== 0) {
+      return {
+        success: false,
+        error: result.stderr || 'Failed to create worktree',
+      };
+    }
+
+    return { success: true, data: undefined };
+  }
+
   // Check if remote branch exists
   const remoteBranchResult = await runGitCommand(
     ['ls-remote', '--heads', 'origin', branch],
