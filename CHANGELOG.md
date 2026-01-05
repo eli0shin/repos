@@ -1,5 +1,11 @@
 # repos
 
+## 0.5.1
+
+### Patch Changes
+
+- [#23](https://github.com/eli0shin/repos/pull/23) [`5c609e0`](https://github.com/eli0shin/repos/commit/5c609e04ba32d397e52a29844c89be952734f450) Thanks [@eli0shin](https://github.com/eli0shin)! - Fix `repos work` command failing when the branch already exists locally. Now correctly checks out existing local branches instead of attempting to create a new branch with the same name.
+
 ## 0.5.0
 
 ### Minor Changes
