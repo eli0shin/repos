@@ -1,3 +1,7 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
 # repos CLI
 
 A Bun-based CLI tool for managing git repositories in `~/code`.
@@ -5,53 +9,63 @@ A Bun-based CLI tool for managing git repositories in `~/code`.
 ## Development
 
 ```bash
-bun install      # Install dependencies
-bun test         # Run tests
-bun run build    # Build executable
-bun run dev      # Run in development mode
-bun run lint     # Run ESLint
-bun run format   # Check formatting
+bun install                   # Install dependencies
+bun test                      # Run all tests
+bun test tests/git.test.ts    # Run a single test file
+bun run build                 # Build executable
+bun run lint                  # Run ESLint
+bun run format                # Check formatting
 ```
 
 ## Architecture
 
-- `src/cli.ts` - Entry point, argument parsing
-- `src/config.ts` - repos.json read/write operations
-- `src/git.ts` - Git command wrappers (clone, pull, branch detection)
+- `src/cli.ts` - Entry point using Commander.js with typed commands
+- `src/config.ts` - Config file read/write operations
+- `src/git.ts` - Git command wrappers (clone, pull, worktree operations)
 - `src/output.ts` - stdout/stderr output utilities
+- `src/types.ts` - Core types (`RepoEntry`, `ReposConfig`, `OperationResult<T>`)
 - `src/commands/` - Individual command implementations
+- `src/auto-update.ts`, `src/update-state.ts`, `src/updater-worker.ts` - Background auto-update system
+
+Commands receive a `CommandContext` with `configPath` and return results using the `OperationResult<T>` pattern:
+
+```typescript
+type OperationResult<T = void> =
+  | { success: true; data: T }
+  | { success: false; error: string };
+```
 
 ## Commands
 
-- `repos add <url>` - Clone and track a repo
-- `repos clone [name]` - Clone repos from config
-- `repos list` - List tracked repos with status
-- `repos remove <name> [--delete]` - Untrack repo
-- `repos latest` - Parallel pull all repos
-- `repos adopt` - Add existing repos to config
-- `repos sync` - Adopt + clone missing
+| Command                        | Description                                  |
+| ------------------------------ | -------------------------------------------- |
+| `repos add <url> [--bare]`     | Clone a repo and add it to tracking          |
+| `repos clone [name]`           | Clone repos from config (all or specific)    |
+| `repos list`                   | List tracked repos with status               |
+| `repos remove <name> [-d]`     | Untrack repo (-d to delete directory)        |
+| `repos latest`                 | Parallel pull all repos                      |
+| `repos adopt`                  | Add existing repos to config                 |
+| `repos sync`                   | Adopt + clone missing                        |
+| `repos work <branch> [repo]`   | Create a worktree for a branch               |
+| `repos clean <branch> [repo]`  | Remove a worktree                            |
+| `repos rebase [branch] [repo]` | Rebase worktree branch on default branch     |
+| `repos cleanup [--dry-run]`    | Remove worktrees for merged/deleted branches |
+| `repos init`                   | Configure shell for work command             |
+| `repos update`                 | Update repos CLI to latest version           |
 
 ## Config Location
 
-`~/code/repos.json` - JSON file with repo entries (name, url, branch)
+`~/.config/repos/config.json` (or `$XDG_CONFIG_HOME/repos/config.json`) - JSON file with repo entries and settings
 
 ## Testing
 
 Tests use real git operations on temp directories. No mocking of deterministic functions.
 
-```bash
-bun test              # Run all tests
-bun test:watch        # Watch mode
-```
+Write assertions on complete output: `expect(result).toEqual(...)` not `expect(result.status).toBe(...)` or `expect(result).toContain(...)`
 
-ALWAYS write assertions on the complete output of a function or command for example `expect(result).toBe(...)` instead of `expect(result.status).toBe(...)` or `expect(result).toContain(...)`
+Test helpers in `tests/helpers.ts`: `matchString()`, `anyString()`, `arrayContaining()`, `objectContaining()`
 
 ## Publishing
 
 Uses changesets for versioning:
-
-```bash
-bunx changeset        # Create a changeset
-bunx changeset version # Update version
-npm publish           # Publish to npm
-```
+Use the /changeset slash command to create a changeset for each change
