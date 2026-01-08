@@ -16,6 +16,8 @@ import { adoptCommand } from './commands/adopt.ts';
 import { syncCommand } from './commands/sync.ts';
 import { updateCommand } from './commands/update.ts';
 import { workCommand } from './commands/work.ts';
+import { stackCommand } from './commands/stack.ts';
+import { restackCommand } from './commands/restack.ts';
 import { cleanCommand } from './commands/clean.ts';
 import { cleanupCommand } from './commands/cleanup.ts';
 import { rebaseCommand } from './commands/rebase.ts';
@@ -138,6 +140,21 @@ program
   .argument('[repo-name]', 'Repo name (optional if inside a tracked repo)')
   .action(async (branch, repoName) => {
     await workCommand(getCommandContext(), branch, repoName);
+  });
+
+program
+  .command('stack')
+  .description('Create a stacked worktree from current branch')
+  .argument('<branch>', 'New branch name')
+  .action(async (branch) => {
+    await stackCommand(getCommandContext(), branch);
+  });
+
+program
+  .command('restack')
+  .description('Rebase current branch on its parent branch')
+  .action(async () => {
+    await restackCommand(getCommandContext());
   });
 
 program

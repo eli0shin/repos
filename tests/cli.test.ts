@@ -56,6 +56,8 @@ Commands:
   sync                         Adopt existing + clone missing repos
   update                       Update repos CLI to latest version
   work <branch> [repo-name]    Create a worktree for a branch
+  stack <branch>               Create a stacked worktree from current branch
+  restack                      Rebase current branch on its parent branch
   clean <branch> [repo-name]   Remove a worktree
   rebase [branch] [repo-name]  Rebase a worktree branch on the default branch
   cleanup [options]            Remove worktrees for merged or deleted branches

@@ -317,6 +317,61 @@ export async function createWorktree(
   return { success: true, data: undefined };
 }
 
+export async function createWorktreeFromBranch(
+  repoDir: string,
+  worktreePath: string,
+  newBranch: string,
+  parentBranch: string
+): Promise<OperationResult> {
+  // Check if new branch already exists locally
+  const localExists = await localBranchExists(repoDir, newBranch);
+  if (localExists) {
+    return {
+      success: false,
+      error: `Branch "${newBranch}" already exists locally`,
+    };
+  }
+
+  // Check if new branch already exists on remote
+  const remoteBranchResult = await runGitCommand(
+    ['ls-remote', '--heads', 'origin', newBranch],
+    repoDir
+  );
+  const remoteExists =
+    remoteBranchResult.exitCode === 0 &&
+    remoteBranchResult.stdout.includes(`refs/heads/${newBranch}`);
+
+  if (remoteExists) {
+    return {
+      success: false,
+      error: `Branch "${newBranch}" already exists on remote`,
+    };
+  }
+
+  // Create worktree with new branch based on parent branch
+  const result = await runGitCommand(
+    [
+      'worktree',
+      'add',
+      '--no-track',
+      '-b',
+      newBranch,
+      worktreePath,
+      parentBranch,
+    ],
+    repoDir
+  );
+
+  if (result.exitCode !== 0) {
+    return {
+      success: false,
+      error: result.stderr || 'Failed to create worktree',
+    };
+  }
+
+  return { success: true, data: undefined };
+}
+
 export async function removeWorktree(
   repoDir: string,
   worktreePath: string
@@ -362,10 +417,14 @@ export async function rebaseOnBranch(
   repoDir: string,
   targetBranch: string
 ): Promise<OperationResult> {
-  const result = await runGitCommand(
-    ['rebase', `origin/${targetBranch}`],
-    repoDir
-  );
+  return rebaseOnRef(repoDir, `origin/${targetBranch}`);
+}
+
+export async function rebaseOnRef(
+  repoDir: string,
+  ref: string
+): Promise<OperationResult> {
+  const result = await runGitCommand(['rebase', ref], repoDir);
 
   if (result.exitCode !== 0) {
     // Check if it's a conflict

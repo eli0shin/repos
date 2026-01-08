@@ -1,8 +1,14 @@
+export type StackEntry = {
+  parent: string;
+  child: string;
+};
+
 export type RepoEntry = {
   name: string;
   url: string;
   path: string;
   bare?: boolean;
+  stacks?: StackEntry[];
 };
 
 export type UpdateBehavior = 'auto' | 'notify' | 'off';

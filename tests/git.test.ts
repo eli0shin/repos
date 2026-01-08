@@ -13,10 +13,12 @@ import {
   getDefaultBranch,
   listWorktrees,
   createWorktree,
+  createWorktreeFromBranch,
   removeWorktree,
   hasUncommittedChanges,
   fetchOrigin,
   rebaseOnBranch,
+  rebaseOnRef,
   cloneBare,
   ensureRefspecConfig,
   localBranchExists,
@@ -729,5 +731,166 @@ describe('createWorktree with existing local branch', () => {
     expect(await isGitRepo(worktreeDir)).toBe(true);
     const branchResult = await getCurrentBranch(worktreeDir);
     expect(branchResult).toEqual({ success: true, data: 'existing-branch' });
+  });
+});
+
+describe('createWorktreeFromBranch', () => {
+  const testDir = '/tmp/repos-test-worktree-from-branch';
+  const sourceDir = '/tmp/repos-test-source-from-branch';
+
+  beforeEach(async () => {
+    await mkdir(testDir, { recursive: true });
+    await mkdir(sourceDir, { recursive: true });
+
+    // Create a source repo with commits
+    await runGitCommand(['init'], sourceDir);
+    await runGitCommand(['config', 'user.email', 'test@test.com'], sourceDir);
+    await runGitCommand(['config', 'user.name', 'Test'], sourceDir);
+    await Bun.write(join(sourceDir, 'file.txt'), 'initial');
+    await runGitCommand(['add', '.'], sourceDir);
+    await runGitCommand(['commit', '-m', 'initial'], sourceDir);
+  });
+
+  afterEach(async () => {
+    await rm(testDir, { recursive: true, force: true });
+    await rm(sourceDir, { recursive: true, force: true });
+  });
+
+  test('creates worktree based on parent branch', async () => {
+    // Clone as bare
+    const bareDir = join(testDir, 'bare.git');
+    await cloneBare(sourceDir, bareDir);
+    await ensureRefspecConfig(bareDir);
+
+    // Create parent branch worktree
+    const parentWorktreeDir = join(testDir, 'parent-worktree');
+    await createWorktree(bareDir, parentWorktreeDir, 'parent-branch');
+
+    // Add a commit to parent branch
+    await Bun.write(join(parentWorktreeDir, 'parent.txt'), 'parent content');
+    await runGitCommand(['add', '.'], parentWorktreeDir);
+    await runGitCommand(['commit', '-m', 'parent commit'], parentWorktreeDir);
+
+    // Create child worktree from parent branch
+    const childWorktreeDir = join(testDir, 'child-worktree');
+    const result = await createWorktreeFromBranch(
+      bareDir,
+      childWorktreeDir,
+      'child-branch',
+      'parent-branch'
+    );
+
+    expect(result).toEqual({ success: true, data: undefined });
+
+    // Verify child worktree exists and is on correct branch
+    expect(await isGitRepo(childWorktreeDir)).toBe(true);
+    expect(await getCurrentBranch(childWorktreeDir)).toEqual({
+      success: true,
+      data: 'child-branch',
+    });
+
+    // Verify child has parent's commit
+    const logResult = await runGitCommand(
+      ['log', '--oneline', '-1'],
+      childWorktreeDir
+    );
+    expect(logResult.stdout).toContain('parent commit');
+  });
+
+  test('fails when new branch already exists locally', async () => {
+    // Clone as bare
+    const bareDir = join(testDir, 'bare.git');
+    await cloneBare(sourceDir, bareDir);
+    await ensureRefspecConfig(bareDir);
+
+    // Create parent branch worktree
+    const parentWorktreeDir = join(testDir, 'parent-worktree');
+    await createWorktree(bareDir, parentWorktreeDir, 'parent-branch');
+
+    // Create an existing branch
+    const existingWorktreeDir = join(testDir, 'existing-worktree');
+    await createWorktree(bareDir, existingWorktreeDir, 'existing-branch');
+
+    // Try to create worktree with existing branch name
+    const childWorktreeDir = join(testDir, 'child-worktree');
+    const result = await createWorktreeFromBranch(
+      bareDir,
+      childWorktreeDir,
+      'existing-branch',
+      'parent-branch'
+    );
+
+    expect(result).toEqual({
+      success: false,
+      error: 'Branch "existing-branch" already exists locally',
+    });
+  });
+});
+
+describe('rebaseOnRef', () => {
+  const testDir = '/tmp/repos-test-rebase-ref';
+  const sourceDir = '/tmp/repos-test-source-rebase-ref';
+
+  beforeEach(async () => {
+    await mkdir(testDir, { recursive: true });
+    await mkdir(sourceDir, { recursive: true });
+
+    // Create a source repo with commits
+    await runGitCommand(['init'], sourceDir);
+    await runGitCommand(['config', 'user.email', 'test@test.com'], sourceDir);
+    await runGitCommand(['config', 'user.name', 'Test'], sourceDir);
+    await Bun.write(join(sourceDir, 'file.txt'), 'initial');
+    await runGitCommand(['add', '.'], sourceDir);
+    await runGitCommand(['commit', '-m', 'initial'], sourceDir);
+  });
+
+  afterEach(async () => {
+    await rm(testDir, { recursive: true, force: true });
+    await rm(sourceDir, { recursive: true, force: true });
+  });
+
+  test('rebases on local branch ref', async () => {
+    // Clone as bare
+    const bareDir = join(testDir, 'bare.git');
+    await cloneBare(sourceDir, bareDir);
+    await ensureRefspecConfig(bareDir);
+
+    // Create parent branch worktree and add commit
+    const parentWorktreeDir = join(testDir, 'parent-worktree');
+    await createWorktree(bareDir, parentWorktreeDir, 'parent-branch');
+    await Bun.write(join(parentWorktreeDir, 'parent.txt'), 'parent content');
+    await runGitCommand(['add', '.'], parentWorktreeDir);
+    await runGitCommand(['commit', '-m', 'parent commit'], parentWorktreeDir);
+
+    // Create child worktree from parent
+    const childWorktreeDir = join(testDir, 'child-worktree');
+    await createWorktreeFromBranch(
+      bareDir,
+      childWorktreeDir,
+      'child-branch',
+      'parent-branch'
+    );
+
+    // Add commit to child
+    await Bun.write(join(childWorktreeDir, 'child.txt'), 'child content');
+    await runGitCommand(['add', '.'], childWorktreeDir);
+    await runGitCommand(['commit', '-m', 'child commit'], childWorktreeDir);
+
+    // Add another commit to parent
+    await Bun.write(join(parentWorktreeDir, 'parent2.txt'), 'parent2 content');
+    await runGitCommand(['add', '.'], parentWorktreeDir);
+    await runGitCommand(['commit', '-m', 'parent commit 2'], parentWorktreeDir);
+
+    // Rebase child on parent branch (local ref)
+    const result = await rebaseOnRef(childWorktreeDir, 'parent-branch');
+    expect(result).toEqual({ success: true, data: undefined });
+
+    // Verify child now has parent's second commit
+    const logResult = await runGitCommand(
+      ['log', '--oneline'],
+      childWorktreeDir
+    );
+    expect(logResult.stdout).toContain('parent commit 2');
+    expect(logResult.stdout).toContain('child commit');
   });
 });

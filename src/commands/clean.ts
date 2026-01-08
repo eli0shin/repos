@@ -1,5 +1,12 @@
 import type { CommandContext } from '../cli.ts';
-import { readConfig, findRepo, findRepoFromCwd } from '../config.ts';
+import {
+  readConfig,
+  findRepo,
+  findRepoFromCwd,
+  removeStackEntry,
+  updateRepoInConfig,
+  writeConfig,
+} from '../config.ts';
 import {
   removeWorktree,
   hasUncommittedChanges,
@@ -71,6 +78,18 @@ export async function cleanCommand(
   if (!result.success) {
     printError(`Error: ${result.error}`);
     process.exit(1);
+  }
+
+  // Clean up any stack entry for this branch
+  const updatedRepo = removeStackEntry(repo, branch);
+  if (updatedRepo !== repo) {
+    const updatedConfig = updateRepoInConfig(configResult.data, updatedRepo);
+    const writeResult = await writeConfig(ctx.configPath, updatedConfig);
+    if (!writeResult.success) {
+      printError(
+        `Warning: Failed to clean up stack entry: ${writeResult.error}`
+      );
+    }
   }
 
   print(`Removed worktree "${repo.name}-${branch}"`);

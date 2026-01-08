@@ -10,6 +10,11 @@ import {
   addRepoToConfig,
   removeRepoFromConfig,
   findRepo,
+  getParentBranch,
+  getChildBranches,
+  addStackEntry,
+  removeStackEntry,
+  updateRepoInConfig,
 } from '../src/config.ts';
 import type { ReposConfig, RepoEntry } from '../src/types.ts';
 import { objectContaining } from './helpers.ts';
@@ -318,6 +323,206 @@ describe('config file operations', () => {
       expect(await readConfig(testConfigPath)).toEqual({
         success: true,
         data: config2,
+      });
+    });
+  });
+});
+
+describe('branch stack helpers', () => {
+  const baseRepo = {
+    name: 'myrepo',
+    url: 'u',
+    path: '/p/myrepo',
+  } satisfies RepoEntry;
+
+  describe('getParentBranch', () => {
+    test('returns undefined when no stacks exist', () => {
+      expect(getParentBranch(baseRepo, 'feature')).toBeUndefined();
+    });
+
+    test('returns undefined when branch has no parent', () => {
+      const repo = {
+        ...baseRepo,
+        stacks: [{ parent: 'main', child: 'other' }],
+      } satisfies RepoEntry;
+      expect(getParentBranch(repo, 'feature')).toBeUndefined();
+    });
+
+    test('returns parent branch when configured', () => {
+      const repo = {
+        ...baseRepo,
+        stacks: [{ parent: 'main', child: 'feature' }],
+      } satisfies RepoEntry;
+      expect(getParentBranch(repo, 'feature')).toBe('main');
+    });
+  });
+
+  describe('getChildBranches', () => {
+    test('returns empty array when no stacks exist', () => {
+      expect(getChildBranches(baseRepo, 'main')).toEqual([]);
+    });
+
+    test('returns empty array when no children exist', () => {
+      const repo = {
+        ...baseRepo,
+        stacks: [{ parent: 'other', child: 'feature' }],
+      } satisfies RepoEntry;
+      expect(getChildBranches(repo, 'main')).toEqual([]);
+    });
+
+    test('returns all children of a parent', () => {
+      const repo = {
+        ...baseRepo,
+        stacks: [
+          { parent: 'main', child: 'feature-1' },
+          { parent: 'main', child: 'feature-2' },
+          { parent: 'other', child: 'feature-3' },
+        ],
+      } satisfies RepoEntry;
+      expect(getChildBranches(repo, 'main')).toEqual([
+        'feature-1',
+        'feature-2',
+      ]);
+    });
+  });
+
+  describe('addStackEntry', () => {
+    test('creates stacks array when none exists', () => {
+      const result = addStackEntry(baseRepo, 'main', 'feature');
+      expect(result).toEqual({
+        name: 'myrepo',
+        url: 'u',
+        path: '/p/myrepo',
+        stacks: [{ parent: 'main', child: 'feature' }],
+      });
+    });
+
+    test('adds to existing stacks array', () => {
+      const repo = {
+        ...baseRepo,
+        stacks: [{ parent: 'main', child: 'existing' }],
+      } satisfies RepoEntry;
+      const result = addStackEntry(repo, 'main', 'feature');
+      expect(result).toEqual({
+        name: 'myrepo',
+        url: 'u',
+        path: '/p/myrepo',
+        stacks: [
+          { parent: 'main', child: 'existing' },
+          { parent: 'main', child: 'feature' },
+        ],
+      });
+    });
+
+    test('does not mutate original repo', () => {
+      const original = {
+        ...baseRepo,
+        stacks: [{ parent: 'main', child: 'existing' }],
+      } satisfies RepoEntry;
+      addStackEntry(original, 'main', 'feature');
+      expect(original).toEqual({
+        name: 'myrepo',
+        url: 'u',
+        path: '/p/myrepo',
+        stacks: [{ parent: 'main', child: 'existing' }],
+      });
+    });
+  });
+
+  describe('removeStackEntry', () => {
+    test('returns unchanged repo when no stacks exist', () => {
+      const result = removeStackEntry(baseRepo, 'feature');
+      expect(result).toEqual(baseRepo);
+    });
+
+    test('returns unchanged repo when child not in stacks', () => {
+      const repo = {
+        ...baseRepo,
+        stacks: [{ parent: 'main', child: 'other' }],
+      } satisfies RepoEntry;
+      const result = removeStackEntry(repo, 'feature');
+      expect(result).toEqual(repo);
+    });
+
+    test('removes stack entry by child', () => {
+      const repo = {
+        ...baseRepo,
+        stacks: [
+          { parent: 'main', child: 'feature' },
+          { parent: 'main', child: 'other' },
+        ],
+      } satisfies RepoEntry;
+      const result = removeStackEntry(repo, 'feature');
+      expect(result).toEqual({
+        name: 'myrepo',
+        url: 'u',
+        path: '/p/myrepo',
+        stacks: [{ parent: 'main', child: 'other' }],
+      });
+    });
+
+    test('removes stacks property when empty', () => {
+      const repo = {
+        ...baseRepo,
+        stacks: [{ parent: 'main', child: 'feature' }],
+      } satisfies RepoEntry;
+      const result = removeStackEntry(repo, 'feature');
+      expect(result).toEqual({
+        name: 'myrepo',
+        url: 'u',
+        path: '/p/myrepo',
+      });
+    });
+
+    test('does not mutate original repo', () => {
+      const original = {
+        ...baseRepo,
+        stacks: [{ parent: 'main', child: 'feature' }],
+      } satisfies RepoEntry;
+      removeStackEntry(original, 'feature');
+      expect(original).toEqual({
+        name: 'myrepo',
+        url: 'u',
+        path: '/p/myrepo',
+        stacks: [{ parent: 'main', child: 'feature' }],
+      });
+    });
+  });
+
+  describe('updateRepoInConfig', () => {
+    test('updates repo in config by name', () => {
+      const config = {
+        repos: [baseRepo, { name: 'other', url: 'u2', path: '/p/other' }],
+      } satisfies ReposConfig;
+      const updatedRepo = {
+        ...baseRepo,
+        stacks: [{ parent: 'main', child: 'feature' }],
+      } satisfies RepoEntry;
+      const result = updateRepoInConfig(config, updatedRepo);
+      expect(result).toEqual({
+        repos: [
+          {
+            name: 'myrepo',
+            url: 'u',
+            path: '/p/myrepo',
+            stacks: [{ parent: 'main', child: 'feature' }],
+          },
+          { name: 'other', url: 'u2', path: '/p/other' },
+        ],
+      });
+    });
+
+    test('does not mutate original config', () => {
+      const config = {
+        repos: [baseRepo],
+      } satisfies ReposConfig;
+      const updatedRepo = {
+        ...baseRepo,
+        stacks: [{ parent: 'main', child: 'feature' }],
+      } satisfies RepoEntry;
+      updateRepoInConfig(config, updatedRepo);
+      expect(config).toEqual({
+        repos: [{ name: 'myrepo', url: 'u', path: '/p/myrepo' }],
       });
     });
   });
