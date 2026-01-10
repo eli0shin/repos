@@ -29,7 +29,11 @@ curl -fsSL https://raw.githubusercontent.com/eli0shin/repos/main/install.sh | ba
 | `repos sync`                   | Adopt existing + clone missing repos                 |
 | `repos update`                 | Update repos CLI to latest version                   |
 | `repos work <branch> [repo]`   | Create a worktree for a branch                       |
-| `repos clean <branch> [repo]`  | Remove a worktree                                    |
+| `repos stack <branch>`         | Create a stacked worktree from current branch        |
+| `repos restack`                | Rebase current branch on its parent branch           |
+| `repos unstack`                | Rebase onto default branch and remove stack relation |
+| `repos collapse`               | Collapse parent branch into current stacked branch   |
+| `repos clean <branch> [repo]`  | Remove a worktree (--force for parent branches)      |
 | `repos rebase [branch] [repo]` | Rebase worktree branch on default branch             |
 | `repos cleanup [--dry-run]`    | Remove worktrees for merged/deleted branches         |
 | `repos init`                   | Configure shell for work command                     |

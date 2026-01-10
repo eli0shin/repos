@@ -16,6 +16,10 @@ import { adoptCommand } from './commands/adopt.ts';
 import { syncCommand } from './commands/sync.ts';
 import { updateCommand } from './commands/update.ts';
 import { workCommand } from './commands/work.ts';
+import { stackCommand } from './commands/stack.ts';
+import { restackCommand } from './commands/restack.ts';
+import { unstackCommand } from './commands/unstack.ts';
+import { collapseCommand } from './commands/collapse.ts';
 import { cleanCommand } from './commands/clean.ts';
 import { cleanupCommand } from './commands/cleanup.ts';
 import { rebaseCommand } from './commands/rebase.ts';
@@ -141,12 +145,46 @@ program
   });
 
 program
+  .command('stack')
+  .description('Create a stacked worktree from current branch')
+  .argument('<branch>', 'New branch name')
+  .action(async (branch) => {
+    await stackCommand(getCommandContext(), branch);
+  });
+
+program
+  .command('restack')
+  .description('Rebase current branch on its parent branch')
+  .action(async () => {
+    await restackCommand(getCommandContext());
+  });
+
+program
+  .command('unstack')
+  .description(
+    'Rebase current branch on default branch and remove stack relationship'
+  )
+  .action(async () => {
+    await unstackCommand(getCommandContext());
+  });
+
+program
+  .command('collapse')
+  .description('Collapse parent branch into current stacked branch')
+  .action(async () => {
+    await collapseCommand(getCommandContext());
+  });
+
+program
   .command('clean')
   .description('Remove a worktree')
   .argument('<branch>', 'Branch name of the worktree to remove')
   .argument('[repo-name]', 'Repo name (optional if inside a tracked repo)')
-  .action(async (branch, repoName) => {
-    await cleanCommand(getCommandContext(), branch, repoName);
+  .option('--force', 'Force removal even if branch has stacked children')
+  .action(async (branch, repoName, options) => {
+    await cleanCommand(getCommandContext(), branch, repoName, {
+      force: options.force ?? false,
+    });
   });
 
 program

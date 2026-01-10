@@ -7,6 +7,7 @@ import type {
   ReposConfig,
   OperationResult,
   UpdateBehavior,
+  StackEntry,
 } from './types.ts';
 
 export function getConfigPath(): string {
@@ -21,14 +22,22 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
+function isStackEntry(value: unknown): value is StackEntry {
+  if (!isRecord(value)) return false;
+  return typeof value.parent === 'string' && typeof value.child === 'string';
+}
+
 function isRepoEntry(value: unknown): value is RepoEntry {
   if (!isRecord(value)) return false;
-  return (
-    typeof value.name === 'string' &&
-    typeof value.url === 'string' &&
-    typeof value.path === 'string' &&
-    (value.bare === undefined || typeof value.bare === 'boolean')
-  );
+  if (typeof value.name !== 'string') return false;
+  if (typeof value.url !== 'string') return false;
+  if (typeof value.path !== 'string') return false;
+  if (value.bare !== undefined && typeof value.bare !== 'boolean') return false;
+  if (value.stacks !== undefined) {
+    if (!Array.isArray(value.stacks)) return false;
+    if (!value.stacks.every(isStackEntry)) return false;
+  }
+  return true;
 }
 
 function isValidUpdateBehavior(value: unknown): boolean {
@@ -185,4 +194,69 @@ export function getUpdateBehavior(config: ReposConfig): UpdateBehavior {
 
 export function getUpdateCheckInterval(config: ReposConfig): number {
   return config.config?.updateCheckIntervalHours ?? 24;
+}
+
+// Find parent of a child branch
+export function getParentBranch(
+  repo: RepoEntry,
+  branch: string
+): string | undefined {
+  return repo.stacks?.find((s) => s.child === branch)?.parent;
+}
+
+// Find all children of a parent branch
+export function getChildBranches(repo: RepoEntry, branch: string): string[] {
+  return (
+    repo.stacks?.filter((s) => s.parent === branch).map((s) => s.child) ?? []
+  );
+}
+
+// Add a stack relationship
+export function addStackEntry(
+  repo: RepoEntry,
+  parent: string,
+  child: string
+): RepoEntry {
+  return {
+    ...repo,
+    stacks: [...(repo.stacks ?? []), { parent, child }],
+  };
+}
+
+// Remove a stack relationship (by child)
+export function removeStackEntry(repo: RepoEntry, child: string): RepoEntry {
+  if (!repo.stacks) return repo;
+  const filtered = repo.stacks.filter((s) => s.child !== child);
+  if (filtered.length === 0) {
+    const { stacks: _, ...rest } = repo;
+    return rest;
+  }
+  return { ...repo, stacks: filtered };
+}
+
+// Remove all stack relationships where branch is the parent (children become independent)
+export function removeStackEntriesByParent(
+  repo: RepoEntry,
+  parent: string
+): RepoEntry {
+  if (!repo.stacks) return repo;
+  const filtered = repo.stacks.filter((s) => s.parent !== parent);
+  if (filtered.length === 0) {
+    const { stacks: _, ...rest } = repo;
+    return rest;
+  }
+  return { ...repo, stacks: filtered };
+}
+
+// Helper to update a repo in the config
+export function updateRepoInConfig(
+  config: ReposConfig,
+  updatedRepo: RepoEntry
+): ReposConfig {
+  return {
+    ...config,
+    repos: config.repos.map((r) =>
+      r.name === updatedRepo.name ? updatedRepo : r
+    ),
+  };
 }

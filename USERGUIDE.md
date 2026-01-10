@@ -469,6 +469,178 @@ This is a convenience wrapper around `repos work` that automatically `cd`s into 
 
 ---
 
+#### `repos stack <branch>`
+
+Create a stacked worktree from the current branch.
+
+```bash
+repos stack feature-part-2    # Inside a worktree
+```
+
+**Arguments:**
+
+- `<branch>` (required) - New branch name for the stacked worktree
+
+**Prerequisites:**
+
+- Must be run from inside an existing worktree (not the bare repo or main checkout)
+
+**Behavior:**
+
+1. Detects the current branch from your working directory
+2. Creates a new worktree with a new branch based on the current branch
+3. Records the parent-child relationship in your config file
+
+**Use case:**
+When working on a feature that depends on another in-progress feature, stack branches to maintain the dependency chain.
+
+**Example:**
+
+```bash
+cd ~/code/my-project-feature-auth
+work feature-auth              # Working on auth feature
+# ... make commits ...
+
+repos stack feature-profile    # Stack profile feature on top of auth
+# Now ~/code/my-project-feature-profile exists, based on feature-auth
+```
+
+**Output:**
+Prints the worktree path to stdout.
+
+---
+
+#### `repos restack`
+
+Rebase current branch on its parent branch.
+
+```bash
+repos restack    # Inside a stacked worktree
+```
+
+**Prerequisites:**
+
+- Must be run from inside a worktree that was created with `repos stack`
+
+**Behavior:**
+
+1. Looks up the parent branch from your config
+2. If parent worktree still exists: rebases on the local parent branch
+3. If parent is gone (merged/deleted): automatically falls back to default branch and removes the stale parent relationship from config
+
+**Use case:**
+After making new commits on a parent branch, sync the child branch to include those changes.
+
+**Example:**
+
+```bash
+# Parent branch got new commits
+cd ~/code/my-project-feature-profile
+repos restack
+# feature-profile is now rebased on latest feature-auth
+```
+
+**On conflicts:**
+Rebase is aborted and an error is reported. Resolve conflicts manually.
+
+**Auto-fallback:**
+When the parent branch no longer exists (worktree removed after merge), `restack` automatically:
+
+1. Detects the parent is gone
+2. Falls back to rebasing on `origin/<default-branch>`
+3. Removes the stale parent relationship from config
+
+---
+
+#### `repos unstack`
+
+Intentionally unstack a branch - rebase it onto the default branch and remove its stack relationship.
+
+```bash
+repos unstack    # Inside a stacked worktree
+```
+
+**Prerequisites:**
+
+- Must be run from inside a stacked worktree
+- Branch must have a recorded parent relationship
+
+**Behavior:**
+
+1. Rebases current branch onto `origin/<default-branch>`
+2. Removes the stack entry from config
+3. Branch becomes independent (no longer stacked)
+
+**Use cases:**
+
+- When you want to make a stacked branch independent before the parent is merged
+- When you decide a feature should be based on main instead of another feature
+- When you want to submit a PR directly to main rather than the parent branch
+
+**Example:**
+
+```bash
+# You have feature-b stacked on feature-a
+cd ~/code/my-project-feature-b
+repos unstack
+# feature-b is now rebased on main and independent
+```
+
+---
+
+#### `repos collapse`
+
+Collapse parent branch into current stacked branch.
+
+```bash
+repos collapse    # Inside a stacked worktree
+```
+
+**Prerequisites:**
+
+- Must be run from inside a stacked worktree (a branch created with `repos stack`)
+- Parent branch must have no other children (siblings must be collapsed/unstacked first)
+- Parent worktree must have no uncommitted changes
+
+**Behavior:**
+
+1. Rebases current branch onto grandparent (or default branch if no grandparent)
+2. Removes the parent worktree automatically
+3. Updates config to reparent current branch to grandparent
+
+**Use cases:**
+
+- After a stacked PR is approved, collapse it to prepare the child for final merge
+- Combine multiple stacked diffs into a single branch for merging
+- Simplify a deep stack by collapsing intermediate layers
+
+**Example:**
+
+```bash
+# You have: main → feature-auth → feature-profile
+cd ~/code/api-server-feature-profile
+repos collapse
+# Result: main → feature-profile (feature-auth worktree removed)
+# feature-profile now contains all commits from feature-auth
+```
+
+**Multi-level stacks:**
+
+```bash
+# You have: main → A → B → C
+cd ~/code/api-server-branch-c
+repos collapse
+# Result: main → A → C (B worktree removed, C now based on A)
+```
+
+**Safety checks:**
+
+- Blocks if parent has uncommitted changes
+- Blocks if parent has sibling children (other branches stacked on it)
+- Parent worktree must exist
+
+---
+
 #### `repos clean <branch> [repo-name]`
 
 Remove a worktree.
@@ -476,6 +648,7 @@ Remove a worktree.
 ```bash
 repos clean feature-x              # Inside a tracked repo
 repos clean feature-x my-repo      # Specify repo explicitly
+repos clean parent --force         # Force remove parent with stacked children
 ```
 
 **Arguments:**
@@ -483,10 +656,26 @@ repos clean feature-x my-repo      # Specify repo explicitly
 - `<branch>` (required) - Branch name of the worktree to remove
 - `[repo-name]` (optional) - Repository name. Auto-detected if inside a tracked repo.
 
+**Options:**
+
+- `--force` - Force removal even if the branch has stacked children
+
 **Safety checks:**
 
 - Cannot remove the main worktree
 - Blocks removal if uncommitted changes exist
+- Blocks removal if branch has stacked children (use `--force` to override)
+
+**Stacked children:**
+
+When cleaning a branch that has stacked children, the command will fail by default:
+
+```
+Error: Branch "parent" has stacked children: child-1, child-2
+Use --force to remove anyway (children will become independent).
+```
+
+Using `--force` removes the parent worktree and makes child branches independent (removes their stack entries).
 
 **Example error:**
 
@@ -621,7 +810,8 @@ If `XDG_CONFIG_HOME` is set, uses `$XDG_CONFIG_HOME/repos/config.json` instead.
       "name": "api-server",
       "url": "https://github.com/myorg/api-server.git",
       "path": "/Users/you/code/api-server",
-      "bare": false
+      "bare": false,
+      "stacks": [{ "parent": "feature-auth", "child": "feature-profile" }]
     },
     {
       "name": "frontend",
@@ -652,6 +842,22 @@ If `XDG_CONFIG_HOME` is set, uses `$XDG_CONFIG_HOME/repos/config.json` instead.
 | -------------------------- | ------ | ------- | --------------------------------------------------------- |
 | `updateBehavior`           | string | `auto`  | `auto`: auto-install, `notify`: warn only, `off`: disable |
 | `updateCheckIntervalHours` | number | `24`    | Hours between update checks                               |
+
+### Stacks
+
+The `stacks` field inside each repo entry tracks parent-child relationships between stacked branches. It's automatically managed by `repos stack` and `repos restack` commands.
+
+```json
+"stacks": [
+  { "parent": "feature-auth", "child": "feature-profile" },
+  { "parent": "feature-profile", "child": "feature-settings" }
+]
+```
+
+- Created when you run `repos stack`
+- Used by `repos restack` to determine rebase target
+- Enables bidirectional lookups: find parent of a child, or find all children of a parent
+- Cleaned up when parent branch is gone or worktree is removed with `repos clean`
 
 ### Editing Config Manually
 
@@ -761,6 +967,54 @@ ln -s ~/.config/repos/config.json ~/dotfiles/repos-config.json
 cp ~/.config/repos/config.json ~/dotfiles/
 ```
 
+### Stacked Diffs Workflow
+
+Use stacked branches when a feature depends on another in-progress feature:
+
+```bash
+# Start with a feature branch
+cd ~/code/api-server
+work feature-auth
+# ... implement auth, make commits ...
+
+# Stack a dependent feature on top
+repos stack feature-profile
+# Now in ~/code/api-server-feature-profile, based on feature-auth
+
+# ... implement profile feature ...
+
+# When auth gets new commits, sync profile
+cd ~/code/api-server-feature-profile
+repos restack
+# profile is now rebased on latest auth
+
+# After auth PR is approved, collapse the stack
+repos collapse
+# auth worktree is removed, profile now based on main with all auth commits
+```
+
+**Alternative: Automatic fallback when parent is merged**
+
+```bash
+# If auth is merged and its worktree is cleaned up
+repos restack
+# Automatically detects auth is gone, rebases on main instead
+```
+
+**Benefits:**
+
+- Work on dependent features without waiting for PR merges
+- Keep child branches in sync with parent changes
+- Collapse stacks to prepare for final merge
+- Automatic fallback when parent branches are merged
+
+**Tips:**
+
+- Create separate PRs for each branch in the stack
+- Restack after making changes to parent branches
+- Use `repos collapse` after a parent PR is approved to prepare child for merge
+- Use `repos cleanup` to remove merged stacked branches
+
 ## Troubleshooting
 
 ### "Repository not found" when running commands
@@ -851,20 +1105,24 @@ cat ~/.config/repos/config.json | grep updateBehavior
 
 ## Command Quick Reference
 
-| Command                          | Description                               |
-| -------------------------------- | ----------------------------------------- |
-| `repos list`                     | List tracked repos and worktrees          |
-| `repos add <url> [--bare]`       | Clone and track a repository              |
-| `repos clone [name]`             | Clone repos from config                   |
-| `repos remove <name> [-d]`       | Remove repo from tracking                 |
-| `repos latest`                   | Pull all repos in parallel                |
-| `repos adopt`                    | Add existing repos to config              |
-| `repos sync`                     | Adopt + clone missing repos               |
-| `repos init [--print] [--force]` | Set up shell for work command             |
-| `repos work <branch> [repo]`     | Create worktree for branch                |
-| `repos clean <branch> [repo]`    | Remove a worktree                         |
-| `repos rebase [branch] [repo]`   | Rebase worktree on default branch         |
-| `repos cleanup [--dry-run]`      | Remove merged/deleted worktrees           |
-| `repos update`                   | Update CLI to latest version              |
-| `repos -v`                       | Show version                              |
-| `work <branch>`                  | Create worktree and cd into it (shell fn) |
+| Command                          | Description                                 |
+| -------------------------------- | ------------------------------------------- |
+| `repos list`                     | List tracked repos and worktrees            |
+| `repos add <url> [--bare]`       | Clone and track a repository                |
+| `repos clone [name]`             | Clone repos from config                     |
+| `repos remove <name> [-d]`       | Remove repo from tracking                   |
+| `repos latest`                   | Pull all repos in parallel                  |
+| `repos adopt`                    | Add existing repos to config                |
+| `repos sync`                     | Adopt + clone missing repos                 |
+| `repos init [--print] [--force]` | Set up shell for work command               |
+| `repos work <branch> [repo]`     | Create worktree for branch                  |
+| `repos stack <branch>`           | Create stacked worktree from current branch |
+| `repos restack`                  | Rebase current branch on parent branch      |
+| `repos unstack`                  | Unstack branch onto default branch          |
+| `repos collapse`                 | Collapse parent into current stacked branch |
+| `repos clean <branch> [repo]`    | Remove a worktree (--force for parents)     |
+| `repos rebase [branch] [repo]`   | Rebase worktree on default branch           |
+| `repos cleanup [--dry-run]`      | Remove merged/deleted worktrees             |
+| `repos update`                   | Update CLI to latest version                |
+| `repos -v`                       | Show version                                |
+| `work <branch>`                  | Create worktree and cd into it (shell fn)   |
