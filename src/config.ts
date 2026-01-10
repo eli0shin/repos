@@ -234,6 +234,20 @@ export function removeStackEntry(repo: RepoEntry, child: string): RepoEntry {
   return { ...repo, stacks: filtered };
 }
 
+// Remove all stack relationships where branch is the parent (children become independent)
+export function removeStackEntriesByParent(
+  repo: RepoEntry,
+  parent: string
+): RepoEntry {
+  if (!repo.stacks) return repo;
+  const filtered = repo.stacks.filter((s) => s.parent !== parent);
+  if (filtered.length === 0) {
+    const { stacks: _, ...rest } = repo;
+    return rest;
+  }
+  return { ...repo, stacks: filtered };
+}
+
 // Helper to update a repo in the config
 export function updateRepoInConfig(
   config: ReposConfig,

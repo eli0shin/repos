@@ -6,7 +6,7 @@ import {
   getWorktreePath,
 } from '../config.ts';
 import { createWorktree, listWorktrees, ensureRefspecConfig } from '../git.ts';
-import { print, printError } from '../output.ts';
+import { print, printError, printStatus } from '../output.ts';
 
 export async function workCommand(
   ctx: CommandContext,
@@ -50,7 +50,7 @@ export async function workCommand(
 
   const worktreePath = getWorktreePath(repo.path, branch);
   // Status messages go to stderr so shell wrapper can capture clean path from stdout
-  printError(`Creating worktree for "${branch}"...`);
+  printStatus(`Creating worktree for "${branch}"...`);
 
   const result = await createWorktree(repo.path, worktreePath, branch);
   if (!result.success) {
@@ -58,7 +58,7 @@ export async function workCommand(
     process.exit(1);
   }
 
-  printError(`Created worktree "${repo.name}-${branch.replace(/\//g, '-')}"`);
+  printStatus(`Created worktree "${repo.name}-${branch.replace(/\//g, '-')}"`);
   // Output path to stdout for shell wrapper to cd into
   print(worktreePath);
 }

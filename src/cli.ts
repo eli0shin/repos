@@ -18,6 +18,7 @@ import { updateCommand } from './commands/update.ts';
 import { workCommand } from './commands/work.ts';
 import { stackCommand } from './commands/stack.ts';
 import { restackCommand } from './commands/restack.ts';
+import { unstackCommand } from './commands/unstack.ts';
 import { cleanCommand } from './commands/clean.ts';
 import { cleanupCommand } from './commands/cleanup.ts';
 import { rebaseCommand } from './commands/rebase.ts';
@@ -158,12 +159,24 @@ program
   });
 
 program
+  .command('unstack')
+  .description(
+    'Rebase current branch on default branch and remove stack relationship'
+  )
+  .action(async () => {
+    await unstackCommand(getCommandContext());
+  });
+
+program
   .command('clean')
   .description('Remove a worktree')
   .argument('<branch>', 'Branch name of the worktree to remove')
   .argument('[repo-name]', 'Repo name (optional if inside a tracked repo)')
-  .action(async (branch, repoName) => {
-    await cleanCommand(getCommandContext(), branch, repoName);
+  .option('--force', 'Force removal even if branch has stacked children')
+  .action(async (branch, repoName, options) => {
+    await cleanCommand(getCommandContext(), branch, repoName, {
+      force: options.force ?? false,
+    });
   });
 
 program

@@ -1,7 +1,40 @@
 import type { CommandContext } from '../cli.ts';
-import { readConfig } from '../config.ts';
+import { readConfig, getParentBranch, getChildBranches } from '../config.ts';
 import { isGitRepo, listWorktrees } from '../git.ts';
+import type { WorktreeInfo } from '../git.ts';
+import type { RepoEntry } from '../types.ts';
 import { print, printError } from '../output.ts';
+
+function printWorktreeTree(
+  repo: RepoEntry,
+  worktrees: WorktreeInfo[],
+  branch: string,
+  indent: string,
+  isLast: boolean
+): void {
+  const wt = worktrees.find((w) => w.branch === branch);
+  if (!wt) return;
+
+  const prefix = indent + (isLast ? '└─ ' : '├─ ');
+  const parentBranch = getParentBranch(repo, branch);
+  const stackedLabel = parentBranch ? ' (stacked)' : '';
+  print(`${prefix}${wt.branch}: ${wt.path}${stackedLabel}`);
+
+  const children = getChildBranches(repo, branch).filter((child) =>
+    worktrees.some((w) => w.branch === child)
+  );
+
+  const newIndent = indent + (isLast ? '   ' : '│  ');
+  children.forEach((child, index) => {
+    printWorktreeTree(
+      repo,
+      worktrees,
+      child,
+      newIndent,
+      index === children.length - 1
+    );
+  });
+}
 
 export async function listCommand(ctx: CommandContext): Promise<void> {
   const result = await readConfig(ctx.configPath);
@@ -35,9 +68,23 @@ export async function listCommand(ctx: CommandContext): Promise<void> {
         const nonMainWorktrees = worktreesResult.data.filter(
           (wt) => !wt.isMain
         );
-        for (const wt of nonMainWorktrees) {
-          print(`      ↳ ${wt.branch}: ${wt.path}`);
-        }
+
+        // Find root worktrees (no parent or parent not in worktrees)
+        const rootWorktrees = nonMainWorktrees.filter((wt) => {
+          const parent = getParentBranch(repo, wt.branch);
+          return !parent || !nonMainWorktrees.some((w) => w.branch === parent);
+        });
+
+        // Print each root and its children
+        rootWorktrees.forEach((wt, index) => {
+          printWorktreeTree(
+            repo,
+            nonMainWorktrees,
+            wt.branch,
+            '      ',
+            index === rootWorktrees.length - 1
+          );
+        });
       }
     }
   }

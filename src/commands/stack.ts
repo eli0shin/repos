@@ -12,7 +12,7 @@ import {
   listWorktrees,
   ensureRefspecConfig,
 } from '../git.ts';
-import { print, printError } from '../output.ts';
+import { print, printError, printStatus } from '../output.ts';
 
 export async function stackCommand(
   ctx: CommandContext,
@@ -64,7 +64,7 @@ export async function stackCommand(
   await ensureRefspecConfig(repo.path);
 
   const worktreePath = getWorktreePath(repo.path, newBranch);
-  printError(
+  printStatus(
     `Creating stacked branch "${newBranch}" from "${parentBranch}"...`
   );
 
@@ -90,7 +90,7 @@ export async function stackCommand(
     );
   }
 
-  printError(
+  printStatus(
     `Created stacked worktree "${repo.name}-${newBranch.replace(/\//g, '-')}"`
   );
   // Output path to stdout for shell wrapper to cd into

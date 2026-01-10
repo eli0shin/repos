@@ -552,6 +552,42 @@ When the parent branch no longer exists (worktree removed after merge), `restack
 
 ---
 
+#### `repos unstack`
+
+Intentionally unstack a branch - rebase it onto the default branch and remove its stack relationship.
+
+```bash
+repos unstack    # Inside a stacked worktree
+```
+
+**Prerequisites:**
+
+- Must be run from inside a stacked worktree
+- Branch must have a recorded parent relationship
+
+**Behavior:**
+
+1. Rebases current branch onto `origin/<default-branch>`
+2. Removes the stack entry from config
+3. Branch becomes independent (no longer stacked)
+
+**Use cases:**
+
+- When you want to make a stacked branch independent before the parent is merged
+- When you decide a feature should be based on main instead of another feature
+- When you want to submit a PR directly to main rather than the parent branch
+
+**Example:**
+
+```bash
+# You have feature-b stacked on feature-a
+cd ~/code/my-project-feature-b
+repos unstack
+# feature-b is now rebased on main and independent
+```
+
+---
+
 #### `repos clean <branch> [repo-name]`
 
 Remove a worktree.
@@ -559,6 +595,7 @@ Remove a worktree.
 ```bash
 repos clean feature-x              # Inside a tracked repo
 repos clean feature-x my-repo      # Specify repo explicitly
+repos clean parent --force         # Force remove parent with stacked children
 ```
 
 **Arguments:**
@@ -566,10 +603,26 @@ repos clean feature-x my-repo      # Specify repo explicitly
 - `<branch>` (required) - Branch name of the worktree to remove
 - `[repo-name]` (optional) - Repository name. Auto-detected if inside a tracked repo.
 
+**Options:**
+
+- `--force` - Force removal even if the branch has stacked children
+
 **Safety checks:**
 
 - Cannot remove the main worktree
 - Blocks removal if uncommitted changes exist
+- Blocks removal if branch has stacked children (use `--force` to override)
+
+**Stacked children:**
+
+When cleaning a branch that has stacked children, the command will fail by default:
+
+```
+Error: Branch "parent" has stacked children: child-1, child-2
+Use --force to remove anyway (children will become independent).
+```
+
+Using `--force` removes the parent worktree and makes child branches independent (removes their stack entries).
 
 **Example error:**
 
@@ -1002,7 +1055,8 @@ cat ~/.config/repos/config.json | grep updateBehavior
 | `repos work <branch> [repo]`     | Create worktree for branch                  |
 | `repos stack <branch>`           | Create stacked worktree from current branch |
 | `repos restack`                  | Rebase current branch on parent branch      |
-| `repos clean <branch> [repo]`    | Remove a worktree                           |
+| `repos unstack`                  | Unstack branch onto default branch          |
+| `repos clean <branch> [repo]`    | Remove a worktree (--force for parents)     |
 | `repos rebase [branch] [repo]`   | Rebase worktree on default branch           |
 | `repos cleanup [--dry-run]`      | Remove merged/deleted worktrees             |
 | `repos update`                   | Update CLI to latest version                |
