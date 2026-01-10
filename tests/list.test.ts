@@ -1,5 +1,5 @@
 import { describe, expect, test, beforeEach, afterEach } from 'bun:test';
-import { mkdir, rm } from 'node:fs/promises';
+import { mkdir, rm, realpath } from 'node:fs/promises';
 import { join } from 'node:path';
 import { runGitCommand, cloneBare } from '../src/git.ts';
 import { listCommand } from '../src/commands/list.ts';
@@ -92,11 +92,14 @@ describe('repos list command - auto-detect repo', () => {
       capture.restore();
 
       const output = capture.output.join('');
-      // Should show repo1
-      expect(output).toContain('repo1');
-      expect(output).toContain('feature');
-      // Should NOT show repo2
-      expect(output).not.toContain('repo2');
+      const realWt1Path = await realpath(wt1Path);
+      const expectedOutput = [
+        `  repo1 (bare) ✓`,
+        `    ${bareDir1}`,
+        `      └─ feature: ${realWt1Path}`,
+        '',
+      ].join('\n');
+      expect(output).toEqual(expectedOutput);
     } finally {
       process.chdir(originalCwd);
     }
@@ -127,10 +130,16 @@ describe('repos list command - auto-detect repo', () => {
       capture.restore();
 
       const output = capture.output.join('');
-      // Should show both repos
-      expect(output).toContain('repo1');
-      expect(output).toContain('repo2');
-      expect(output).toContain('Tracked repositories');
+      const expectedOutput = [
+        'Tracked repositories:',
+        '',
+        `  repo1 (bare) ✓`,
+        `    ${bareDir1}`,
+        `  repo2 (bare) ✓`,
+        `    ${bareDir2}`,
+        '',
+      ].join('\n');
+      expect(output).toEqual(expectedOutput);
     } finally {
       process.chdir(originalCwd);
     }
@@ -173,11 +182,16 @@ describe('repos list command - auto-detect repo', () => {
       capture.restore();
 
       const output = capture.output.join('');
-      // Should show parent branch
-      expect(output).toContain('parent');
-      // Should show child branch with stacked label
-      expect(output).toContain('child');
-      expect(output).toContain('(stacked)');
+      const realParentPath = await realpath(parentPath);
+      const realChildPath = await realpath(childPath);
+      const expectedOutput = [
+        `  repo (bare) ✓`,
+        `    ${bareDir}`,
+        `      └─ parent: ${realParentPath}`,
+        `         └─ child: ${realChildPath} (stacked)`,
+        '',
+      ].join('\n');
+      expect(output).toEqual(expectedOutput);
     } finally {
       process.chdir(originalCwd);
     }
@@ -215,11 +229,152 @@ describe('repos list command - auto-detect repo', () => {
       capture.restore();
 
       const output = capture.output.join('');
-      // Should show repo1
-      expect(output).toContain('repo1');
-      expect(output).toContain('feature');
-      // Should NOT show repo2
-      expect(output).not.toContain('repo2');
+      const realWt1Path = await realpath(wt1Path);
+      const expectedOutput = [
+        `  repo1 (bare) ✓`,
+        `    ${bareDir1}`,
+        `      └─ feature: ${realWt1Path}`,
+        '',
+      ].join('\n');
+      expect(output).toEqual(expectedOutput);
+    } finally {
+      process.chdir(originalCwd);
+    }
+  });
+
+  test('shows complex multi-level stack relationships', async () => {
+    // Setup: Create bare repo with multiple stacked worktrees
+    // Stack relationships: b > a > main, d > c > main, e > main
+    const bareDir = join(testDir, 'bare.git');
+    await cloneBare(sourceDir1, bareDir);
+
+    // Create worktrees
+    const aPath = join(testDir, 'bare.git-a');
+    const bPath = join(testDir, 'bare.git-b');
+    const cPath = join(testDir, 'bare.git-c');
+    const dPath = join(testDir, 'bare.git-d');
+    const ePath = join(testDir, 'bare.git-e');
+
+    await runGitCommand(['worktree', 'add', '-b', 'a', aPath], bareDir);
+    await runGitCommand(['worktree', 'add', '-b', 'b', bPath], bareDir);
+    await runGitCommand(['worktree', 'add', '-b', 'c', cPath], bareDir);
+    await runGitCommand(['worktree', 'add', '-b', 'd', dPath], bareDir);
+    await runGitCommand(['worktree', 'add', '-b', 'e', ePath], bareDir);
+
+    // Create config with stack relationships
+    const config = {
+      repos: [
+        {
+          name: 'repo',
+          url: sourceDir1,
+          path: bareDir,
+          bare: true,
+          stacks: [
+            { parent: 'main', child: 'a' },
+            { parent: 'a', child: 'b' },
+            { parent: 'main', child: 'c' },
+            { parent: 'c', child: 'd' },
+            { parent: 'main', child: 'e' },
+          ],
+        },
+      ],
+    } satisfies ReposConfig;
+    await writeConfig(configPath, config);
+
+    // Run from inside the repo
+    const originalCwd = process.cwd();
+    process.chdir(aPath);
+    try {
+      const capture = captureOutput();
+      await listCommand({ configPath });
+      capture.restore();
+
+      const output = capture.output.join('');
+      const realAPath = await realpath(aPath);
+      const realBPath = await realpath(bPath);
+      const realCPath = await realpath(cPath);
+      const realDPath = await realpath(dPath);
+      const realEPath = await realpath(ePath);
+      const expectedOutput = [
+        `  repo (bare) ✓`,
+        `    ${bareDir}`,
+        `      ├─ a: ${realAPath} (stacked)`,
+        `      │  └─ b: ${realBPath} (stacked)`,
+        `      ├─ c: ${realCPath} (stacked)`,
+        `      │  └─ d: ${realDPath} (stacked)`,
+        `      └─ e: ${realEPath} (stacked)`,
+        '',
+      ].join('\n');
+      expect(output).toEqual(expectedOutput);
+    } finally {
+      process.chdir(originalCwd);
+    }
+  });
+
+  test('shows complex multi-level stack relationships for non-bare repo', async () => {
+    // Setup: Create regular repo with multiple stacked worktrees
+    // Stack relationships: b > a > main, d > c > main, e > main
+    const repoDir = join(testDir, 'repo');
+    await mkdir(repoDir, { recursive: true });
+    await runGitCommand(['clone', sourceDir1, repoDir], testDir);
+
+    // Create worktrees
+    const aPath = join(testDir, 'repo-a');
+    const bPath = join(testDir, 'repo-b');
+    const cPath = join(testDir, 'repo-c');
+    const dPath = join(testDir, 'repo-d');
+    const ePath = join(testDir, 'repo-e');
+
+    await runGitCommand(['worktree', 'add', '-b', 'a', aPath], repoDir);
+    await runGitCommand(['worktree', 'add', '-b', 'b', bPath], repoDir);
+    await runGitCommand(['worktree', 'add', '-b', 'c', cPath], repoDir);
+    await runGitCommand(['worktree', 'add', '-b', 'd', dPath], repoDir);
+    await runGitCommand(['worktree', 'add', '-b', 'e', ePath], repoDir);
+
+    // Create config with stack relationships
+    const config = {
+      repos: [
+        {
+          name: 'repo',
+          url: sourceDir1,
+          path: repoDir,
+          stacks: [
+            { parent: 'main', child: 'a' },
+            { parent: 'a', child: 'b' },
+            { parent: 'main', child: 'c' },
+            { parent: 'c', child: 'd' },
+            { parent: 'main', child: 'e' },
+          ],
+        },
+      ],
+    } satisfies ReposConfig;
+    await writeConfig(configPath, config);
+
+    // Run from inside the repo
+    const originalCwd = process.cwd();
+    process.chdir(aPath);
+    try {
+      const capture = captureOutput();
+      await listCommand({ configPath });
+      capture.restore();
+
+      const output = capture.output.join('');
+      const realAPath = await realpath(aPath);
+      const realBPath = await realpath(bPath);
+      const realCPath = await realpath(cPath);
+      const realDPath = await realpath(dPath);
+      const realEPath = await realpath(ePath);
+      const expectedOutput = [
+        `  repo ✓`,
+        `    ${repoDir}`,
+        `      ├─ a: ${realAPath} (stacked)`,
+        `      │  └─ b: ${realBPath} (stacked)`,
+        `      ├─ c: ${realCPath} (stacked)`,
+        `      │  └─ d: ${realDPath} (stacked)`,
+        `      └─ e: ${realEPath} (stacked)`,
+        '',
+      ].join('\n');
+      expect(output).toEqual(expectedOutput);
     } finally {
       process.chdir(originalCwd);
     }
