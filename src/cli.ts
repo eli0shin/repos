@@ -19,6 +19,7 @@ import { workCommand } from './commands/work.ts';
 import { stackCommand } from './commands/stack.ts';
 import { restackCommand } from './commands/restack.ts';
 import { unstackCommand } from './commands/unstack.ts';
+import { collapseCommand } from './commands/collapse.ts';
 import { cleanCommand } from './commands/clean.ts';
 import { cleanupCommand } from './commands/cleanup.ts';
 import { rebaseCommand } from './commands/rebase.ts';
@@ -165,6 +166,13 @@ program
   )
   .action(async () => {
     await unstackCommand(getCommandContext());
+  });
+
+program
+  .command('collapse')
+  .description('Collapse parent branch into current stacked branch')
+  .action(async () => {
+    await collapseCommand(getCommandContext());
   });
 
 program

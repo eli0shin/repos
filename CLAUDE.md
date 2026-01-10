@@ -50,6 +50,7 @@ type OperationResult<T = void> =
 | `repos stack <branch>`         | Create a stacked worktree from current branch |
 | `repos restack`                | Rebase current branch on its parent branch    |
 | `repos unstack`                | Rebase onto default branch and remove stack   |
+| `repos collapse`               | Collapse parent into current stacked branch   |
 | `repos clean <branch> [repo]`  | Remove a worktree (--force for parent branch) |
 | `repos rebase [branch] [repo]` | Rebase worktree branch on default branch      |
 | `repos cleanup [--dry-run]`    | Remove worktrees for merged/deleted branches  |
