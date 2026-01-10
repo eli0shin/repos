@@ -765,6 +765,11 @@ describe('createWorktreeFromBranch', () => {
     // Create parent branch worktree
     const parentWorktreeDir = join(testDir, 'parent-worktree');
     await createWorktree(bareDir, parentWorktreeDir, 'parent-branch');
+    await runGitCommand(
+      ['config', 'user.email', 'test@test.com'],
+      parentWorktreeDir
+    );
+    await runGitCommand(['config', 'user.name', 'Test'], parentWorktreeDir);
 
     // Add a commit to parent branch
     await Bun.write(join(parentWorktreeDir, 'parent.txt'), 'parent content');
@@ -858,6 +863,11 @@ describe('rebaseOnRef', () => {
     // Create parent branch worktree and add commit
     const parentWorktreeDir = join(testDir, 'parent-worktree');
     await createWorktree(bareDir, parentWorktreeDir, 'parent-branch');
+    await runGitCommand(
+      ['config', 'user.email', 'test@test.com'],
+      parentWorktreeDir
+    );
+    await runGitCommand(['config', 'user.name', 'Test'], parentWorktreeDir);
     await Bun.write(join(parentWorktreeDir, 'parent.txt'), 'parent content');
     await runGitCommand(['add', '.'], parentWorktreeDir);
     await runGitCommand(['commit', '-m', 'parent commit'], parentWorktreeDir);
@@ -870,6 +880,11 @@ describe('rebaseOnRef', () => {
       'child-branch',
       'parent-branch'
     );
+    await runGitCommand(
+      ['config', 'user.email', 'test@test.com'],
+      childWorktreeDir
+    );
+    await runGitCommand(['config', 'user.name', 'Test'], childWorktreeDir);
 
     // Add commit to child
     await Bun.write(join(childWorktreeDir, 'child.txt'), 'child content');
