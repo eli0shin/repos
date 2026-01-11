@@ -11,6 +11,8 @@ import {
   createWorktreeFromBranch,
   listWorktrees,
   ensureRefspecConfig,
+  findWorktreeByDirectory,
+  findWorktreeByBranch,
 } from '../git.ts';
 import { print, printError, printStatus } from '../output.ts';
 
@@ -39,9 +41,9 @@ export async function stackCommand(
   }
 
   // Find the worktree we're currently in
-  const cwd = process.cwd();
-  const currentWorktree = worktreesResult.data.find(
-    (wt) => cwd === wt.path || cwd.startsWith(wt.path + '/')
+  const currentWorktree = findWorktreeByDirectory(
+    worktreesResult.data,
+    process.cwd()
   );
 
   if (!currentWorktree?.branch) {
@@ -52,8 +54,9 @@ export async function stackCommand(
   const parentBranch = currentWorktree.branch;
 
   // Check if worktree for new branch already exists
-  const existingWorktree = worktreesResult.data.find(
-    (wt) => wt.branch === newBranch
+  const existingWorktree = findWorktreeByBranch(
+    worktreesResult.data,
+    newBranch
   );
   if (existingWorktree) {
     printError(`Error: Worktree for branch "${newBranch}" already exists.`);

@@ -13,6 +13,8 @@ import {
   removeWorktree,
   hasUncommittedChanges,
   listWorktrees,
+  findWorktreeByBranch,
+  findWorktreeByDirectory,
 } from '../git.ts';
 import { print, printError } from '../output.ts';
 
@@ -57,16 +59,13 @@ export async function cleanCommand(
   // If no branch specified, detect from current working directory
   let worktree;
   if (branch) {
-    worktree = worktreesResult.data.find((wt) => wt.branch === branch);
+    worktree = findWorktreeByBranch(worktreesResult.data, branch);
     if (!worktree) {
       printError(`Error: No worktree found for branch "${branch}"`);
       process.exit(1);
     }
   } else {
-    const cwd = process.cwd();
-    worktree = worktreesResult.data.find(
-      (wt) => cwd === wt.path || cwd.startsWith(wt.path + '/')
-    );
+    worktree = findWorktreeByDirectory(worktreesResult.data, process.cwd());
     if (!worktree) {
       printError('Error: Not inside a worktree. Specify branch name.');
       process.exit(1);

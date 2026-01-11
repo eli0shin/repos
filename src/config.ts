@@ -1,7 +1,7 @@
 import { mkdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
-import { listWorktrees } from './git.ts';
+import { listWorktrees, findWorktreeByDirectory } from './git.ts';
 import type {
   RepoEntry,
   ReposConfig,
@@ -170,10 +170,8 @@ export async function findRepoFromCwd(
   for (const repo of config.repos) {
     const worktreesResult = await listWorktrees(repo.path);
     if (worktreesResult.success) {
-      for (const wt of worktreesResult.data) {
-        if (cwd === wt.path || cwd.startsWith(wt.path + '/')) {
-          return repo;
-        }
+      if (findWorktreeByDirectory(worktreesResult.data, cwd)) {
+        return repo;
       }
     }
   }

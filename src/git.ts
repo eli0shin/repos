@@ -227,6 +227,22 @@ export async function listWorktrees(
   return { success: true, data: worktrees };
 }
 
+export function findWorktreeByBranch(
+  worktrees: WorktreeInfo[],
+  branch: string
+): WorktreeInfo | undefined {
+  return worktrees.find((wt) => wt.branch === branch);
+}
+
+export function findWorktreeByDirectory(
+  worktrees: WorktreeInfo[],
+  directory: string
+): WorktreeInfo | undefined {
+  return worktrees.find(
+    (wt) => directory === wt.path || directory.startsWith(wt.path + '/')
+  );
+}
+
 export async function localBranchExists(
   repoDir: string,
   branch: string

@@ -12,6 +12,8 @@ import {
   rebaseOnRef,
   getDefaultBranch,
   listWorktrees,
+  findWorktreeByDirectory,
+  findWorktreeByBranch,
 } from '../git.ts';
 import { print, printError } from '../output.ts';
 
@@ -37,9 +39,9 @@ export async function restackCommand(ctx: CommandContext): Promise<void> {
   }
 
   // Find the worktree we're currently in
-  const cwd = process.cwd();
-  const currentWorktree = worktreesResult.data.find(
-    (wt) => cwd === wt.path || cwd.startsWith(wt.path + '/')
+  const currentWorktree = findWorktreeByDirectory(
+    worktreesResult.data,
+    process.cwd()
   );
 
   if (!currentWorktree?.branch) {
@@ -60,8 +62,9 @@ export async function restackCommand(ctx: CommandContext): Promise<void> {
   }
 
   // Check if parent branch still exists (has an active worktree)
-  const parentWorktree = worktreesResult.data.find(
-    (wt) => wt.branch === parentBranch
+  const parentWorktree = findWorktreeByBranch(
+    worktreesResult.data,
+    parentBranch
   );
   const parentStillExists = parentWorktree !== undefined;
 

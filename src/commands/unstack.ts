@@ -12,6 +12,7 @@ import {
   rebaseOnRef,
   getDefaultBranch,
   listWorktrees,
+  findWorktreeByDirectory,
 } from '../git.ts';
 import { print, printError } from '../output.ts';
 
@@ -37,9 +38,9 @@ export async function unstackCommand(ctx: CommandContext): Promise<void> {
   }
 
   // Find the worktree we're currently in
-  const cwd = process.cwd();
-  const currentWorktree = worktreesResult.data.find(
-    (wt) => cwd === wt.path || cwd.startsWith(wt.path + '/')
+  const currentWorktree = findWorktreeByDirectory(
+    worktreesResult.data,
+    process.cwd()
   );
 
   if (!currentWorktree?.branch) {

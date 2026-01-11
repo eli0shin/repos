@@ -5,7 +5,12 @@ import {
   findRepoFromCwd,
   getWorktreePath,
 } from '../config.ts';
-import { createWorktree, listWorktrees, ensureRefspecConfig } from '../git.ts';
+import {
+  createWorktree,
+  listWorktrees,
+  ensureRefspecConfig,
+  findWorktreeByBranch,
+} from '../git.ts';
 import { print, printError, printStatus } from '../output.ts';
 
 export async function workCommand(
@@ -37,7 +42,7 @@ export async function workCommand(
   // Check if worktree already exists - if so, output path and return
   const worktreesResult = await listWorktrees(repo.path);
   if (worktreesResult.success) {
-    const existing = worktreesResult.data.find((wt) => wt.branch === branch);
+    const existing = findWorktreeByBranch(worktreesResult.data, branch);
     if (existing) {
       // Output path to stdout for shell wrapper to cd into
       print(existing.path);

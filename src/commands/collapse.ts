@@ -16,6 +16,8 @@ import {
   listWorktrees,
   removeWorktree,
   hasUncommittedChanges,
+  findWorktreeByDirectory,
+  findWorktreeByBranch,
 } from '../git.ts';
 import { print, printError } from '../output.ts';
 
@@ -41,9 +43,9 @@ export async function collapseCommand(ctx: CommandContext): Promise<void> {
   }
 
   // Find the worktree we're currently in
-  const cwd = process.cwd();
-  const currentWorktree = worktreesResult.data.find(
-    (wt) => cwd === wt.path || cwd.startsWith(wt.path + '/')
+  const currentWorktree = findWorktreeByDirectory(
+    worktreesResult.data,
+    process.cwd()
   );
 
   if (!currentWorktree?.branch) {
@@ -75,8 +77,9 @@ export async function collapseCommand(ctx: CommandContext): Promise<void> {
   }
 
   // Find the parent worktree
-  const parentWorktree = worktreesResult.data.find(
-    (wt) => wt.branch === parentBranch
+  const parentWorktree = findWorktreeByBranch(
+    worktreesResult.data,
+    parentBranch
   );
 
   if (!parentWorktree) {
