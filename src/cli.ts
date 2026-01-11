@@ -178,7 +178,7 @@ program
 program
   .command('clean')
   .description('Remove a worktree')
-  .argument('<branch>', 'Branch name of the worktree to remove')
+  .argument('[branch]', 'Branch name (optional if inside a worktree)')
   .argument('[repo-name]', 'Repo name (optional if inside a tracked repo)')
   .option('--force', 'Force removal even if branch has stacked children')
   .action(async (branch, repoName, options) => {

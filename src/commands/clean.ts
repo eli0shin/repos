@@ -22,7 +22,7 @@ type CleanOptions = {
 
 export async function cleanCommand(
   ctx: CommandContext,
-  branch: string,
+  branch?: string,
   repoName?: string,
   options: CleanOptions = { force: false }
 ): Promise<void> {
@@ -54,10 +54,23 @@ export async function cleanCommand(
     process.exit(1);
   }
 
-  const worktree = worktreesResult.data.find((wt) => wt.branch === branch);
-  if (!worktree) {
-    printError(`Error: No worktree found for branch "${branch}"`);
-    process.exit(1);
+  // If no branch specified, detect from current working directory
+  let worktree;
+  if (branch) {
+    worktree = worktreesResult.data.find((wt) => wt.branch === branch);
+    if (!worktree) {
+      printError(`Error: No worktree found for branch "${branch}"`);
+      process.exit(1);
+    }
+  } else {
+    const cwd = process.cwd();
+    worktree = worktreesResult.data.find(
+      (wt) => cwd === wt.path || cwd.startsWith(wt.path + '/')
+    );
+    if (!worktree) {
+      printError('Error: Not inside a worktree. Specify branch name.');
+      process.exit(1);
+    }
   }
 
   if (worktree.isMain) {
@@ -80,10 +93,10 @@ export async function cleanCommand(
   }
 
   // Check if this branch has stacked children
-  const childBranches = getChildBranches(repo, branch);
+  const childBranches = getChildBranches(repo, worktree.branch);
   if (childBranches.length > 0 && !options.force) {
     printError(
-      `Error: Branch "${branch}" has stacked children: ${childBranches.join(', ')}`
+      `Error: Branch "${worktree.branch}" has stacked children: ${childBranches.join(', ')}`
     );
     printError(
       'Use --force to remove anyway (children will become independent).'
@@ -91,7 +104,7 @@ export async function cleanCommand(
     process.exit(1);
   }
 
-  print(`Removing worktree for "${branch}"...`);
+  print(`Removing worktree for "${worktree.branch}"...`);
 
   const result = await removeWorktree(repo.path, worktree.path);
   if (!result.success) {
@@ -102,8 +115,8 @@ export async function cleanCommand(
   // Clean up stack entries for this branch
   // 1. Remove entries where this branch is the child (its own parent relationship)
   // 2. Remove entries where this branch is the parent (children become independent)
-  let updatedRepo = removeStackEntry(repo, branch);
-  updatedRepo = removeStackEntriesByParent(updatedRepo, branch);
+  let updatedRepo = removeStackEntry(repo, worktree.branch);
+  updatedRepo = removeStackEntriesByParent(updatedRepo, worktree.branch);
   if (updatedRepo !== repo) {
     const updatedConfig = updateRepoInConfig(configResult.data, updatedRepo);
     const writeResult = await writeConfig(ctx.configPath, updatedConfig);
@@ -114,5 +127,5 @@ export async function cleanCommand(
     }
   }
 
-  print(`Removed worktree "${repo.name}-${branch}"`);
+  print(`Removed worktree "${repo.name}-${worktree.branch}"`);
 }
