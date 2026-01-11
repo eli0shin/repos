@@ -1,6 +1,6 @@
 import type { CommandContext } from '../cli.ts';
 import {
-  readConfig,
+  loadConfig,
   getParentBranch,
   getChildBranches,
   findRepoFromCwd,
@@ -8,7 +8,7 @@ import {
 import { isGitRepoOrBare, listWorktrees } from '../git.ts';
 import type { WorktreeInfo } from '../git.ts';
 import type { RepoEntry } from '../types.ts';
-import { print, printError } from '../output.ts';
+import { print } from '../output.ts';
 
 function printWorktreeTree(
   repo: RepoEntry,
@@ -76,17 +76,12 @@ async function printRepo(repo: RepoEntry): Promise<void> {
 }
 
 export async function listCommand(ctx: CommandContext): Promise<void> {
-  const result = await readConfig(ctx.configPath);
+  const config = await loadConfig(ctx.configPath);
 
-  if (!result.success) {
-    printError(`Error reading config: ${result.error}`);
-    process.exit(1);
-  }
-
-  const { repos } = result.data;
+  const { repos } = config;
 
   // Detect if we're inside a tracked repo
-  const currentRepo = await findRepoFromCwd(result.data, process.cwd());
+  const currentRepo = await findRepoFromCwd(config, process.cwd());
 
   if (currentRepo) {
     // Inside a tracked repo - show only this repo

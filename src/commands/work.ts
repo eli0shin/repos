@@ -1,10 +1,5 @@
 import type { CommandContext } from '../cli.ts';
-import {
-  readConfig,
-  findRepo,
-  findRepoFromCwd,
-  getWorktreePath,
-} from '../config.ts';
+import { loadConfig, resolveRepo, getWorktreePath } from '../config.ts';
 import {
   createWorktree,
   listWorktrees,
@@ -18,26 +13,8 @@ export async function workCommand(
   branch: string,
   repoName?: string
 ): Promise<void> {
-  const configResult = await readConfig(ctx.configPath);
-  if (!configResult.success) {
-    printError(`Error reading config: ${configResult.error}`);
-    process.exit(1);
-  }
-
-  let repo;
-  if (repoName) {
-    repo = findRepo(configResult.data, repoName);
-    if (!repo) {
-      printError(`Error: "${repoName}" not found in config`);
-      process.exit(1);
-    }
-  } else {
-    repo = await findRepoFromCwd(configResult.data, process.cwd());
-    if (!repo) {
-      printError('Error: Not inside a tracked repo. Specify repo name.');
-      process.exit(1);
-    }
-  }
+  const config = await loadConfig(ctx.configPath);
+  const repo = await resolveRepo(config, repoName);
 
   // Check if worktree already exists - if so, output path and return
   const worktreesResult = await listWorktrees(repo.path);

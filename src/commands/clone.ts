@@ -1,5 +1,5 @@
 import type { CommandContext } from '../cli.ts';
-import { readConfig, findRepo } from '../config.ts';
+import { loadConfig, findRepo } from '../config.ts';
 import { cloneRepo, cloneBare, isGitRepo, isBareRepo } from '../git.ts';
 import { print, printError } from '../output.ts';
 import type { RepoEntry } from '../types.ts';
@@ -24,13 +24,9 @@ export async function cloneCommand(
   ctx: CommandContext,
   name?: string
 ): Promise<void> {
-  const configResult = await readConfig(ctx.configPath);
-  if (!configResult.success) {
-    printError(`Error reading config: ${configResult.error}`);
-    process.exit(1);
-  }
+  const config = await loadConfig(ctx.configPath);
 
-  const { repos } = configResult.data;
+  const { repos } = config;
 
   if (repos.length === 0) {
     print('No repos in config. Use "repos add <url>" to add one.');
@@ -38,7 +34,7 @@ export async function cloneCommand(
   }
 
   if (name) {
-    const repo = findRepo(configResult.data, name);
+    const repo = findRepo(config, name);
     if (!repo) {
       printError(`Error: "${name}" not found in config`);
       process.exit(1);

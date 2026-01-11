@@ -1,20 +1,16 @@
 import type { CommandContext } from '../cli.ts';
 import {
-  readConfig,
-  findRepo,
-  findRepoFromCwd,
+  loadConfig,
+  resolveRepo,
   removeStackEntry,
   removeStackEntriesByParent,
   getChildBranches,
-  updateRepoInConfig,
-  writeConfig,
+  saveStackUpdate,
 } from '../config.ts';
 import {
   removeWorktree,
   hasUncommittedChanges,
-  listWorktrees,
-  findWorktreeByBranch,
-  findWorktreeByDirectory,
+  resolveWorktree,
 } from '../git.ts';
 import { print, printError } from '../output.ts';
 
@@ -28,49 +24,9 @@ export async function cleanCommand(
   repoName?: string,
   options: CleanOptions = { force: false }
 ): Promise<void> {
-  const configResult = await readConfig(ctx.configPath);
-  if (!configResult.success) {
-    printError(`Error reading config: ${configResult.error}`);
-    process.exit(1);
-  }
-
-  let repo;
-  if (repoName) {
-    repo = findRepo(configResult.data, repoName);
-    if (!repo) {
-      printError(`Error: "${repoName}" not found in config`);
-      process.exit(1);
-    }
-  } else {
-    repo = await findRepoFromCwd(configResult.data, process.cwd());
-    if (!repo) {
-      printError('Error: Not inside a tracked repo. Specify repo name.');
-      process.exit(1);
-    }
-  }
-
-  // Find the worktree
-  const worktreesResult = await listWorktrees(repo.path);
-  if (!worktreesResult.success) {
-    printError(`Error: ${worktreesResult.error}`);
-    process.exit(1);
-  }
-
-  // If no branch specified, detect from current working directory
-  let worktree;
-  if (branch) {
-    worktree = findWorktreeByBranch(worktreesResult.data, branch);
-    if (!worktree) {
-      printError(`Error: No worktree found for branch "${branch}"`);
-      process.exit(1);
-    }
-  } else {
-    worktree = findWorktreeByDirectory(worktreesResult.data, process.cwd());
-    if (!worktree) {
-      printError('Error: Not inside a worktree. Specify branch name.');
-      process.exit(1);
-    }
-  }
+  const config = await loadConfig(ctx.configPath);
+  const repo = await resolveRepo(config, repoName);
+  const worktree = await resolveWorktree(repo.path, branch);
 
   if (worktree.isMain) {
     printError('Error: Cannot remove the main worktree');
@@ -117,13 +73,7 @@ export async function cleanCommand(
   let updatedRepo = removeStackEntry(repo, worktree.branch);
   updatedRepo = removeStackEntriesByParent(updatedRepo, worktree.branch);
   if (updatedRepo !== repo) {
-    const updatedConfig = updateRepoInConfig(configResult.data, updatedRepo);
-    const writeResult = await writeConfig(ctx.configPath, updatedConfig);
-    if (!writeResult.success) {
-      printError(
-        `Warning: Failed to clean up stack entry: ${writeResult.error}`
-      );
-    }
+    await saveStackUpdate(ctx.configPath, config, updatedRepo);
   }
 
   print(`Removed worktree "${repo.name}-${worktree.branch}"`);

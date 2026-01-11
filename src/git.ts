@@ -1,5 +1,6 @@
 import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
+import { printError } from './output.ts';
 import type { OperationResult } from './types.ts';
 
 type GitCommandResult = {
@@ -241,6 +242,50 @@ export function findWorktreeByDirectory(
   return worktrees.find(
     (wt) => directory === wt.path || directory.startsWith(wt.path + '/')
   );
+}
+
+export async function resolveWorktree(
+  repoPath: string,
+  branch?: string
+): Promise<WorktreeInfo> {
+  const result = await listWorktrees(repoPath);
+  if (!result.success) {
+    printError(`Error: ${result.error}`);
+    process.exit(1);
+  }
+
+  if (branch) {
+    const worktree = findWorktreeByBranch(result.data, branch);
+    if (!worktree) {
+      printError(`Error: No worktree found for branch "${branch}"`);
+      process.exit(1);
+    }
+    return worktree;
+  }
+
+  const worktree = findWorktreeByDirectory(result.data, process.cwd());
+  if (!worktree) {
+    printError('Error: Not inside a worktree. Specify branch name.');
+    process.exit(1);
+  }
+  return worktree;
+}
+
+export async function fetchAndRebase(
+  worktreePath: string,
+  targetRef: string
+): Promise<void> {
+  const fetchResult = await fetchOrigin(worktreePath);
+  if (!fetchResult.success) {
+    printError(`Error fetching: ${fetchResult.error}`);
+    process.exit(1);
+  }
+
+  const rebaseResult = await rebaseOnRef(worktreePath, targetRef);
+  if (!rebaseResult.success) {
+    printError(`Error: ${rebaseResult.error}`);
+    process.exit(1);
+  }
 }
 
 export async function localBranchExists(

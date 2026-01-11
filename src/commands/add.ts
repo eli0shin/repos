@@ -2,7 +2,7 @@ import { join } from 'node:path';
 import type { CommandContext } from '../cli.ts';
 import {
   extractRepoName,
-  readConfig,
+  loadConfig,
   writeConfig,
   addRepoToConfig,
   findRepo,
@@ -26,13 +26,9 @@ export async function addCommand(
   }
   const name = nameResult.data;
 
-  const configResult = await readConfig(ctx.configPath);
-  if (!configResult.success) {
-    printError(`Error reading config: ${configResult.error}`);
-    process.exit(1);
-  }
+  const config = await loadConfig(ctx.configPath);
 
-  if (findRepo(configResult.data, name)) {
+  if (findRepo(config, name)) {
     printError(`Error: "${name}" is already tracked`);
     process.exit(1);
   }
@@ -48,7 +44,7 @@ export async function addCommand(
       process.exit(1);
     }
 
-    const newConfig = addRepoToConfig(configResult.data, {
+    const newConfig = addRepoToConfig(config, {
       name,
       url,
       path: targetDir,
@@ -71,7 +67,7 @@ export async function addCommand(
       process.exit(1);
     }
 
-    const newConfig = addRepoToConfig(configResult.data, {
+    const newConfig = addRepoToConfig(config, {
       name,
       url,
       path: targetDir,

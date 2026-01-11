@@ -1,7 +1,7 @@
 import type { CommandContext } from '../cli.ts';
-import { readConfig } from '../config.ts';
+import { loadConfig } from '../config.ts';
 import { isGitRepo, pullCurrentBranch } from '../git.ts';
-import { print, printError } from '../output.ts';
+import { print } from '../output.ts';
 
 type PullResult = {
   name: string;
@@ -11,13 +11,9 @@ type PullResult = {
 };
 
 export async function latestCommand(ctx: CommandContext): Promise<void> {
-  const configResult = await readConfig(ctx.configPath);
-  if (!configResult.success) {
-    printError(`Error reading config: ${configResult.error}`);
-    process.exit(1);
-  }
+  const config = await loadConfig(ctx.configPath);
 
-  const { repos } = configResult.data;
+  const { repos } = config;
 
   if (repos.length === 0) {
     print('No repos in config. Use "repos add <url>" to add one.');
