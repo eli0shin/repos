@@ -1,7 +1,7 @@
 import { rm } from 'node:fs/promises';
 import type { CommandContext } from '../cli.ts';
 import {
-  readConfig,
+  loadConfig,
   writeConfig,
   removeRepoFromConfig,
   findRepo,
@@ -14,19 +14,15 @@ export async function removeCommand(
   name: string,
   deleteDir: boolean
 ): Promise<void> {
-  const configResult = await readConfig(ctx.configPath);
-  if (!configResult.success) {
-    printError(`Error reading config: ${configResult.error}`);
-    process.exit(1);
-  }
+  const config = await loadConfig(ctx.configPath);
 
-  const repo = findRepo(configResult.data, name);
+  const repo = findRepo(config, name);
   if (!repo) {
     printError(`Error: "${name}" not found in config`);
     process.exit(1);
   }
 
-  const newConfig = removeRepoFromConfig(configResult.data, name);
+  const newConfig = removeRepoFromConfig(config, name);
   const writeResult = await writeConfig(ctx.configPath, newConfig);
   if (!writeResult.success) {
     printError(`Error saving config: ${writeResult.error}`);

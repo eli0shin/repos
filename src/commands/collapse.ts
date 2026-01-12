@@ -1,33 +1,29 @@
 import type { CommandContext } from '../cli.ts';
 import {
-  readConfig,
+  loadConfig,
   findRepoFromCwd,
   getParentBranch,
   getChildBranches,
   removeStackEntry,
   addStackEntry,
-  updateRepoInConfig,
-  writeConfig,
+  saveStackUpdate,
 } from '../config.ts';
 import {
-  fetchOrigin,
-  rebaseOnRef,
   getDefaultBranch,
   listWorktrees,
   removeWorktree,
   hasUncommittedChanges,
+  findWorktreeByDirectory,
+  findWorktreeByBranch,
+  fetchAndRebase,
 } from '../git.ts';
 import { print, printError } from '../output.ts';
 
 export async function collapseCommand(ctx: CommandContext): Promise<void> {
-  const configResult = await readConfig(ctx.configPath);
-  if (!configResult.success) {
-    printError(`Error reading config: ${configResult.error}`);
-    process.exit(1);
-  }
+  const config = await loadConfig(ctx.configPath);
 
   // Find repo from current working directory
-  const repo = await findRepoFromCwd(configResult.data, process.cwd());
+  const repo = await findRepoFromCwd(config, process.cwd());
   if (!repo) {
     printError('Error: Not inside a tracked repo.');
     process.exit(1);
@@ -41,9 +37,9 @@ export async function collapseCommand(ctx: CommandContext): Promise<void> {
   }
 
   // Find the worktree we're currently in
-  const cwd = process.cwd();
-  const currentWorktree = worktreesResult.data.find(
-    (wt) => cwd === wt.path || cwd.startsWith(wt.path + '/')
+  const currentWorktree = findWorktreeByDirectory(
+    worktreesResult.data,
+    process.cwd()
   );
 
   if (!currentWorktree?.branch) {
@@ -75,8 +71,9 @@ export async function collapseCommand(ctx: CommandContext): Promise<void> {
   }
 
   // Find the parent worktree
-  const parentWorktree = worktreesResult.data.find(
-    (wt) => wt.branch === parentBranch
+  const parentWorktree = findWorktreeByBranch(
+    worktreesResult.data,
+    parentBranch
   );
 
   if (!parentWorktree) {
@@ -102,27 +99,14 @@ export async function collapseCommand(ctx: CommandContext): Promise<void> {
   // Get grandparent (parent's parent, or default branch if none)
   const grandparentBranch = getParentBranch(repo, parentBranch);
 
-  // Fetch first
-  const fetchResult = await fetchOrigin(currentWorktree.path);
-  if (!fetchResult.success) {
-    printError(`Error fetching: ${fetchResult.error}`);
-    process.exit(1);
-  }
-
-  // Rebase onto grandparent or default branch
+  // Determine target ref and rebase
+  let targetRef: string;
   if (grandparentBranch) {
     print(
       `Collapsing "${parentBranch}" - rebasing "${currentBranch}" onto "${grandparentBranch}"...`
     );
     // Use local branch name directly since grandparent is a local worktree branch
-    const rebaseResult = await rebaseOnRef(
-      currentWorktree.path,
-      grandparentBranch
-    );
-    if (!rebaseResult.success) {
-      printError(`Error: ${rebaseResult.error}`);
-      process.exit(1);
-    }
+    targetRef = grandparentBranch;
   } else {
     // No grandparent means parent was based on default branch
     const defaultBranchResult = await getDefaultBranch(repo.path);
@@ -131,17 +115,14 @@ export async function collapseCommand(ctx: CommandContext): Promise<void> {
       process.exit(1);
     }
     const defaultBranch = defaultBranchResult.data;
-    const targetRef = `origin/${defaultBranch}`;
+    targetRef = `origin/${defaultBranch}`;
 
     print(
       `Collapsing "${parentBranch}" - rebasing "${currentBranch}" onto "${defaultBranch}"...`
     );
-    const rebaseResult = await rebaseOnRef(currentWorktree.path, targetRef);
-    if (!rebaseResult.success) {
-      printError(`Error: ${rebaseResult.error}`);
-      process.exit(1);
-    }
   }
+
+  await fetchAndRebase(currentWorktree.path, targetRef);
 
   // Update config: remove parent->child, optionally add grandparent->child
   let updatedRepo = removeStackEntry(repo, currentBranch);
@@ -151,11 +132,7 @@ export async function collapseCommand(ctx: CommandContext): Promise<void> {
   // Also remove the grandparent->parent entry since parent is going away
   updatedRepo = removeStackEntry(updatedRepo, parentBranch);
 
-  const updatedConfig = updateRepoInConfig(configResult.data, updatedRepo);
-  const writeResult = await writeConfig(ctx.configPath, updatedConfig);
-  if (!writeResult.success) {
-    printError(`Warning: Failed to update config: ${writeResult.error}`);
-  }
+  await saveStackUpdate(ctx.configPath, config, updatedRepo);
 
   // Remove parent worktree
   print(`Removing parent worktree "${parentBranch}"...`);

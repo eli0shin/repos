@@ -1,7 +1,7 @@
 import { basename, join } from 'node:path';
 import type { CommandContext } from '../cli.ts';
 import {
-  readConfig,
+  loadConfig,
   writeConfig,
   addRepoToConfig,
   findRepo,
@@ -17,28 +17,24 @@ import { print, printError } from '../output.ts';
 import type { ReposConfig } from '../types.ts';
 
 export async function adoptCommand(ctx: CommandContext): Promise<void> {
-  const configResult = await readConfig(ctx.configPath);
-  if (!configResult.success) {
-    printError(`Error reading config: ${configResult.error}`);
-    process.exit(1);
-  }
+  const config = await loadConfig(ctx.configPath);
 
   const cwd = process.cwd();
 
   // If current directory is a bare repo, adopt it
   if (await isBareRepo(cwd)) {
-    await adoptSingleRepo(ctx.configPath, configResult.data, cwd, true);
+    await adoptSingleRepo(ctx.configPath, config, cwd, true);
     return;
   }
 
   // If current directory is a regular git repo, adopt just that repo
   if (await isGitRepo(cwd)) {
-    await adoptSingleRepo(ctx.configPath, configResult.data, cwd, false);
+    await adoptSingleRepo(ctx.configPath, config, cwd, false);
     return;
   }
 
   // Otherwise, scan current directory for git repos
-  await adoptMultipleRepos(ctx.configPath, configResult.data, cwd);
+  await adoptMultipleRepos(ctx.configPath, config, cwd);
 }
 
 async function adoptSingleRepo(

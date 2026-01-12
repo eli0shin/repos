@@ -1,16 +1,17 @@
 import type { CommandContext } from '../cli.ts';
 import {
-  readConfig,
+  loadConfig,
   findRepoFromCwd,
   getWorktreePath,
-  writeConfig,
   addStackEntry,
-  updateRepoInConfig,
+  saveStackUpdate,
 } from '../config.ts';
 import {
   createWorktreeFromBranch,
   listWorktrees,
   ensureRefspecConfig,
+  findWorktreeByDirectory,
+  findWorktreeByBranch,
 } from '../git.ts';
 import { print, printError, printStatus } from '../output.ts';
 
@@ -18,14 +19,10 @@ export async function stackCommand(
   ctx: CommandContext,
   newBranch: string
 ): Promise<void> {
-  const configResult = await readConfig(ctx.configPath);
-  if (!configResult.success) {
-    printError(`Error reading config: ${configResult.error}`);
-    process.exit(1);
-  }
+  const config = await loadConfig(ctx.configPath);
 
   // Find repo from current working directory
-  const repo = await findRepoFromCwd(configResult.data, process.cwd());
+  const repo = await findRepoFromCwd(config, process.cwd());
   if (!repo) {
     printError('Error: Not inside a tracked repo.');
     process.exit(1);
@@ -39,9 +36,9 @@ export async function stackCommand(
   }
 
   // Find the worktree we're currently in
-  const cwd = process.cwd();
-  const currentWorktree = worktreesResult.data.find(
-    (wt) => cwd === wt.path || cwd.startsWith(wt.path + '/')
+  const currentWorktree = findWorktreeByDirectory(
+    worktreesResult.data,
+    process.cwd()
   );
 
   if (!currentWorktree?.branch) {
@@ -52,8 +49,9 @@ export async function stackCommand(
   const parentBranch = currentWorktree.branch;
 
   // Check if worktree for new branch already exists
-  const existingWorktree = worktreesResult.data.find(
-    (wt) => wt.branch === newBranch
+  const existingWorktree = findWorktreeByBranch(
+    worktreesResult.data,
+    newBranch
   );
   if (existingWorktree) {
     printError(`Error: Worktree for branch "${newBranch}" already exists.`);
@@ -82,13 +80,7 @@ export async function stackCommand(
 
   // Record parent-child relationship in config
   const updatedRepo = addStackEntry(repo, parentBranch, newBranch);
-  const updatedConfig = updateRepoInConfig(configResult.data, updatedRepo);
-  const writeResult = await writeConfig(ctx.configPath, updatedConfig);
-  if (!writeResult.success) {
-    printError(
-      `Warning: Failed to save stack relationship: ${writeResult.error}`
-    );
-  }
+  await saveStackUpdate(ctx.configPath, config, updatedRepo);
 
   printStatus(
     `Created stacked worktree "${repo.name}-${newBranch.replace(/\//g, '-')}"`

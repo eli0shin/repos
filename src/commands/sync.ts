@@ -1,24 +1,18 @@
 import { join } from 'node:path';
 import type { CommandContext } from '../cli.ts';
 import {
-  readConfig,
+  loadConfig,
   writeConfig,
   addRepoToConfig,
   findRepo,
 } from '../config.ts';
 import { findGitRepos, getRemoteUrl, cloneRepo, isGitRepo } from '../git.ts';
 import { print, printError } from '../output.ts';
-import type { ReposConfig } from '../types.ts';
 
 export async function syncCommand(ctx: CommandContext): Promise<void> {
-  const configResult = await readConfig(ctx.configPath);
-  if (!configResult.success) {
-    printError(`Error reading config: ${configResult.error}`);
-    process.exit(1);
-  }
+  let config = await loadConfig(ctx.configPath);
 
   const cwd = process.cwd();
-  let config: ReposConfig = configResult.data;
   let adopted = 0;
   let cloned = 0;
 

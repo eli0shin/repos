@@ -1,29 +1,25 @@
 import type { CommandContext } from '../cli.ts';
 import {
-  readConfig,
+  loadConfig,
   findRepoFromCwd,
   getParentBranch,
   removeStackEntry,
-  updateRepoInConfig,
-  writeConfig,
+  saveStackUpdate,
 } from '../config.ts';
 import {
-  fetchOrigin,
-  rebaseOnRef,
   getDefaultBranch,
   listWorktrees,
+  findWorktreeByDirectory,
+  findWorktreeByBranch,
+  fetchAndRebase,
 } from '../git.ts';
 import { print, printError } from '../output.ts';
 
 export async function restackCommand(ctx: CommandContext): Promise<void> {
-  const configResult = await readConfig(ctx.configPath);
-  if (!configResult.success) {
-    printError(`Error reading config: ${configResult.error}`);
-    process.exit(1);
-  }
+  const config = await loadConfig(ctx.configPath);
 
   // Find repo from current working directory
-  const repo = await findRepoFromCwd(configResult.data, process.cwd());
+  const repo = await findRepoFromCwd(config, process.cwd());
   if (!repo) {
     printError('Error: Not inside a tracked repo.');
     process.exit(1);
@@ -37,9 +33,9 @@ export async function restackCommand(ctx: CommandContext): Promise<void> {
   }
 
   // Find the worktree we're currently in
-  const cwd = process.cwd();
-  const currentWorktree = worktreesResult.data.find(
-    (wt) => cwd === wt.path || cwd.startsWith(wt.path + '/')
+  const currentWorktree = findWorktreeByDirectory(
+    worktreesResult.data,
+    process.cwd()
   );
 
   if (!currentWorktree?.branch) {
@@ -60,14 +56,14 @@ export async function restackCommand(ctx: CommandContext): Promise<void> {
   }
 
   // Check if parent branch still exists (has an active worktree)
-  const parentWorktree = worktreesResult.data.find(
-    (wt) => wt.branch === parentBranch
+  const parentWorktree = findWorktreeByBranch(
+    worktreesResult.data,
+    parentBranch
   );
   const parentStillExists = parentWorktree !== undefined;
 
   // Determine target branch for rebase
   let targetRef: string;
-  let updatedConfig = configResult.data;
 
   if (parentStillExists) {
     targetRef = parentBranch;
@@ -84,30 +80,14 @@ export async function restackCommand(ctx: CommandContext): Promise<void> {
 
     // Remove the stale parent relationship
     const updatedRepo = removeStackEntry(repo, currentBranch);
-    updatedConfig = updateRepoInConfig(configResult.data, updatedRepo);
-    const writeResult = await writeConfig(ctx.configPath, updatedConfig);
-    if (!writeResult.success) {
-      printError(`Warning: Failed to update config: ${writeResult.error}`);
-    }
+    await saveStackUpdate(ctx.configPath, config, updatedRepo);
 
     print(
       `Parent "${parentBranch}" is gone. Rebasing "${currentBranch}" on "${defaultBranch}"...`
     );
   }
 
-  // Fetch first
-  const fetchResult = await fetchOrigin(currentWorktree.path);
-  if (!fetchResult.success) {
-    printError(`Error fetching: ${fetchResult.error}`);
-    process.exit(1);
-  }
-
-  // Rebase on target
-  const rebaseResult = await rebaseOnRef(currentWorktree.path, targetRef);
-  if (!rebaseResult.success) {
-    printError(`Error: ${rebaseResult.error}`);
-    process.exit(1);
-  }
+  await fetchAndRebase(currentWorktree.path, targetRef);
 
   print(`Rebased "${currentBranch}" on "${targetRef}"`);
 }

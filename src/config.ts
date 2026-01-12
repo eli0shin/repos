@@ -1,7 +1,8 @@
 import { mkdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
-import { listWorktrees } from './git.ts';
+import { listWorktrees, findWorktreeByDirectory } from './git.ts';
+import { printError } from './output.ts';
 import type {
   RepoEntry,
   ReposConfig,
@@ -114,6 +115,15 @@ export async function readConfig(
   }
 }
 
+export async function loadConfig(configPath: string): Promise<ReposConfig> {
+  const result = await readConfig(configPath);
+  if (!result.success) {
+    printError(`Error reading config: ${result.error}`);
+    process.exit(1);
+  }
+  return result.data;
+}
+
 export async function writeConfig(
   configPath: string,
   config: ReposConfig
@@ -170,15 +180,33 @@ export async function findRepoFromCwd(
   for (const repo of config.repos) {
     const worktreesResult = await listWorktrees(repo.path);
     if (worktreesResult.success) {
-      for (const wt of worktreesResult.data) {
-        if (cwd === wt.path || cwd.startsWith(wt.path + '/')) {
-          return repo;
-        }
+      if (findWorktreeByDirectory(worktreesResult.data, cwd)) {
+        return repo;
       }
     }
   }
 
   return undefined;
+}
+
+export async function resolveRepo(
+  config: ReposConfig,
+  repoName?: string
+): Promise<RepoEntry> {
+  if (repoName) {
+    const repo = findRepo(config, repoName);
+    if (!repo) {
+      printError(`Error: "${repoName}" not found in config`);
+      process.exit(1);
+    }
+    return repo;
+  }
+  const repo = await findRepoFromCwd(config, process.cwd());
+  if (!repo) {
+    printError('Error: Not inside a tracked repo. Specify repo name.');
+    process.exit(1);
+  }
+  return repo;
 }
 
 export function getWorktreePath(repoPath: string, branch: string): string {
@@ -259,4 +287,16 @@ export function updateRepoInConfig(
       r.name === updatedRepo.name ? updatedRepo : r
     ),
   };
+}
+
+export async function saveStackUpdate(
+  configPath: string,
+  config: ReposConfig,
+  repo: RepoEntry
+): Promise<void> {
+  const updatedConfig = updateRepoInConfig(config, repo);
+  const result = await writeConfig(configPath, updatedConfig);
+  if (!result.success) {
+    printError(`Warning: Failed to update config: ${result.error}`);
+  }
 }

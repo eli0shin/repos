@@ -1,5 +1,5 @@
 import type { CommandContext } from '../cli.ts';
-import { readConfig } from '../config.ts';
+import { loadConfig } from '../config.ts';
 import type { RepoEntry } from '../types.ts';
 import type { WorktreeInfo } from '../git.ts';
 import {
@@ -139,16 +139,10 @@ export async function cleanupCommand(
   ctx: CommandContext,
   options: CleanupOptions
 ): Promise<void> {
-  const configResult = await readConfig(ctx.configPath);
-  if (!configResult.success) {
-    printError(`Error reading config: ${configResult.error}`);
-    process.exit(1);
-  }
+  const config = await loadConfig(ctx.configPath);
 
   // Phase 1: Parallel fetch and preparation for all repos
-  const repoContexts = await Promise.all(
-    configResult.data.repos.map(prepareRepo)
-  );
+  const repoContexts = await Promise.all(config.repos.map(prepareRepo));
 
   // Phase 2: Process worktrees for each repo
   const results: CleanupResult[] = [];

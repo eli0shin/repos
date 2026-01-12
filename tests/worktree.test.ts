@@ -388,6 +388,67 @@ describe('repos clean command', () => {
       },
     });
   });
+
+  test('removes current worktree when no branch specified', async () => {
+    // Clone as bare
+    const bareDir = join(testDir, 'bare.git');
+    await cloneBare(sourceDir, bareDir);
+
+    // Create worktree
+    const worktreePathRaw = join(testDir, 'bare.git-feature');
+    await runGitCommand(
+      ['worktree', 'add', '-b', 'feature', worktreePathRaw],
+      bareDir
+    );
+    const worktreePath = realpathSync(worktreePathRaw);
+
+    // Create config
+    const config = {
+      repos: [{ name: 'bare', url: sourceDir, path: bareDir, bare: true }],
+    } satisfies ReposConfig;
+    await writeConfig(configPath, config);
+
+    // Verify worktree exists before
+    expect(await isGitRepo(worktreePath)).toBe(true);
+
+    // Change to worktree directory and run clean without specifying branch
+    const originalCwd = process.cwd();
+    process.chdir(worktreePath);
+    try {
+      const ctx = { configPath };
+      await cleanCommand(ctx, undefined, undefined);
+
+      // Verify worktree was removed
+      expect(await isGitRepo(worktreePath)).toBe(false);
+    } finally {
+      process.chdir(originalCwd);
+    }
+  });
+
+  test('fails when not in worktree and no branch specified', async () => {
+    // Clone as bare
+    const bareDir = join(testDir, 'bare.git');
+    await cloneBare(sourceDir, bareDir);
+
+    // Create config
+    const config = {
+      repos: [{ name: 'bare', url: sourceDir, path: bareDir, bare: true }],
+    } satisfies ReposConfig;
+    await writeConfig(configPath, config);
+
+    // Change to a non-worktree directory (the bare repo dir)
+    const originalCwd = process.cwd();
+    process.chdir(bareDir);
+    try {
+      const ctx = { configPath };
+      await expect(cleanCommand(ctx, undefined, undefined)).rejects.toThrow(
+        'process.exit(1)'
+      );
+      expect(mockExit).toHaveBeenCalledWith(1);
+    } finally {
+      process.chdir(originalCwd);
+    }
+  });
 });
 
 describe('repos rebase command', () => {

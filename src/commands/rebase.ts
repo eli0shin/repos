@@ -1,11 +1,6 @@
 import type { CommandContext } from '../cli.ts';
-import { readConfig, findRepo, findRepoFromCwd } from '../config.ts';
-import {
-  fetchOrigin,
-  rebaseOnBranch,
-  getDefaultBranch,
-  listWorktrees,
-} from '../git.ts';
+import { loadConfig, resolveRepo } from '../config.ts';
+import { getDefaultBranch, resolveWorktree, fetchAndRebase } from '../git.ts';
 import { print, printError } from '../output.ts';
 
 export async function rebaseCommand(
@@ -13,53 +8,9 @@ export async function rebaseCommand(
   branch?: string,
   repoName?: string
 ): Promise<void> {
-  const configResult = await readConfig(ctx.configPath);
-  if (!configResult.success) {
-    printError(`Error reading config: ${configResult.error}`);
-    process.exit(1);
-  }
-
-  let repo;
-  if (repoName) {
-    repo = findRepo(configResult.data, repoName);
-    if (!repo) {
-      printError(`Error: "${repoName}" not found in config`);
-      process.exit(1);
-    }
-  } else {
-    repo = await findRepoFromCwd(configResult.data, process.cwd());
-    if (!repo) {
-      printError('Error: Not inside a tracked repo. Specify repo name.');
-      process.exit(1);
-    }
-  }
-
-  // Find the worktree
-  const worktreesResult = await listWorktrees(repo.path);
-  if (!worktreesResult.success) {
-    printError(`Error: ${worktreesResult.error}`);
-    process.exit(1);
-  }
-
-  // If no branch specified, detect from current working directory
-  let worktree;
-  if (branch) {
-    worktree = worktreesResult.data.find((wt) => wt.branch === branch);
-    if (!worktree) {
-      printError(`Error: No worktree found for branch "${branch}"`);
-      process.exit(1);
-    }
-  } else {
-    const cwd = process.cwd();
-    worktree = worktreesResult.data.find(
-      (wt) => cwd === wt.path || cwd.startsWith(wt.path + '/')
-    );
-    if (!worktree) {
-      printError('Error: Not inside a worktree. Specify branch name.');
-      process.exit(1);
-    }
-    branch = worktree.branch;
-  }
+  const config = await loadConfig(ctx.configPath);
+  const repo = await resolveRepo(config, repoName);
+  const worktree = await resolveWorktree(repo.path, branch);
 
   // Get default branch
   const defaultBranchResult = await getDefaultBranch(repo.path);
@@ -69,21 +20,9 @@ export async function rebaseCommand(
   }
 
   const defaultBranch = defaultBranchResult.data;
-  print(`Fetching and rebasing "${branch}" on "${defaultBranch}"...`);
+  print(`Fetching and rebasing "${worktree.branch}" on "${defaultBranch}"...`);
 
-  // Fetch first
-  const fetchResult = await fetchOrigin(worktree.path);
-  if (!fetchResult.success) {
-    printError(`Error fetching: ${fetchResult.error}`);
-    process.exit(1);
-  }
+  await fetchAndRebase(worktree.path, `origin/${defaultBranch}`);
 
-  // Rebase
-  const rebaseResult = await rebaseOnBranch(worktree.path, defaultBranch);
-  if (!rebaseResult.success) {
-    printError(`Error: ${rebaseResult.error}`);
-    process.exit(1);
-  }
-
-  print(`Rebased "${branch}" on "${defaultBranch}"`);
+  print(`Rebased "${worktree.branch}" on "${defaultBranch}"`);
 }

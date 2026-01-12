@@ -1,29 +1,24 @@
 import type { CommandContext } from '../cli.ts';
 import {
-  readConfig,
+  loadConfig,
   findRepoFromCwd,
   getParentBranch,
   removeStackEntry,
-  updateRepoInConfig,
-  writeConfig,
+  saveStackUpdate,
 } from '../config.ts';
 import {
-  fetchOrigin,
-  rebaseOnRef,
   getDefaultBranch,
   listWorktrees,
+  findWorktreeByDirectory,
+  fetchAndRebase,
 } from '../git.ts';
 import { print, printError } from '../output.ts';
 
 export async function unstackCommand(ctx: CommandContext): Promise<void> {
-  const configResult = await readConfig(ctx.configPath);
-  if (!configResult.success) {
-    printError(`Error reading config: ${configResult.error}`);
-    process.exit(1);
-  }
+  const config = await loadConfig(ctx.configPath);
 
   // Find repo from current working directory
-  const repo = await findRepoFromCwd(configResult.data, process.cwd());
+  const repo = await findRepoFromCwd(config, process.cwd());
   if (!repo) {
     printError('Error: Not inside a tracked repo.');
     process.exit(1);
@@ -37,9 +32,9 @@ export async function unstackCommand(ctx: CommandContext): Promise<void> {
   }
 
   // Find the worktree we're currently in
-  const cwd = process.cwd();
-  const currentWorktree = worktreesResult.data.find(
-    (wt) => cwd === wt.path || cwd.startsWith(wt.path + '/')
+  const currentWorktree = findWorktreeByDirectory(
+    worktreesResult.data,
+    process.cwd()
   );
 
   if (!currentWorktree?.branch) {
@@ -72,27 +67,11 @@ export async function unstackCommand(ctx: CommandContext): Promise<void> {
     `Unstacking "${currentBranch}" from "${parentBranch}" onto "${defaultBranch}"...`
   );
 
-  // Fetch first
-  const fetchResult = await fetchOrigin(currentWorktree.path);
-  if (!fetchResult.success) {
-    printError(`Error fetching: ${fetchResult.error}`);
-    process.exit(1);
-  }
-
-  // Rebase on default branch
-  const rebaseResult = await rebaseOnRef(currentWorktree.path, targetRef);
-  if (!rebaseResult.success) {
-    printError(`Error: ${rebaseResult.error}`);
-    process.exit(1);
-  }
+  await fetchAndRebase(currentWorktree.path, targetRef);
 
   // Remove the stack relationship
   const updatedRepo = removeStackEntry(repo, currentBranch);
-  const updatedConfig = updateRepoInConfig(configResult.data, updatedRepo);
-  const writeResult = await writeConfig(ctx.configPath, updatedConfig);
-  if (!writeResult.success) {
-    printError(`Warning: Failed to update config: ${writeResult.error}`);
-  }
+  await saveStackUpdate(ctx.configPath, config, updatedRepo);
 
   print(`Unstacked "${currentBranch}" - now independent on "${defaultBranch}"`);
 }
