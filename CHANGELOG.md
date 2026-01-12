@@ -1,5 +1,11 @@
 # repos
 
+## 0.7.0
+
+### Minor Changes
+
+- [#29](https://github.com/eli0shin/repos/pull/29) [`f09c34b`](https://github.com/eli0shin/repos/commit/f09c34bcb9785482230df15346acb277b5a8747c) Thanks [@eli0shin](https://github.com/eli0shin)! - Make branch argument optional in `repos clean` command - when run from inside a worktree, it now cleans up the current worktree by default.
+
 ## 0.6.0
 
 ### Minor Changes
