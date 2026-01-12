@@ -427,16 +427,19 @@ export async function rebaseOnRef(
   const result = await runGitCommand(['rebase', ref], repoDir);
 
   if (result.exitCode !== 0) {
-    // Check if it's a conflict
     if (
       result.stderr.includes('CONFLICT') ||
       result.stdout.includes('CONFLICT')
     ) {
-      // Abort the rebase
-      await runGitCommand(['rebase', '--abort'], repoDir);
       return {
         success: false,
-        error: 'Rebase failed due to conflicts. Rebase aborted.',
+        error:
+          'Rebase paused due to conflicts.\n\n' +
+          'To resolve:\n' +
+          '  1. Fix conflicts in the affected files\n' +
+          '  2. Stage resolved files: git add <file>\n' +
+          '  3. Continue rebase: git rebase --continue\n\n' +
+          'To abort: git rebase --abort',
       };
     }
     return { success: false, error: result.stderr || 'Failed to rebase' };
