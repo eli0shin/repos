@@ -641,6 +641,84 @@ repos collapse
 
 ---
 
+#### `repos squash [-m, --message <message>] [-f, --first]`
+
+Squash all commits since the base branch into a single commit.
+
+```bash
+repos squash                    # Opens editor for commit message
+repos squash -m "Add feature"   # Use provided message
+repos squash --first            # Use first commit's message
+repos squash -f                 # Short form of --first
+```
+
+**Options:**
+
+- `-m, --message <message>` - Commit message for the squashed commit
+- `-f, --first` - Use the first commit's message as the squash commit message
+
+**Base branch determination:**
+
+- **Stacked branches** - Uses the parent branch as base (from `repos stack`)
+- **Non-stacked branches** - Uses `origin/<default-branch>` as base
+
+**Prerequisites:**
+
+- Must be inside a tracked repo or worktree
+- Working directory must be clean (no uncommitted changes)
+- At least 2 commits since base branch (single commit = nothing to squash)
+
+**Behavior:**
+
+1. Determines the base branch (parent for stacked, default branch otherwise)
+2. Counts commits since base
+3. Soft resets to base, keeping all changes staged
+4. Creates a single new commit with the squashed changes
+
+**Use cases:**
+
+- Clean up work-in-progress commits before creating a PR
+- Combine multiple small commits into a single logical change
+- Prepare a stacked branch for merge after parent is merged
+
+**Example:**
+
+```bash
+# You have 5 WIP commits on feature branch
+cd ~/code/api-server-feature-auth
+git log --oneline
+# abc1234 WIP: fix tests
+# def5678 WIP: add validation
+# ghi9012 WIP: initial attempt
+# jkl3456 Add auth endpoint
+# mno7890 Setup auth module
+
+repos squash -m "Add user authentication"
+# All 5 commits are now squashed into one
+
+git log --oneline
+# xyz9999 Add user authentication
+```
+
+**With stacked branches:**
+
+```bash
+# feature-profile is stacked on feature-auth
+cd ~/code/api-server-feature-profile
+repos squash -m "Add user profile endpoint"
+# Squashes commits since feature-auth (not since main)
+```
+
+**Using first commit message:**
+
+```bash
+repos squash --first
+# Uses the message from your first commit after the base
+# Useful when your first commit has a good descriptive message
+```
+
+---
+
 #### `repos clean <branch> [repo-name]`
 
 Remove a worktree.
@@ -1120,6 +1198,7 @@ cat ~/.config/repos/config.json | grep updateBehavior
 | `repos restack`                  | Rebase current branch on parent branch      |
 | `repos unstack`                  | Unstack branch onto default branch          |
 | `repos collapse`                 | Collapse parent into current stacked branch |
+| `repos squash [-m msg] [-f]`     | Squash commits since base into one commit   |
 | `repos clean <branch> [repo]`    | Remove a worktree (--force for parents)     |
 | `repos rebase [branch] [repo]`   | Rebase worktree on default branch           |
 | `repos cleanup [--dry-run]`      | Remove merged/deleted worktrees             |

@@ -20,6 +20,7 @@ import { stackCommand } from './commands/stack.ts';
 import { restackCommand } from './commands/restack.ts';
 import { unstackCommand } from './commands/unstack.ts';
 import { collapseCommand } from './commands/collapse.ts';
+import { squashCommand } from './commands/squash.ts';
 import { cleanCommand } from './commands/clean.ts';
 import { cleanupCommand } from './commands/cleanup.ts';
 import { rebaseCommand } from './commands/rebase.ts';
@@ -173,6 +174,18 @@ program
   .description('Collapse parent branch into current stacked branch')
   .action(async () => {
     await collapseCommand(getCommandContext());
+  });
+
+program
+  .command('squash')
+  .description('Squash commits since base branch into a single commit')
+  .option('-m, --message <message>', 'Commit message for squashed commit')
+  .option('-f, --first', 'Use first commit message as squash message')
+  .action(async (options) => {
+    await squashCommand(getCommandContext(), {
+      message: options.message,
+      first: options.first ?? false,
+    });
   });
 
 program
