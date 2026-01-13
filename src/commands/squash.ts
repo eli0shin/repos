@@ -24,6 +24,17 @@ export async function squashCommand(
   ctx: CommandContext,
   options: SquashOptions
 ): Promise<void> {
+  // Validate options
+  if (options.message && options.first) {
+    printError('Error: Cannot use both -m and -f flags together.');
+    process.exit(1);
+  }
+
+  if (options.message?.trim() === '') {
+    printError('Error: Commit message cannot be empty.');
+    process.exit(1);
+  }
+
   // Step 1: Read config and find repo
   const configResult = await readConfig(ctx.configPath);
   if (!configResult.success) {

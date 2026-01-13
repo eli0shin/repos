@@ -749,5 +749,5 @@ export async function getMergeBase(
     };
   }
 
-  return { success: true, data: result.stdout };
+  return { success: true, data: result.stdout.trim() };
 }

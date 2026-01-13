@@ -376,4 +376,104 @@ describe('repos squash command', () => {
     );
     expect(mockExit).toHaveBeenCalledWith(1);
   });
+
+  test('squashes with multi-line commit message using -f flag', async () => {
+    // Clone as bare
+    const bareDir = join(testDir, 'bare.git');
+    await cloneBare(sourceDir, bareDir);
+
+    // Create config
+    const config = {
+      repos: [{ name: 'bare', url: sourceDir, path: bareDir, bare: true }],
+    } satisfies ReposConfig;
+    await writeConfig(configPath, config);
+
+    const ctx = { configPath };
+
+    // Create worktree
+    await workCommand(ctx, 'feature', 'bare');
+    const worktreePath = join(testDir, 'bare.git-feature');
+
+    // Configure git user
+    await runGitCommand(
+      ['config', 'user.email', 'test@test.com'],
+      worktreePath
+    );
+    await runGitCommand(['config', 'user.name', 'Test'], worktreePath);
+
+    // Add first commit with multi-line message
+    await Bun.write(join(worktreePath, 'file1.txt'), 'content');
+    await runGitCommand(['add', '.'], worktreePath);
+    await runGitCommand(
+      ['commit', '-m', 'First line\n\nSecond paragraph\n\nThird paragraph'],
+      worktreePath
+    );
+
+    // Add more commits
+    await addCommit(worktreePath, 'file2.txt', 'second commit');
+    await addCommit(worktreePath, 'file3.txt', 'third commit');
+
+    // Squash with --first flag
+    process.chdir(worktreePath);
+    await squashCommand(ctx, { first: true });
+
+    // Verify full multi-line message is preserved
+    const result = await runGitCommand(
+      ['log', '-1', '--format=%B'],
+      worktreePath
+    );
+    const fullMessage = result.stdout.trim();
+    expect(fullMessage).toBe(
+      'First line\n\nSecond paragraph\n\nThird paragraph'
+    );
+
+    // Verify only 1 commit since base
+    const countAfter = await getCommitCount(worktreePath, 'origin/main');
+    expect(countAfter).toBe(1);
+  });
+
+  test('fails when both -m and -f flags are provided', async () => {
+    // Create empty config (we don't need a repo for this test)
+    const config = { repos: [] } satisfies ReposConfig;
+    await writeConfig(configPath, config);
+
+    const ctx = { configPath };
+
+    // Try to squash with both flags
+    process.chdir(testDir);
+    await expect(
+      squashCommand(ctx, { message: 'custom', first: true })
+    ).rejects.toThrow('process.exit(1)');
+    expect(mockExit).toHaveBeenCalledWith(1);
+  });
+
+  test('fails when commit message is empty', async () => {
+    // Create empty config (we don't need a repo for this test)
+    const config = { repos: [] } satisfies ReposConfig;
+    await writeConfig(configPath, config);
+
+    const ctx = { configPath };
+
+    // Try to squash with empty message
+    process.chdir(testDir);
+    await expect(squashCommand(ctx, { message: '' })).rejects.toThrow(
+      'process.exit(1)'
+    );
+    expect(mockExit).toHaveBeenCalledWith(1);
+  });
+
+  test('fails when commit message is whitespace only', async () => {
+    // Create empty config (we don't need a repo for this test)
+    const config = { repos: [] } satisfies ReposConfig;
+    await writeConfig(configPath, config);
+
+    const ctx = { configPath };
+
+    // Try to squash with whitespace-only message
+    process.chdir(testDir);
+    await expect(squashCommand(ctx, { message: '   ' })).rejects.toThrow(
+      'process.exit(1)'
+    );
+    expect(mockExit).toHaveBeenCalledWith(1);
+  });
 });
