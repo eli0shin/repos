@@ -163,14 +163,17 @@ describe('repos clean command', () => {
   const sourceDir = '/tmp/repos-test-clean-cmd-source';
   const configPath = '/tmp/repos-test-clean-cmd-config/config.json';
   let mockExit: MockExit;
+  let originalCwd: string;
 
   beforeEach(async () => {
+    originalCwd = process.cwd();
     mockExit = mockProcessExit();
     await mkdir(testDir, { recursive: true });
     await createTestRepo(sourceDir);
   });
 
   afterEach(async () => {
+    process.chdir(originalCwd);
     mockExit.mockRestore();
     await rm(testDir, { recursive: true, force: true });
     await rm(sourceDir, { recursive: true, force: true });
@@ -412,17 +415,12 @@ describe('repos clean command', () => {
     expect(await isGitRepo(worktreePath)).toBe(true);
 
     // Change to worktree directory and run clean without specifying branch
-    const originalCwd = process.cwd();
     process.chdir(worktreePath);
-    try {
-      const ctx = { configPath };
-      await cleanCommand(ctx, undefined, undefined);
+    const ctx = { configPath };
+    await cleanCommand(ctx, undefined, undefined);
 
-      // Verify worktree was removed
-      expect(await isGitRepo(worktreePath)).toBe(false);
-    } finally {
-      process.chdir(originalCwd);
-    }
+    // Verify worktree was removed
+    expect(await isGitRepo(worktreePath)).toBe(false);
   });
 
   test('fails when not in worktree and no branch specified', async () => {
@@ -437,17 +435,12 @@ describe('repos clean command', () => {
     await writeConfig(configPath, config);
 
     // Change to a non-worktree directory (the bare repo dir)
-    const originalCwd = process.cwd();
     process.chdir(bareDir);
-    try {
-      const ctx = { configPath };
-      await expect(cleanCommand(ctx, undefined, undefined)).rejects.toThrow(
-        'process.exit(1)'
-      );
-      expect(mockExit).toHaveBeenCalledWith(1);
-    } finally {
-      process.chdir(originalCwd);
-    }
+    const ctx = { configPath };
+    await expect(cleanCommand(ctx, undefined, undefined)).rejects.toThrow(
+      'process.exit(1)'
+    );
+    expect(mockExit).toHaveBeenCalledWith(1);
   });
 });
 
@@ -596,13 +589,16 @@ describe('repos stack command', () => {
   const testDir = '/tmp/repos-test-stack-cmd';
   const sourceDir = '/tmp/repos-test-stack-cmd-source';
   const configPath = '/tmp/repos-test-stack-cmd-config/config.json';
+  let originalCwd: string;
 
   beforeEach(async () => {
+    originalCwd = process.cwd();
     await mkdir(testDir, { recursive: true });
     await createTestRepo(sourceDir);
   });
 
   afterEach(async () => {
+    process.chdir(originalCwd);
     await rm(testDir, { recursive: true, force: true });
     await rm(sourceDir, { recursive: true, force: true });
     await rm('/tmp/repos-test-stack-cmd-config', {
@@ -641,37 +637,39 @@ describe('repos stack command', () => {
 
     // Step 3: Stack a child branch from within parent worktree
     const childWorktreePath = join(testDir, 'bare.git-child-branch');
-    const originalCwd = process.cwd();
     process.chdir(parentWorktreePath);
-    try {
-      await stackCommand(ctx, 'child-branch');
+    await stackCommand(ctx, 'child-branch');
 
-      // Verify child worktree was created
-      expect(await isGitRepo(childWorktreePath)).toBe(true);
-      expect(await getCurrentBranch(childWorktreePath)).toEqual({
-        success: true,
-        data: 'child-branch',
-      });
+    // Verify child worktree was created
+    expect(await isGitRepo(childWorktreePath)).toBe(true);
+    expect(await getCurrentBranch(childWorktreePath)).toEqual({
+      success: true,
+      data: 'child-branch',
+    });
 
-      // Verify child has parent's commit
-      const logResult = await runGitCommand(
-        ['log', '--oneline', '-1'],
-        childWorktreePath
-      );
-      expect(logResult.stdout).toContain('parent commit');
+    // Verify child has parent's commit
+    const logResult = await runGitCommand(
+      ['log', '--oneline', '-1'],
+      childWorktreePath
+    );
+    expect(logResult.stdout).toContain('parent commit');
 
-      // Verify stack relationship is recorded in config
-      const configResult = await readConfig(configPath);
-      expect(configResult.success).toBe(true);
-      if (configResult.success) {
-        const repo = configResult.data.repos.find((r) => r.name === 'bare');
-        expect(repo?.stacks).toEqual([
-          { parent: 'parent-branch', child: 'child-branch' },
-        ]);
-      }
-    } finally {
-      process.chdir(originalCwd);
-    }
+    // Verify stack relationship is recorded in config
+    const configResult = await readConfig(configPath);
+    expect(configResult).toEqual({
+      success: true,
+      data: {
+        repos: [
+          {
+            name: 'bare',
+            url: sourceDir,
+            path: bareDir,
+            bare: true,
+            stacks: [{ parent: 'parent-branch', child: 'child-branch' }],
+          },
+        ],
+      },
+    });
   });
 
   test('fails when not inside a worktree', async () => {
@@ -689,17 +687,12 @@ describe('repos stack command', () => {
     const mockExit = mockProcessExit();
 
     // Try to stack from outside a worktree (bare dir)
-    const originalCwd = process.cwd();
     process.chdir(bareDir);
-    try {
-      await expect(stackCommand(ctx, 'child-branch')).rejects.toThrow(
-        'process.exit(1)'
-      );
-      expect(mockExit).toHaveBeenCalledWith(1);
-    } finally {
-      process.chdir(originalCwd);
-      mockExit.mockRestore();
-    }
+    await expect(stackCommand(ctx, 'child-branch')).rejects.toThrow(
+      'process.exit(1)'
+    );
+    expect(mockExit).toHaveBeenCalledWith(1);
+    mockExit.mockRestore();
   });
 
   test('fails when target branch already exists', async () => {
@@ -725,17 +718,12 @@ describe('repos stack command', () => {
     const mockExit = mockProcessExit();
 
     // Try to stack with existing branch name
-    const originalCwd = process.cwd();
     process.chdir(parentWorktreePath);
-    try {
-      await expect(stackCommand(ctx, 'existing-branch')).rejects.toThrow(
-        'process.exit(1)'
-      );
-      expect(mockExit).toHaveBeenCalledWith(1);
-    } finally {
-      process.chdir(originalCwd);
-      mockExit.mockRestore();
-    }
+    await expect(stackCommand(ctx, 'existing-branch')).rejects.toThrow(
+      'process.exit(1)'
+    );
+    expect(mockExit).toHaveBeenCalledWith(1);
+    mockExit.mockRestore();
   });
 });
 
@@ -743,13 +731,16 @@ describe('repos restack command', () => {
   const testDir = '/tmp/repos-test-restack-cmd';
   const sourceDir = '/tmp/repos-test-restack-cmd-source';
   const configPath = '/tmp/repos-test-restack-cmd-config/config.json';
+  let originalCwd: string;
 
   beforeEach(async () => {
+    originalCwd = process.cwd();
     await mkdir(testDir, { recursive: true });
     await createTestRepo(sourceDir);
   });
 
   afterEach(async () => {
+    process.chdir(originalCwd);
     await rm(testDir, { recursive: true, force: true });
     await rm(sourceDir, { recursive: true, force: true });
     await rm('/tmp/repos-test-restack-cmd-config', {
@@ -789,48 +780,40 @@ describe('repos restack command', () => {
 
     // Step 4: Stack a child branch from within parent worktree
     const childWorktreePath = join(testDir, 'bare.git-child-branch');
-    const originalCwd = process.cwd();
     process.chdir(parentWorktreePath);
-    try {
-      await stackCommand(ctx, 'child-branch');
+    await stackCommand(ctx, 'child-branch');
 
-      // Step 5: Add git config to child
-      await runGitCommand(
-        ['config', 'user.email', 'test@test.com'],
-        childWorktreePath
-      );
-      await runGitCommand(['config', 'user.name', 'Test'], childWorktreePath);
+    // Step 5: Add git config to child
+    await runGitCommand(
+      ['config', 'user.email', 'test@test.com'],
+      childWorktreePath
+    );
+    await runGitCommand(['config', 'user.name', 'Test'], childWorktreePath);
 
-      // Step 6: Make a commit on child branch
-      await Bun.write(join(childWorktreePath, 'child.txt'), 'child content');
-      await runGitCommand(['add', '.'], childWorktreePath);
-      await runGitCommand(['commit', '-m', 'child commit'], childWorktreePath);
+    // Step 6: Make a commit on child branch
+    await Bun.write(join(childWorktreePath, 'child.txt'), 'child content');
+    await runGitCommand(['add', '.'], childWorktreePath);
+    await runGitCommand(['commit', '-m', 'child commit'], childWorktreePath);
 
-      // Step 7: Make another commit on parent branch
-      await Bun.write(
-        join(parentWorktreePath, 'parent2.txt'),
-        'parent2 content'
-      );
-      await runGitCommand(['add', '.'], parentWorktreePath);
-      await runGitCommand(
-        ['commit', '-m', 'parent commit 2'],
-        parentWorktreePath
-      );
+    // Step 7: Make another commit on parent branch
+    await Bun.write(join(parentWorktreePath, 'parent2.txt'), 'parent2 content');
+    await runGitCommand(['add', '.'], parentWorktreePath);
+    await runGitCommand(
+      ['commit', '-m', 'parent commit 2'],
+      parentWorktreePath
+    );
 
-      // Step 8: Restack from child worktree
-      process.chdir(childWorktreePath);
-      await restackCommand(ctx);
+    // Step 8: Restack from child worktree
+    process.chdir(childWorktreePath);
+    await restackCommand(ctx);
 
-      // Verify child now has parent's second commit
-      const logResult = await runGitCommand(
-        ['log', '--oneline'],
-        childWorktreePath
-      );
-      expect(logResult.stdout).toContain('parent commit 2');
-      expect(logResult.stdout).toContain('child commit');
-    } finally {
-      process.chdir(originalCwd);
-    }
+    // Verify child now has parent's second commit
+    const logResult = await runGitCommand(
+      ['log', '--oneline'],
+      childWorktreePath
+    );
+    expect(logResult.stdout).toContain('parent commit 2');
+    expect(logResult.stdout).toContain('child commit');
   });
 
   test('falls back to default branch when parent is gone', async () => {
@@ -871,28 +854,31 @@ describe('repos restack command', () => {
     await runGitCommand(['commit', '-m', 'orphan commit'], orphanWorktreePath);
 
     // Restack should fall back to origin/main
-    const originalCwd = process.cwd();
     process.chdir(orphanWorktreePath);
-    try {
-      await restackCommand(ctx);
+    await restackCommand(ctx);
 
-      // Verify the branch still has the orphan commit
-      const logResult = await runGitCommand(
-        ['log', '--oneline'],
-        orphanWorktreePath
-      );
-      expect(logResult.stdout).toContain('orphan commit');
+    // Verify the branch still has the orphan commit
+    const logResult = await runGitCommand(
+      ['log', '--oneline'],
+      orphanWorktreePath
+    );
+    expect(logResult.stdout).toContain('orphan commit');
 
-      // Verify the stale parent relationship was removed
-      const configResult = await readConfig(configPath);
-      expect(configResult.success).toBe(true);
-      if (configResult.success) {
-        const repo = configResult.data.repos.find((r) => r.name === 'bare');
-        expect(repo?.stacks).toBeUndefined();
-      }
-    } finally {
-      process.chdir(originalCwd);
-    }
+    // Verify the stale parent relationship was removed
+    const configResult = await readConfig(configPath);
+    expect(configResult).toEqual({
+      success: true,
+      data: {
+        repos: [
+          {
+            name: 'bare',
+            url: sourceDir,
+            path: bareDir,
+            bare: true,
+          },
+        ],
+      },
+    });
   });
 
   test('fails when no parent is configured', async () => {
@@ -915,15 +901,10 @@ describe('repos restack command', () => {
     const mockExit = mockProcessExit();
 
     // Try to restack - should fail
-    const originalCwd = process.cwd();
     process.chdir(unstackedWorktreePath);
-    try {
-      await expect(restackCommand(ctx)).rejects.toThrow('process.exit(1)');
-      expect(mockExit).toHaveBeenCalledWith(1);
-    } finally {
-      process.chdir(originalCwd);
-      mockExit.mockRestore();
-    }
+    await expect(restackCommand(ctx)).rejects.toThrow('process.exit(1)');
+    expect(mockExit).toHaveBeenCalledWith(1);
+    mockExit.mockRestore();
   });
 });
 
@@ -931,13 +912,16 @@ describe('repos unstack command', () => {
   const testDir = '/tmp/repos-test-unstack-cmd';
   const sourceDir = '/tmp/repos-test-unstack-cmd-source';
   const configPath = '/tmp/repos-test-unstack-cmd-config/config.json';
+  let originalCwd: string;
 
   beforeEach(async () => {
+    originalCwd = process.cwd();
     await mkdir(testDir, { recursive: true });
     await createTestRepo(sourceDir);
   });
 
   afterEach(async () => {
+    process.chdir(originalCwd);
     await rm(testDir, { recursive: true, force: true });
     await rm(sourceDir, { recursive: true, force: true });
     await rm('/tmp/repos-test-unstack-cmd-config', {
@@ -977,54 +961,64 @@ describe('repos unstack command', () => {
 
     // Step 4: Stack a child branch from within parent worktree
     const childWorktreePath = join(testDir, 'bare.git-child-branch');
-    const originalCwd = process.cwd();
     process.chdir(parentWorktreePath);
-    try {
-      await stackCommand(ctx, 'child-branch');
+    await stackCommand(ctx, 'child-branch');
 
-      // Step 5: Add git config to child
-      await runGitCommand(
-        ['config', 'user.email', 'test@test.com'],
-        childWorktreePath
-      );
-      await runGitCommand(['config', 'user.name', 'Test'], childWorktreePath);
+    // Step 5: Add git config to child
+    await runGitCommand(
+      ['config', 'user.email', 'test@test.com'],
+      childWorktreePath
+    );
+    await runGitCommand(['config', 'user.name', 'Test'], childWorktreePath);
 
-      // Step 6: Make a commit on child branch
-      await Bun.write(join(childWorktreePath, 'child.txt'), 'child content');
-      await runGitCommand(['add', '.'], childWorktreePath);
-      await runGitCommand(['commit', '-m', 'child commit'], childWorktreePath);
+    // Step 6: Make a commit on child branch
+    await Bun.write(join(childWorktreePath, 'child.txt'), 'child content');
+    await runGitCommand(['add', '.'], childWorktreePath);
+    await runGitCommand(['commit', '-m', 'child commit'], childWorktreePath);
 
-      // Verify stack relationship exists before unstack
-      const configBefore = await readConfig(configPath);
-      expect(configBefore.success).toBe(true);
-      if (configBefore.success) {
-        const repo = configBefore.data.repos.find((r) => r.name === 'bare');
-        expect(repo?.stacks).toEqual([
-          { parent: 'parent-branch', child: 'child-branch' },
-        ]);
-      }
+    // Verify stack relationship exists before unstack
+    const configBefore = await readConfig(configPath);
+    expect(configBefore).toEqual({
+      success: true,
+      data: {
+        repos: [
+          {
+            name: 'bare',
+            url: sourceDir,
+            path: bareDir,
+            bare: true,
+            stacks: [{ parent: 'parent-branch', child: 'child-branch' }],
+          },
+        ],
+      },
+    });
 
-      // Step 7: Unstack from child worktree
-      process.chdir(childWorktreePath);
-      await unstackCommand(ctx);
+    // Step 7: Unstack from child worktree
+    process.chdir(childWorktreePath);
+    await unstackCommand(ctx);
 
-      // Verify child still has its commit
-      const logResult = await runGitCommand(
-        ['log', '--oneline'],
-        childWorktreePath
-      );
-      expect(logResult.stdout).toContain('child commit');
+    // Verify child still has its commit
+    const logResult = await runGitCommand(
+      ['log', '--oneline'],
+      childWorktreePath
+    );
+    expect(logResult.stdout).toContain('child commit');
 
-      // Verify the stack relationship was removed
-      const configAfter = await readConfig(configPath);
-      expect(configAfter.success).toBe(true);
-      if (configAfter.success) {
-        const repo = configAfter.data.repos.find((r) => r.name === 'bare');
-        expect(repo?.stacks).toBeUndefined();
-      }
-    } finally {
-      process.chdir(originalCwd);
-    }
+    // Verify the stack relationship was removed
+    const configAfter = await readConfig(configPath);
+    expect(configAfter).toEqual({
+      success: true,
+      data: {
+        repos: [
+          {
+            name: 'bare',
+            url: sourceDir,
+            path: bareDir,
+            bare: true,
+          },
+        ],
+      },
+    });
   });
 
   test('fails when branch is not stacked', async () => {
@@ -1047,14 +1041,9 @@ describe('repos unstack command', () => {
     const mockExit = mockProcessExit();
 
     // Try to unstack - should fail
-    const originalCwd = process.cwd();
     process.chdir(unstackedWorktreePath);
-    try {
-      await expect(unstackCommand(ctx)).rejects.toThrow('process.exit(1)');
-      expect(mockExit).toHaveBeenCalledWith(1);
-    } finally {
-      process.chdir(originalCwd);
-      mockExit.mockRestore();
-    }
+    await expect(unstackCommand(ctx)).rejects.toThrow('process.exit(1)');
+    expect(mockExit).toHaveBeenCalledWith(1);
+    mockExit.mockRestore();
   });
 });

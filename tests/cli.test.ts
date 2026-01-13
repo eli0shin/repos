@@ -65,6 +65,8 @@ Commands:
                                         and remove stack relationship
   collapse                              Collapse parent branch into current
                                         stacked branch
+  squash [options]                      Squash commits since base branch into a
+                                        single commit
   clean [options] [branch] [repo-name]  Remove a worktree
   rebase [branch] [repo-name]           Rebase a worktree branch on the default
                                         branch

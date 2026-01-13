@@ -38,14 +38,17 @@ describe('repos list command - auto-detect repo', () => {
   const sourceDir1 = '/tmp/repos-test-list-cmd-source1';
   const sourceDir2 = '/tmp/repos-test-list-cmd-source2';
   const configPath = '/tmp/repos-test-list-cmd-config/config.json';
+  let originalCwd: string;
 
   beforeEach(async () => {
+    originalCwd = process.cwd();
     await mkdir(testDir, { recursive: true });
     await createTestRepo(sourceDir1);
     await createTestRepo(sourceDir2);
   });
 
   afterEach(async () => {
+    process.chdir(originalCwd);
     await rm(testDir, { recursive: true, force: true });
     await rm(sourceDir1, { recursive: true, force: true });
     await rm(sourceDir2, { recursive: true, force: true });
@@ -84,25 +87,20 @@ describe('repos list command - auto-detect repo', () => {
     await writeConfig(configPath, config);
 
     // Change cwd to inside repo1's worktree
-    const originalCwd = process.cwd();
     process.chdir(wt1Path);
-    try {
-      const capture = captureOutput();
-      await listCommand({ configPath });
-      capture.restore();
+    const capture = captureOutput();
+    await listCommand({ configPath });
+    capture.restore();
 
-      const output = capture.output.join('');
-      const realWt1Path = await realpath(wt1Path);
-      const expectedOutput = [
-        `  repo1 (bare) ✓`,
-        `    ${bareDir1}`,
-        `      └─ feature: ${realWt1Path}`,
-        '',
-      ].join('\n');
-      expect(output).toEqual(expectedOutput);
-    } finally {
-      process.chdir(originalCwd);
-    }
+    const output = capture.output.join('');
+    const realWt1Path = await realpath(wt1Path);
+    const expectedOutput = [
+      `  repo1 (bare) ✓`,
+      `    ${bareDir1}`,
+      `      └─ feature: ${realWt1Path}`,
+      '',
+    ].join('\n');
+    expect(output).toEqual(expectedOutput);
   });
 
   test('shows all repos when outside any tracked repo', async () => {
@@ -122,27 +120,22 @@ describe('repos list command - auto-detect repo', () => {
     await writeConfig(configPath, config);
 
     // Run from outside both repos (testDir parent)
-    const originalCwd = process.cwd();
     process.chdir('/tmp');
-    try {
-      const capture = captureOutput();
-      await listCommand({ configPath });
-      capture.restore();
+    const capture = captureOutput();
+    await listCommand({ configPath });
+    capture.restore();
 
-      const output = capture.output.join('');
-      const expectedOutput = [
-        'Tracked repositories:',
-        '',
-        `  repo1 (bare) ✓`,
-        `    ${bareDir1}`,
-        `  repo2 (bare) ✓`,
-        `    ${bareDir2}`,
-        '',
-      ].join('\n');
-      expect(output).toEqual(expectedOutput);
-    } finally {
-      process.chdir(originalCwd);
-    }
+    const output = capture.output.join('');
+    const expectedOutput = [
+      'Tracked repositories:',
+      '',
+      `  repo1 (bare) ✓`,
+      `    ${bareDir1}`,
+      `  repo2 (bare) ✓`,
+      `    ${bareDir2}`,
+      '',
+    ].join('\n');
+    expect(output).toEqual(expectedOutput);
   });
 
   test('shows worktrees with stack relationships in tree format', async () => {
@@ -174,27 +167,22 @@ describe('repos list command - auto-detect repo', () => {
     await writeConfig(configPath, config);
 
     // Run from inside the repo
-    const originalCwd = process.cwd();
     process.chdir(parentPath);
-    try {
-      const capture = captureOutput();
-      await listCommand({ configPath });
-      capture.restore();
+    const capture = captureOutput();
+    await listCommand({ configPath });
+    capture.restore();
 
-      const output = capture.output.join('');
-      const realParentPath = await realpath(parentPath);
-      const realChildPath = await realpath(childPath);
-      const expectedOutput = [
-        `  repo (bare) ✓`,
-        `    ${bareDir}`,
-        `      └─ parent: ${realParentPath}`,
-        `         └─ child: ${realChildPath} (stacked)`,
-        '',
-      ].join('\n');
-      expect(output).toEqual(expectedOutput);
-    } finally {
-      process.chdir(originalCwd);
-    }
+    const output = capture.output.join('');
+    const realParentPath = await realpath(parentPath);
+    const realChildPath = await realpath(childPath);
+    const expectedOutput = [
+      `  repo (bare) ✓`,
+      `    ${bareDir}`,
+      `      └─ parent: ${realParentPath}`,
+      `         └─ child: ${realChildPath} (stacked)`,
+      '',
+    ].join('\n');
+    expect(output).toEqual(expectedOutput);
   });
 
   test('auto-detects repo when inside the bare repo directory', async () => {
@@ -221,25 +209,20 @@ describe('repos list command - auto-detect repo', () => {
     await writeConfig(configPath, config);
 
     // Run from inside bare repo1 directory
-    const originalCwd = process.cwd();
     process.chdir(bareDir1);
-    try {
-      const capture = captureOutput();
-      await listCommand({ configPath });
-      capture.restore();
+    const capture = captureOutput();
+    await listCommand({ configPath });
+    capture.restore();
 
-      const output = capture.output.join('');
-      const realWt1Path = await realpath(wt1Path);
-      const expectedOutput = [
-        `  repo1 (bare) ✓`,
-        `    ${bareDir1}`,
-        `      └─ feature: ${realWt1Path}`,
-        '',
-      ].join('\n');
-      expect(output).toEqual(expectedOutput);
-    } finally {
-      process.chdir(originalCwd);
-    }
+    const output = capture.output.join('');
+    const realWt1Path = await realpath(wt1Path);
+    const expectedOutput = [
+      `  repo1 (bare) ✓`,
+      `    ${bareDir1}`,
+      `      └─ feature: ${realWt1Path}`,
+      '',
+    ].join('\n');
+    expect(output).toEqual(expectedOutput);
   });
 
   test('shows complex multi-level stack relationships', async () => {
@@ -282,33 +265,28 @@ describe('repos list command - auto-detect repo', () => {
     await writeConfig(configPath, config);
 
     // Run from inside the repo
-    const originalCwd = process.cwd();
     process.chdir(aPath);
-    try {
-      const capture = captureOutput();
-      await listCommand({ configPath });
-      capture.restore();
+    const capture = captureOutput();
+    await listCommand({ configPath });
+    capture.restore();
 
-      const output = capture.output.join('');
-      const realAPath = await realpath(aPath);
-      const realBPath = await realpath(bPath);
-      const realCPath = await realpath(cPath);
-      const realDPath = await realpath(dPath);
-      const realEPath = await realpath(ePath);
-      const expectedOutput = [
-        `  repo (bare) ✓`,
-        `    ${bareDir}`,
-        `      ├─ a: ${realAPath} (stacked)`,
-        `      │  └─ b: ${realBPath} (stacked)`,
-        `      ├─ c: ${realCPath} (stacked)`,
-        `      │  └─ d: ${realDPath} (stacked)`,
-        `      └─ e: ${realEPath} (stacked)`,
-        '',
-      ].join('\n');
-      expect(output).toEqual(expectedOutput);
-    } finally {
-      process.chdir(originalCwd);
-    }
+    const output = capture.output.join('');
+    const realAPath = await realpath(aPath);
+    const realBPath = await realpath(bPath);
+    const realCPath = await realpath(cPath);
+    const realDPath = await realpath(dPath);
+    const realEPath = await realpath(ePath);
+    const expectedOutput = [
+      `  repo (bare) ✓`,
+      `    ${bareDir}`,
+      `      ├─ a: ${realAPath} (stacked)`,
+      `      │  └─ b: ${realBPath} (stacked)`,
+      `      ├─ c: ${realCPath} (stacked)`,
+      `      │  └─ d: ${realDPath} (stacked)`,
+      `      └─ e: ${realEPath} (stacked)`,
+      '',
+    ].join('\n');
+    expect(output).toEqual(expectedOutput);
   });
 
   test('shows complex multi-level stack relationships for non-bare repo', async () => {
@@ -351,32 +329,27 @@ describe('repos list command - auto-detect repo', () => {
     await writeConfig(configPath, config);
 
     // Run from inside the repo
-    const originalCwd = process.cwd();
     process.chdir(aPath);
-    try {
-      const capture = captureOutput();
-      await listCommand({ configPath });
-      capture.restore();
+    const capture = captureOutput();
+    await listCommand({ configPath });
+    capture.restore();
 
-      const output = capture.output.join('');
-      const realAPath = await realpath(aPath);
-      const realBPath = await realpath(bPath);
-      const realCPath = await realpath(cPath);
-      const realDPath = await realpath(dPath);
-      const realEPath = await realpath(ePath);
-      const expectedOutput = [
-        `  repo ✓`,
-        `    ${repoDir}`,
-        `      ├─ a: ${realAPath} (stacked)`,
-        `      │  └─ b: ${realBPath} (stacked)`,
-        `      ├─ c: ${realCPath} (stacked)`,
-        `      │  └─ d: ${realDPath} (stacked)`,
-        `      └─ e: ${realEPath} (stacked)`,
-        '',
-      ].join('\n');
-      expect(output).toEqual(expectedOutput);
-    } finally {
-      process.chdir(originalCwd);
-    }
+    const output = capture.output.join('');
+    const realAPath = await realpath(aPath);
+    const realBPath = await realpath(bPath);
+    const realCPath = await realpath(cPath);
+    const realDPath = await realpath(dPath);
+    const realEPath = await realpath(ePath);
+    const expectedOutput = [
+      `  repo ✓`,
+      `    ${repoDir}`,
+      `      ├─ a: ${realAPath} (stacked)`,
+      `      │  └─ b: ${realBPath} (stacked)`,
+      `      ├─ c: ${realCPath} (stacked)`,
+      `      │  └─ d: ${realDPath} (stacked)`,
+      `      └─ e: ${realEPath} (stacked)`,
+      '',
+    ].join('\n');
+    expect(output).toEqual(expectedOutput);
   });
 });
