@@ -11,7 +11,7 @@ import { mockProcessExit, type MockExit } from './utils.ts';
 
 async function createTestRepo(dir: string): Promise<void> {
   await mkdir(dir, { recursive: true });
-  await runGitCommand(['init'], dir);
+  await runGitCommand(['init', '-b', 'main'], dir);
   await runGitCommand(['config', 'user.email', 'test@test.com'], dir);
   await runGitCommand(['config', 'user.name', 'Test'], dir);
   await Bun.write(join(dir, 'test.txt'), 'test');
