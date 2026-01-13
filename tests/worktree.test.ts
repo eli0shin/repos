@@ -163,14 +163,17 @@ describe('repos clean command', () => {
   const sourceDir = '/tmp/repos-test-clean-cmd-source';
   const configPath = '/tmp/repos-test-clean-cmd-config/config.json';
   let mockExit: MockExit;
+  let originalCwd: string;
 
   beforeEach(async () => {
+    originalCwd = process.cwd();
     mockExit = mockProcessExit();
     await mkdir(testDir, { recursive: true });
     await createTestRepo(sourceDir);
   });
 
   afterEach(async () => {
+    process.chdir(originalCwd);
     mockExit.mockRestore();
     await rm(testDir, { recursive: true, force: true });
     await rm(sourceDir, { recursive: true, force: true });
@@ -412,17 +415,12 @@ describe('repos clean command', () => {
     expect(await isGitRepo(worktreePath)).toBe(true);
 
     // Change to worktree directory and run clean without specifying branch
-    const originalCwd = process.cwd();
     process.chdir(worktreePath);
-    try {
-      const ctx = { configPath };
-      await cleanCommand(ctx, undefined, undefined);
+    const ctx = { configPath };
+    await cleanCommand(ctx, undefined, undefined);
 
-      // Verify worktree was removed
-      expect(await isGitRepo(worktreePath)).toBe(false);
-    } finally {
-      process.chdir(originalCwd);
-    }
+    // Verify worktree was removed
+    expect(await isGitRepo(worktreePath)).toBe(false);
   });
 
   test('fails when not in worktree and no branch specified', async () => {
@@ -437,17 +435,12 @@ describe('repos clean command', () => {
     await writeConfig(configPath, config);
 
     // Change to a non-worktree directory (the bare repo dir)
-    const originalCwd = process.cwd();
     process.chdir(bareDir);
-    try {
-      const ctx = { configPath };
-      await expect(cleanCommand(ctx, undefined, undefined)).rejects.toThrow(
-        'process.exit(1)'
-      );
-      expect(mockExit).toHaveBeenCalledWith(1);
-    } finally {
-      process.chdir(originalCwd);
-    }
+    const ctx = { configPath };
+    await expect(cleanCommand(ctx, undefined, undefined)).rejects.toThrow(
+      'process.exit(1)'
+    );
+    expect(mockExit).toHaveBeenCalledWith(1);
   });
 });
 
