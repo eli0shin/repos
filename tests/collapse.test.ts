@@ -25,14 +25,17 @@ describe('repos collapse command', () => {
   const sourceDir = '/tmp/repos-test-collapse-cmd-source';
   const configPath = '/tmp/repos-test-collapse-cmd-config/config.json';
   let mockExit: MockExit;
+  let originalCwd: string;
 
   beforeEach(async () => {
+    originalCwd = process.cwd();
     mockExit = mockProcessExit();
     await mkdir(testDir, { recursive: true });
     await createTestRepo(sourceDir);
   });
 
   afterEach(async () => {
+    process.chdir(originalCwd);
     mockExit.mockRestore();
     await rm(testDir, { recursive: true, force: true });
     await rm(sourceDir, { recursive: true, force: true });
@@ -71,74 +74,69 @@ describe('repos collapse command', () => {
     await runGitCommand(['commit', '-m', 'parent commit'], parentWorktreePath);
 
     // Step 3: Stack child branch
-    const originalCwd = process.cwd();
     process.chdir(parentWorktreePath);
-    try {
-      await stackCommand(ctx, 'child-branch');
+    await stackCommand(ctx, 'child-branch');
 
-      // Step 4: Add git config and make commits on child
-      await runGitCommand(
-        ['config', 'user.email', 'test@test.com'],
-        childWorktreePath
-      );
-      await runGitCommand(['config', 'user.name', 'Test'], childWorktreePath);
-      await Bun.write(join(childWorktreePath, 'child.txt'), 'child content');
-      await runGitCommand(['add', '.'], childWorktreePath);
-      await runGitCommand(['commit', '-m', 'child commit'], childWorktreePath);
+    // Step 4: Add git config and make commits on child
+    await runGitCommand(
+      ['config', 'user.email', 'test@test.com'],
+      childWorktreePath
+    );
+    await runGitCommand(['config', 'user.name', 'Test'], childWorktreePath);
+    await Bun.write(join(childWorktreePath, 'child.txt'), 'child content');
+    await runGitCommand(['add', '.'], childWorktreePath);
+    await runGitCommand(['commit', '-m', 'child commit'], childWorktreePath);
 
-      // Verify stack exists before collapse
-      const configBefore = await readConfig(configPath);
-      expect(configBefore).toEqual({
-        success: true,
-        data: {
-          repos: [
-            {
-              name: 'bare',
-              url: sourceDir,
-              path: bareDir,
-              bare: true,
-              stacks: [{ parent: 'parent-branch', child: 'child-branch' }],
-            },
-          ],
-        },
-      });
+    // Verify stack exists before collapse
+    const configBefore = await readConfig(configPath);
+    expect(configBefore).toEqual({
+      success: true,
+      data: {
+        repos: [
+          {
+            name: 'bare',
+            url: sourceDir,
+            path: bareDir,
+            bare: true,
+            stacks: [{ parent: 'parent-branch', child: 'child-branch' }],
+          },
+        ],
+      },
+    });
 
-      // Step 5: Collapse from child worktree
-      process.chdir(childWorktreePath);
-      await collapseCommand(ctx);
+    // Step 5: Collapse from child worktree
+    process.chdir(childWorktreePath);
+    await collapseCommand(ctx);
 
-      // Verify parent worktree was removed
-      expect(await isGitRepo(parentWorktreePath)).toBe(false);
+    // Verify parent worktree was removed
+    expect(await isGitRepo(parentWorktreePath)).toBe(false);
 
-      // Verify child worktree still exists
-      expect(await isGitRepo(childWorktreePath)).toBe(true);
+    // Verify child worktree still exists
+    expect(await isGitRepo(childWorktreePath)).toBe(true);
 
-      // Verify child has both commits (parent's and its own)
-      const logResult = await runGitCommand(
-        ['log', '--oneline'],
-        childWorktreePath
-      );
-      expect(logResult.stdout).toContain('parent commit');
-      expect(logResult.stdout).toContain('child commit');
+    // Verify child has both commits (parent's and its own)
+    const logResult = await runGitCommand(
+      ['log', '--oneline'],
+      childWorktreePath
+    );
+    expect(logResult.stdout).toContain('parent commit');
+    expect(logResult.stdout).toContain('child commit');
 
-      // Verify stack entry was removed (child is now independent)
-      const configAfter = await readConfig(configPath);
-      expect(configAfter).toEqual({
-        success: true,
-        data: {
-          repos: [
-            {
-              name: 'bare',
-              url: sourceDir,
-              path: bareDir,
-              bare: true,
-            },
-          ],
-        },
-      });
-    } finally {
-      process.chdir(originalCwd);
-    }
+    // Verify stack entry was removed (child is now independent)
+    const configAfter = await readConfig(configPath);
+    expect(configAfter).toEqual({
+      success: true,
+      data: {
+        repos: [
+          {
+            name: 'bare',
+            url: sourceDir,
+            path: bareDir,
+            bare: true,
+          },
+        ],
+      },
+    });
   });
 
   test('collapses to grandparent in multi-level stack', async () => {
@@ -167,82 +165,77 @@ describe('repos collapse command', () => {
     await runGitCommand(['add', '.'], pathA);
     await runGitCommand(['commit', '-m', 'commit A'], pathA);
 
-    const originalCwd = process.cwd();
     process.chdir(pathA);
-    try {
-      await stackCommand(ctx, 'branch-b');
+    await stackCommand(ctx, 'branch-b');
 
-      await runGitCommand(['config', 'user.email', 'test@test.com'], pathB);
-      await runGitCommand(['config', 'user.name', 'Test'], pathB);
-      await Bun.write(join(pathB, 'b.txt'), 'b content');
-      await runGitCommand(['add', '.'], pathB);
-      await runGitCommand(['commit', '-m', 'commit B'], pathB);
+    await runGitCommand(['config', 'user.email', 'test@test.com'], pathB);
+    await runGitCommand(['config', 'user.name', 'Test'], pathB);
+    await Bun.write(join(pathB, 'b.txt'), 'b content');
+    await runGitCommand(['add', '.'], pathB);
+    await runGitCommand(['commit', '-m', 'commit B'], pathB);
 
-      process.chdir(pathB);
-      await stackCommand(ctx, 'branch-c');
+    process.chdir(pathB);
+    await stackCommand(ctx, 'branch-c');
 
-      await runGitCommand(['config', 'user.email', 'test@test.com'], pathC);
-      await runGitCommand(['config', 'user.name', 'Test'], pathC);
-      await Bun.write(join(pathC, 'c.txt'), 'c content');
-      await runGitCommand(['add', '.'], pathC);
-      await runGitCommand(['commit', '-m', 'commit C'], pathC);
+    await runGitCommand(['config', 'user.email', 'test@test.com'], pathC);
+    await runGitCommand(['config', 'user.name', 'Test'], pathC);
+    await Bun.write(join(pathC, 'c.txt'), 'c content');
+    await runGitCommand(['add', '.'], pathC);
+    await runGitCommand(['commit', '-m', 'commit C'], pathC);
 
-      // Verify 3-level stack exists
-      const configBefore = await readConfig(configPath);
-      expect(configBefore).toEqual({
-        success: true,
-        data: {
-          repos: [
-            {
-              name: 'bare',
-              url: sourceDir,
-              path: bareDir,
-              bare: true,
-              stacks: [
-                { parent: 'branch-a', child: 'branch-b' },
-                { parent: 'branch-b', child: 'branch-c' },
-              ],
-            },
-          ],
-        },
-      });
+    // Verify 3-level stack exists
+    const configBefore = await readConfig(configPath);
+    expect(configBefore).toEqual({
+      success: true,
+      data: {
+        repos: [
+          {
+            name: 'bare',
+            url: sourceDir,
+            path: bareDir,
+            bare: true,
+            stacks: [
+              { parent: 'branch-a', child: 'branch-b' },
+              { parent: 'branch-b', child: 'branch-c' },
+            ],
+          },
+        ],
+      },
+    });
 
-      // Collapse from C (should collapse B into C, keeping A -> C)
-      process.chdir(pathC);
-      await collapseCommand(ctx);
+    // Collapse from C (should collapse B into C, keeping A -> C)
+    process.chdir(pathC);
+    await collapseCommand(ctx);
 
-      // Verify B worktree was removed
-      expect(await isGitRepo(pathB)).toBe(false);
+    // Verify B worktree was removed
+    expect(await isGitRepo(pathB)).toBe(false);
 
-      // Verify A and C worktrees still exist
-      expect(await isGitRepo(pathA)).toBe(true);
-      expect(await isGitRepo(pathC)).toBe(true);
+    // Verify A and C worktrees still exist
+    expect(await isGitRepo(pathA)).toBe(true);
+    expect(await isGitRepo(pathC)).toBe(true);
 
-      // Verify C now has A as parent
-      const configAfter = await readConfig(configPath);
-      expect(configAfter).toEqual({
-        success: true,
-        data: {
-          repos: [
-            {
-              name: 'bare',
-              url: sourceDir,
-              path: bareDir,
-              bare: true,
-              stacks: [{ parent: 'branch-a', child: 'branch-c' }],
-            },
-          ],
-        },
-      });
+    // Verify C now has A as parent
+    const configAfter = await readConfig(configPath);
+    expect(configAfter).toEqual({
+      success: true,
+      data: {
+        repos: [
+          {
+            name: 'bare',
+            url: sourceDir,
+            path: bareDir,
+            bare: true,
+            stacks: [{ parent: 'branch-a', child: 'branch-c' }],
+          },
+        ],
+      },
+    });
 
-      // Verify C has all commits
-      const logResult = await runGitCommand(['log', '--oneline'], pathC);
-      expect(logResult.stdout).toContain('commit A');
-      expect(logResult.stdout).toContain('commit B');
-      expect(logResult.stdout).toContain('commit C');
-    } finally {
-      process.chdir(originalCwd);
-    }
+    // Verify C has all commits
+    const logResult = await runGitCommand(['log', '--oneline'], pathC);
+    expect(logResult.stdout).toContain('commit A');
+    expect(logResult.stdout).toContain('commit B');
+    expect(logResult.stdout).toContain('commit C');
   });
 
   test('fails when not inside a worktree', async () => {
@@ -259,14 +252,9 @@ describe('repos collapse command', () => {
     const ctx = { configPath };
 
     // Try to collapse from outside a worktree
-    const originalCwd = process.cwd();
     process.chdir(bareDir);
-    try {
-      await expect(collapseCommand(ctx)).rejects.toThrow('process.exit(1)');
-      expect(mockExit).toHaveBeenCalledWith(1);
-    } finally {
-      process.chdir(originalCwd);
-    }
+    await expect(collapseCommand(ctx)).rejects.toThrow('process.exit(1)');
+    expect(mockExit).toHaveBeenCalledWith(1);
   });
 
   test('fails when branch is not stacked', async () => {
@@ -287,14 +275,9 @@ describe('repos collapse command', () => {
     const unstackedWorktreePath = join(testDir, 'bare.git-unstacked-branch');
 
     // Try to collapse - should fail
-    const originalCwd = process.cwd();
     process.chdir(unstackedWorktreePath);
-    try {
-      await expect(collapseCommand(ctx)).rejects.toThrow('process.exit(1)');
-      expect(mockExit).toHaveBeenCalledWith(1);
-    } finally {
-      process.chdir(originalCwd);
-    }
+    await expect(collapseCommand(ctx)).rejects.toThrow('process.exit(1)');
+    expect(mockExit).toHaveBeenCalledWith(1);
   });
 
   test('fails when parent has sibling children', async () => {
@@ -325,45 +308,40 @@ describe('repos collapse command', () => {
     await runGitCommand(['add', '.'], parentWorktreePath);
     await runGitCommand(['commit', '-m', 'parent commit'], parentWorktreePath);
 
-    const originalCwd = process.cwd();
     process.chdir(parentWorktreePath);
-    try {
-      // Stack two children
-      await stackCommand(ctx, 'child-1');
-      await stackCommand(ctx, 'child-2');
+    // Stack two children
+    await stackCommand(ctx, 'child-1');
+    await stackCommand(ctx, 'child-2');
 
-      // Verify both children exist
-      expect(await isGitRepo(child1Path)).toBe(true);
-      expect(await isGitRepo(child2Path)).toBe(true);
+    // Verify both children exist
+    expect(await isGitRepo(child1Path)).toBe(true);
+    expect(await isGitRepo(child2Path)).toBe(true);
 
-      // Try to collapse from child-1 - should fail because child-2 is a sibling
-      process.chdir(child1Path);
-      await expect(collapseCommand(ctx)).rejects.toThrow('process.exit(1)');
-      expect(mockExit).toHaveBeenCalledWith(1);
+    // Try to collapse from child-1 - should fail because child-2 is a sibling
+    process.chdir(child1Path);
+    await expect(collapseCommand(ctx)).rejects.toThrow('process.exit(1)');
+    expect(mockExit).toHaveBeenCalledWith(1);
 
-      // Verify nothing was changed
-      expect(await isGitRepo(parentWorktreePath)).toBe(true);
-      const configAfter = await readConfig(configPath);
-      expect(configAfter).toEqual({
-        success: true,
-        data: {
-          repos: [
-            {
-              name: 'bare',
-              url: sourceDir,
-              path: bareDir,
-              bare: true,
-              stacks: [
-                { parent: 'parent-branch', child: 'child-1' },
-                { parent: 'parent-branch', child: 'child-2' },
-              ],
-            },
-          ],
-        },
-      });
-    } finally {
-      process.chdir(originalCwd);
-    }
+    // Verify nothing was changed
+    expect(await isGitRepo(parentWorktreePath)).toBe(true);
+    const configAfter = await readConfig(configPath);
+    expect(configAfter).toEqual({
+      success: true,
+      data: {
+        repos: [
+          {
+            name: 'bare',
+            url: sourceDir,
+            path: bareDir,
+            bare: true,
+            stacks: [
+              { parent: 'parent-branch', child: 'child-1' },
+              { parent: 'parent-branch', child: 'child-2' },
+            ],
+          },
+        ],
+      },
+    });
   });
 
   test('fails when parent worktree has uncommitted changes', async () => {
@@ -393,23 +371,18 @@ describe('repos collapse command', () => {
     await runGitCommand(['add', '.'], parentWorktreePath);
     await runGitCommand(['commit', '-m', 'parent commit'], parentWorktreePath);
 
-    const originalCwd = process.cwd();
     process.chdir(parentWorktreePath);
-    try {
-      await stackCommand(ctx, 'child-branch');
+    await stackCommand(ctx, 'child-branch');
 
-      // Add uncommitted changes to parent
-      await Bun.write(join(parentWorktreePath, 'dirty.txt'), 'dirty');
+    // Add uncommitted changes to parent
+    await Bun.write(join(parentWorktreePath, 'dirty.txt'), 'dirty');
 
-      // Try to collapse - should fail due to uncommitted changes
-      process.chdir(childWorktreePath);
-      await expect(collapseCommand(ctx)).rejects.toThrow('process.exit(1)');
-      expect(mockExit).toHaveBeenCalledWith(1);
+    // Try to collapse - should fail due to uncommitted changes
+    process.chdir(childWorktreePath);
+    await expect(collapseCommand(ctx)).rejects.toThrow('process.exit(1)');
+    expect(mockExit).toHaveBeenCalledWith(1);
 
-      // Verify parent worktree still exists
-      expect(await isGitRepo(parentWorktreePath)).toBe(true);
-    } finally {
-      process.chdir(originalCwd);
-    }
+    // Verify parent worktree still exists
+    expect(await isGitRepo(parentWorktreePath)).toBe(true);
   });
 });
