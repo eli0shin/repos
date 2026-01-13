@@ -1,5 +1,11 @@
 # repos
 
+## 0.7.1
+
+### Patch Changes
+
+- [#31](https://github.com/eli0shin/repos/pull/31) [`e0d6644`](https://github.com/eli0shin/repos/commit/e0d66443ddc5a55ccf258d66dbbbd5dc8530a63a) Thanks [@eli0shin](https://github.com/eli0shin)! - Fix rebase conflict handling to pause instead of auto-aborting, allowing users to resolve conflicts manually with `git rebase --continue`.
+
 ## 0.7.0
 
 ### Minor Changes
