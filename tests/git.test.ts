@@ -908,4 +908,71 @@ describe('rebaseOnRef', () => {
     expect(logResult.stdout).toContain('parent commit 2');
     expect(logResult.stdout).toContain('child commit');
   });
+
+  test('returns conflict error and does not abort when conflicts occur', async () => {
+    // Clone as bare
+    const bareDir = join(testDir, 'bare.git');
+    await cloneBare(sourceDir, bareDir);
+    await ensureRefspecConfig(bareDir);
+
+    // Create parent branch worktree and modify file.txt
+    const parentWorktreeDir = join(testDir, 'parent-worktree');
+    await createWorktree(bareDir, parentWorktreeDir, 'parent-branch');
+    await runGitCommand(
+      ['config', 'user.email', 'test@test.com'],
+      parentWorktreeDir
+    );
+    await runGitCommand(['config', 'user.name', 'Test'], parentWorktreeDir);
+    await Bun.write(join(parentWorktreeDir, 'file.txt'), 'parent content');
+    await runGitCommand(['add', '.'], parentWorktreeDir);
+    await runGitCommand(
+      ['commit', '-m', 'parent changes file'],
+      parentWorktreeDir
+    );
+
+    // Create child worktree from parent (same starting point)
+    const childWorktreeDir = join(testDir, 'child-worktree');
+    await createWorktreeFromBranch(
+      bareDir,
+      childWorktreeDir,
+      'child-branch',
+      'parent-branch'
+    );
+    await runGitCommand(
+      ['config', 'user.email', 'test@test.com'],
+      childWorktreeDir
+    );
+    await runGitCommand(['config', 'user.name', 'Test'], childWorktreeDir);
+
+    // Reset child to before parent's change, then make conflicting change
+    await runGitCommand(['reset', '--hard', 'HEAD~1'], childWorktreeDir);
+    await Bun.write(join(childWorktreeDir, 'file.txt'), 'child content');
+    await runGitCommand(['add', '.'], childWorktreeDir);
+    await runGitCommand(
+      ['commit', '-m', 'child changes file'],
+      childWorktreeDir
+    );
+
+    // Attempt to rebase child on parent - should conflict
+    const result = await rebaseOnRef(childWorktreeDir, 'parent-branch');
+
+    // Should return failure with conflict message
+    expect(result).toEqual({
+      success: false,
+      error:
+        'Rebase paused due to conflicts.\n\n' +
+        'To resolve:\n' +
+        '  1. Fix conflicts in the affected files\n' +
+        '  2. Stage resolved files: git add <file>\n' +
+        '  3. Continue rebase: git rebase --continue\n\n' +
+        'To abort: git rebase --abort',
+    });
+
+    // Verify rebase is NOT aborted - git status should show rebase in progress
+    const statusResult = await runGitCommand(['status'], childWorktreeDir);
+    expect(statusResult.stdout).toContain('rebase in progress');
+
+    // Clean up: abort the rebase so afterEach can delete the directory
+    await runGitCommand(['rebase', '--abort'], childWorktreeDir);
+  });
 });
