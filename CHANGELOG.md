@@ -1,5 +1,11 @@
 # repos
 
+## 0.8.0
+
+### Minor Changes
+
+- [#33](https://github.com/eli0shin/repos/pull/33) [`8599154`](https://github.com/eli0shin/repos/commit/859915486074b151de534dd0fa3d49e5cd90dbef) Thanks [@eli0shin](https://github.com/eli0shin)! - Add `repos squash` command to squash all commits since the base branch into a single commit. Supports `-m` flag for inline message, `-f/--first` flag to use the first commit's message, or opens an editor by default. Works with both regular branches (squashes since default branch) and stacked branches (squashes since parent branch).
+
 ## 0.7.1
 
 ### Patch Changes
