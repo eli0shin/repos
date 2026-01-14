@@ -964,6 +964,64 @@ export async function isRebaseInProgress(repoDir: string): Promise<boolean> {
   return checkExists.exitCode === 0;
 }
 
+/**
+ * Get the branch name being rebased (during an active rebase).
+ * During a rebase, HEAD is detached so git worktree list doesn't show the branch.
+ * We read the branch name from the rebase state file.
+ */
+export async function getRebaseBranch(
+  repoDir: string
+): Promise<OperationResult<string>> {
+  const gitDir = await getGitDir(repoDir);
+  if (!gitDir.success) {
+    return { success: false, error: gitDir.error };
+  }
+
+  // Try rebase-merge first (used by default rebase and interactive rebase)
+  const mergeBranch = await readBranchFromFile(
+    join(gitDir.data, 'rebase-merge', 'head-name')
+  );
+  if (mergeBranch) {
+    return { success: true, data: mergeBranch };
+  }
+
+  // Try rebase-apply (used by git rebase --apply)
+  const applyBranch = await readBranchFromFile(
+    join(gitDir.data, 'rebase-apply', 'head-name')
+  );
+  if (applyBranch) {
+    return { success: true, data: applyBranch };
+  }
+
+  return {
+    success: false,
+    error: 'Could not determine branch from rebase state',
+  };
+}
+
+async function readBranchFromFile(path: string): Promise<string | undefined> {
+  try {
+    const content = await Bun.file(path).text();
+    const branch = content.trim().replace(/^refs\/heads\//, '');
+    return branch || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+async function getGitDir(repoDir: string): Promise<OperationResult<string>> {
+  const result = await runGitCommand(['rev-parse', '--git-dir'], repoDir);
+  if (result.exitCode !== 0) {
+    return { success: false, error: 'Not a git repository' };
+  }
+  const gitDir = result.stdout.trim();
+  // If relative, make absolute
+  if (!gitDir.startsWith('/')) {
+    return { success: true, data: join(repoDir, gitDir) };
+  }
+  return { success: true, data: gitDir };
+}
+
 export async function rebaseContinue(
   repoDir: string
 ): Promise<OperationResult> {

@@ -103,6 +103,7 @@ async function restackBranch(
     useForkPoint = true;
   } else if (parentStillExists) {
     // No base ref exists but parent is available - compute fork point
+    // This handles migration from stacks created before fork point tracking
     print('Computing fork point (no base ref found)...');
     const computedResult = await computeForkPoint(
       worktree.path,
@@ -112,6 +113,10 @@ async function restackBranch(
     if (computedResult.success) {
       forkPoint = computedResult.data;
       useForkPoint = true;
+      // Save the computed fork point for future restacks
+      // This is important because computeForkPoint will give incorrect results
+      // if the parent is later rebased/amended
+      await setBaseRef(repo.path, branch, forkPoint);
     }
   }
 
@@ -156,7 +161,11 @@ async function restackTree(
     return false;
   }
 
-  // Reload config and worktrees since they may have changed
+  // Reload config and worktrees since they may have changed.
+  // Note: We mutate rctx in place intentionally. This is safe because:
+  // 1. This code only runs after restackBranch succeeds (early return on failure above)
+  // 2. If child recursion fails, we return false and exit - parent state doesn't matter
+  // 3. The mutation propagates updated worktree list to subsequent sibling branches
   rctx.config = await loadConfig(rctx.ctx.configPath);
   const worktreesResult = await listWorktrees(rctx.repo.path);
   if (!worktreesResult.success) {
@@ -253,6 +262,12 @@ export async function restackCommand(
     success = await restackBranch(rctx, currentBranch);
   } else {
     // Restack current branch and all children recursively
+    const children = getChildBranches(repo, currentBranch);
+    if (children.length > 0) {
+      print(
+        `Will restack "${currentBranch}" and ${children.length} child branch(es)...`
+      );
+    }
     success = await restackTree(rctx, currentBranch);
   }
 

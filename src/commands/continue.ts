@@ -5,6 +5,7 @@ import {
   findWorktreeByDirectory,
   findWorktreeByBranch,
   isRebaseInProgress,
+  getRebaseBranch,
   rebaseContinue,
   setBaseRef,
   getHeadCommit,
@@ -34,18 +35,27 @@ export async function continueCommand(ctx: CommandContext): Promise<void> {
     process.cwd()
   );
 
-  if (!currentWorktree?.branch) {
+  if (!currentWorktree) {
     printError('Error: Not inside a worktree. Run from inside a worktree.');
     process.exit(1);
   }
-
-  const currentBranch = currentWorktree.branch;
 
   // Check if a rebase is in progress
   const rebaseActive = await isRebaseInProgress(currentWorktree.path);
   if (!rebaseActive) {
     printError('Error: No rebase in progress.');
     process.exit(1);
+  }
+
+  // Get the branch name - during a rebase HEAD is detached so worktree.branch is empty
+  let currentBranch = currentWorktree.branch;
+  if (!currentBranch) {
+    const rebaseBranchResult = await getRebaseBranch(currentWorktree.path);
+    if (!rebaseBranchResult.success) {
+      printError('Error: Could not determine current branch.');
+      process.exit(1);
+    }
+    currentBranch = rebaseBranchResult.data;
   }
 
   print('Continuing rebase...');
@@ -67,16 +77,24 @@ export async function continueCommand(ctx: CommandContext): Promise<void> {
 
     if (parentWorktree) {
       const parentHeadResult = await getHeadCommit(parentWorktree.path);
-      if (parentHeadResult.success) {
-        const setRefResult = await setBaseRef(
-          repo.path,
-          currentBranch,
-          parentHeadResult.data
+      if (!parentHeadResult.success) {
+        printError(
+          `Error: Failed to get parent HEAD: ${parentHeadResult.error}`
         );
-        if (setRefResult.success) {
-          print('Updated fork point reference.');
-        }
+        process.exit(1);
       }
+
+      const setRefResult = await setBaseRef(
+        repo.path,
+        currentBranch,
+        parentHeadResult.data
+      );
+      if (!setRefResult.success) {
+        printError(`Error: Failed to update fork point: ${setRefResult.error}`);
+        process.exit(1);
+      }
+
+      print('Updated fork point reference.');
     }
   }
 

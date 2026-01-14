@@ -13,6 +13,7 @@ import {
 import { workCommand } from '../src/commands/work.ts';
 import { stackCommand } from '../src/commands/stack.ts';
 import { restackCommand } from '../src/commands/restack.ts';
+import { continueCommand } from '../src/commands/continue.ts';
 import { unstackCommand } from '../src/commands/unstack.ts';
 import { cleanCommand } from '../src/commands/clean.ts';
 import { rebaseCommand } from '../src/commands/rebase.ts';
@@ -1256,5 +1257,128 @@ describe('repos unstack command', () => {
     await expect(unstackCommand(ctx)).rejects.toThrow('process.exit(1)');
     expect(mockExit).toHaveBeenCalledWith(1);
     mockExit.mockRestore();
+  });
+});
+
+describe('repos continue command', () => {
+  const testDir = '/tmp/repos-test-continue-cmd';
+  const sourceDir = '/tmp/repos-test-continue-cmd-source';
+  const configPath = '/tmp/repos-test-continue-cmd-config/config.json';
+  let originalCwd: string;
+
+  beforeEach(async () => {
+    originalCwd = process.cwd();
+    await mkdir(testDir, { recursive: true });
+    await createTestRepo(sourceDir);
+  });
+
+  afterEach(async () => {
+    process.chdir(originalCwd);
+    await rm(testDir, { recursive: true, force: true });
+    await rm(sourceDir, { recursive: true, force: true });
+    await rm('/tmp/repos-test-continue-cmd-config', {
+      recursive: true,
+      force: true,
+    });
+  });
+
+  test('fails when no rebase is in progress', async () => {
+    // Clone as bare
+    const bareDir = join(testDir, 'bare.git');
+    await cloneBare(sourceDir, bareDir);
+
+    // Create config
+    const config = {
+      repos: [{ name: 'bare', url: sourceDir, path: bareDir, bare: true }],
+    } satisfies ReposConfig;
+    await writeConfig(configPath, config);
+
+    const ctx = { configPath };
+
+    // Create a worktree
+    await workCommand(ctx, 'feature-branch', 'bare');
+    const worktreePath = join(testDir, 'bare.git-feature-branch');
+
+    const mockExit = mockProcessExit();
+
+    // Try to continue without a rebase in progress
+    process.chdir(worktreePath);
+    await expect(continueCommand(ctx)).rejects.toThrow('process.exit(1)');
+    expect(mockExit).toHaveBeenCalledWith(1);
+    mockExit.mockRestore();
+  });
+
+  test('continues rebase after conflict resolution and updates fork point', async () => {
+    // Clone as bare
+    const bareDir = join(testDir, 'bare.git');
+    await cloneBare(sourceDir, bareDir);
+
+    // Create config
+    const config = {
+      repos: [{ name: 'bare', url: sourceDir, path: bareDir, bare: true }],
+    } satisfies ReposConfig;
+    await writeConfig(configPath, config);
+
+    const ctx = { configPath };
+
+    // Create parent branch with initial commit
+    await workCommand(ctx, 'parent-branch', 'bare');
+    const parentPath = join(testDir, 'bare.git-parent-branch');
+    await runGitCommand(['config', 'user.email', 'test@test.com'], parentPath);
+    await runGitCommand(['config', 'user.name', 'Test'], parentPath);
+    await Bun.write(join(parentPath, 'shared.txt'), 'parent version 1');
+    await runGitCommand(['add', '.'], parentPath);
+    await runGitCommand(['commit', '-m', 'parent initial'], parentPath);
+
+    // Stack child branch - use the path from stdout instead of constructing it
+    // This ensures we use the exact path git worktree knows about
+    process.chdir(parentPath);
+    await stackCommand(ctx, 'child-branch');
+    const childPath = join(testDir, 'bare.git-child-branch');
+    await runGitCommand(['config', 'user.email', 'test@test.com'], childPath);
+    await runGitCommand(['config', 'user.name', 'Test'], childPath);
+
+    // Child modifies the same file (will cause conflict)
+    await Bun.write(join(childPath, 'shared.txt'), 'child version');
+    await runGitCommand(['add', '.'], childPath);
+    await runGitCommand(['commit', '-m', 'child commit'], childPath);
+
+    // Parent modifies the same file (different change)
+    await Bun.write(join(parentPath, 'shared.txt'), 'parent version 2');
+    await runGitCommand(['add', '.'], parentPath);
+    await runGitCommand(['commit', '-m', 'parent update'], parentPath);
+
+    // Attempt restack from child - will fail with conflict
+    process.chdir(childPath);
+    const mockExit = mockProcessExit();
+    await expect(restackCommand(ctx)).rejects.toThrow('process.exit(1)');
+    mockExit.mockRestore();
+
+    // Resolve the conflict
+    await Bun.write(join(childPath, 'shared.txt'), 'resolved version');
+    await runGitCommand(['add', '.'], childPath);
+
+    // Continue the rebase (must be in the worktree directory)
+    process.chdir(childPath);
+    await continueCommand(ctx);
+
+    // Verify the rebase completed
+    const logResult = await runGitCommand(['log', '--oneline'], childPath);
+    expect(logResult.stdout).toContain('child commit');
+    expect(logResult.stdout).toContain('parent update');
+
+    // Verify fork point ref was updated (by checking the base ref exists)
+    const baseRefResult = await runGitCommand(
+      ['rev-parse', 'refs/bases/child-branch'],
+      bareDir
+    );
+    expect(baseRefResult.exitCode).toBe(0);
+
+    // Verify the base ref points to parent's HEAD
+    const parentHeadResult = await runGitCommand(
+      ['rev-parse', 'HEAD'],
+      parentPath
+    );
+    expect(baseRefResult.stdout.trim()).toBe(parentHeadResult.stdout.trim());
   });
 });
