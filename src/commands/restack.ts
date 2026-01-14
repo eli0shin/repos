@@ -29,7 +29,7 @@ type RestackOptions = {
   only: boolean;
 };
 
-type RestackContext = {
+export type RestackContext = {
   ctx: CommandContext;
   repo: RepoEntry;
   config: ReposConfig;
@@ -105,6 +105,9 @@ async function restackBranch(
     // No base ref exists but parent is available - compute fork point
     // This handles migration from stacks created before fork point tracking
     print('Computing fork point (no base ref found)...');
+    print(
+      'Note: If parent was recently rebased, the computed fork point may be incorrect.'
+    );
     const computedResult = await computeForkPoint(
       worktree.path,
       branch,
@@ -151,7 +154,7 @@ async function restackBranch(
 /**
  * Recursively restack a branch and all its children.
  */
-async function restackTree(
+export async function restackTree(
   rctx: RestackContext,
   branch: string
 ): Promise<boolean> {
@@ -176,9 +179,11 @@ async function restackTree(
 
   // Find the updated repo entry
   const updatedRepo = rctx.config.repos.find((r) => r.path === rctx.repo.path);
-  if (updatedRepo) {
-    rctx.repo = updatedRepo;
+  if (!updatedRepo) {
+    printError('Error: Repository configuration was modified during restack.');
+    return false;
   }
+  rctx.repo = updatedRepo;
 
   // Get children of this branch and restack them
   const children = getChildBranches(rctx.repo, branch);

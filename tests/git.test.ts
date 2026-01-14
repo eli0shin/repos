@@ -964,7 +964,7 @@ describe('rebaseOnRef', () => {
         'To resolve:\n' +
         '  1. Fix conflicts in the affected files\n' +
         '  2. Stage resolved files: git add <file>\n' +
-        '  3. Continue rebase: git rebase --continue\n\n' +
+        '  3. Continue rebase: repos continue\n\n' +
         'To abort: git rebase --abort',
     });
 

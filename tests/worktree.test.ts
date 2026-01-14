@@ -1118,6 +1118,70 @@ describe('repos restack command', () => {
     // Verify branch-b kept its own file
     expect(existsSync(join(branchBPath, 'file-b.txt'))).toBe(true);
   });
+
+  test('restack with --only flag does not restack children', async () => {
+    // Clone as bare
+    const bareDir = join(testDir, 'bare.git');
+    await cloneBare(sourceDir, bareDir);
+
+    // Create config
+    const config = {
+      repos: [{ name: 'bare', url: sourceDir, path: bareDir, bare: true }],
+    } satisfies ReposConfig;
+    await writeConfig(configPath, config);
+
+    const ctx = { configPath };
+
+    // Create a stack: branch-a -> branch-b -> branch-c
+    await workCommand(ctx, 'branch-a', 'bare');
+    const branchAPath = join(testDir, 'bare.git-branch-a');
+    await runGitCommand(['config', 'user.email', 'test@test.com'], branchAPath);
+    await runGitCommand(['config', 'user.name', 'Test'], branchAPath);
+    await Bun.write(join(branchAPath, 'file-a.txt'), 'content from a');
+    await runGitCommand(['add', '.'], branchAPath);
+    await runGitCommand(['commit', '-m', 'commit in a'], branchAPath);
+
+    process.chdir(branchAPath);
+    await stackCommand(ctx, 'branch-b');
+    const branchBPath = join(testDir, 'bare.git-branch-b');
+    await runGitCommand(['config', 'user.email', 'test@test.com'], branchBPath);
+    await runGitCommand(['config', 'user.name', 'Test'], branchBPath);
+    await Bun.write(join(branchBPath, 'file-b.txt'), 'content from b');
+    await runGitCommand(['add', '.'], branchBPath);
+    await runGitCommand(['commit', '-m', 'commit in b'], branchBPath);
+
+    process.chdir(branchBPath);
+    await stackCommand(ctx, 'branch-c');
+    const branchCPath = join(testDir, 'bare.git-branch-c');
+    await runGitCommand(['config', 'user.email', 'test@test.com'], branchCPath);
+    await runGitCommand(['config', 'user.name', 'Test'], branchCPath);
+    await Bun.write(join(branchCPath, 'file-c.txt'), 'content from c');
+    await runGitCommand(['add', '.'], branchCPath);
+    await runGitCommand(['commit', '-m', 'commit in c'], branchCPath);
+
+    // Get branch-c's current parent commit (before restacking)
+    const logCBefore = await runGitCommand(['log', '--oneline'], branchCPath);
+
+    // Add a new commit to branch-a
+    await Bun.write(join(branchAPath, 'file-a2.txt'), 'more content from a');
+    await runGitCommand(['add', '.'], branchAPath);
+    await runGitCommand(['commit', '-m', 'second commit in a'], branchAPath);
+
+    // Restack from branch-b with --only flag (should NOT restack branch-c)
+    process.chdir(branchBPath);
+    await restackCommand(ctx, { only: true });
+
+    // Verify branch-b has the new commit from a
+    const logB = await runGitCommand(['log', '--oneline'], branchBPath);
+    expect(logB.stdout).toContain('second commit in a');
+    expect(logB.stdout).toContain('commit in b');
+
+    // Verify branch-c does NOT have the new commit from a (was not restacked)
+    const logCAfter = await runGitCommand(['log', '--oneline'], branchCPath);
+    expect(logCAfter.stdout).not.toContain('second commit in a');
+    // branch-c should have the same commits as before (unchanged)
+    expect(logCAfter.stdout).toBe(logCBefore.stdout);
+  });
 });
 
 describe('repos unstack command', () => {
@@ -1380,5 +1444,77 @@ describe('repos continue command', () => {
       parentPath
     );
     expect(baseRefResult.stdout.trim()).toBe(parentHeadResult.stdout.trim());
+  });
+
+  test('continue restacks child branches after resolving conflicts', async () => {
+    // Clone as bare
+    const bareDir = join(testDir, 'bare.git');
+    await cloneBare(sourceDir, bareDir);
+
+    // Create config
+    const config = {
+      repos: [{ name: 'bare', url: sourceDir, path: bareDir, bare: true }],
+    } satisfies ReposConfig;
+    await writeConfig(configPath, config);
+
+    const ctx = { configPath };
+
+    // Create a stack: branch-a -> branch-b -> branch-c
+    await workCommand(ctx, 'branch-a', 'bare');
+    const branchAPath = join(testDir, 'bare.git-branch-a');
+    await runGitCommand(['config', 'user.email', 'test@test.com'], branchAPath);
+    await runGitCommand(['config', 'user.name', 'Test'], branchAPath);
+    await Bun.write(join(branchAPath, 'shared.txt'), 'content from a');
+    await runGitCommand(['add', '.'], branchAPath);
+    await runGitCommand(['commit', '-m', 'commit in a'], branchAPath);
+
+    process.chdir(branchAPath);
+    await stackCommand(ctx, 'branch-b');
+    const branchBPath = join(testDir, 'bare.git-branch-b');
+    await runGitCommand(['config', 'user.email', 'test@test.com'], branchBPath);
+    await runGitCommand(['config', 'user.name', 'Test'], branchBPath);
+    // branch-b modifies the shared file (will conflict with a's change)
+    await Bun.write(join(branchBPath, 'shared.txt'), 'content from b');
+    await runGitCommand(['add', '.'], branchBPath);
+    await runGitCommand(['commit', '-m', 'commit in b'], branchBPath);
+
+    process.chdir(branchBPath);
+    await stackCommand(ctx, 'branch-c');
+    const branchCPath = join(testDir, 'bare.git-branch-c');
+    await runGitCommand(['config', 'user.email', 'test@test.com'], branchCPath);
+    await runGitCommand(['config', 'user.name', 'Test'], branchCPath);
+    await Bun.write(join(branchCPath, 'file-c.txt'), 'content from c');
+    await runGitCommand(['add', '.'], branchCPath);
+    await runGitCommand(['commit', '-m', 'commit in c'], branchCPath);
+
+    // Modify branch-a to cause conflict with branch-b
+    await Bun.write(join(branchAPath, 'shared.txt'), 'updated content from a');
+    await runGitCommand(['add', '.'], branchAPath);
+    await runGitCommand(['commit', '-m', 'update in a'], branchAPath);
+
+    // Attempt restack from branch-b - will fail with conflict
+    process.chdir(branchBPath);
+    const mockExit = mockProcessExit();
+    await expect(restackCommand(ctx)).rejects.toThrow('process.exit(1)');
+    mockExit.mockRestore();
+
+    // Resolve the conflict
+    await Bun.write(join(branchBPath, 'shared.txt'), 'resolved content');
+    await runGitCommand(['add', '.'], branchBPath);
+
+    // Continue the rebase - should also restack branch-c
+    process.chdir(branchBPath);
+    await continueCommand(ctx);
+
+    // Verify branch-b has the update from a
+    const logB = await runGitCommand(['log', '--oneline'], branchBPath);
+    expect(logB.stdout).toContain('update in a');
+    expect(logB.stdout).toContain('commit in b');
+
+    // Verify branch-c was also restacked and has all commits
+    const logC = await runGitCommand(['log', '--oneline'], branchCPath);
+    expect(logC.stdout).toContain('update in a');
+    expect(logC.stdout).toContain('commit in b');
+    expect(logC.stdout).toContain('commit in c');
   });
 });

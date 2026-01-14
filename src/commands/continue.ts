@@ -1,5 +1,11 @@
 import type { CommandContext } from '../cli.ts';
-import { loadConfig, findRepoFromCwd, getParentBranch } from '../config.ts';
+import {
+  loadConfig,
+  findRepoFromCwd,
+  getParentBranch,
+  getChildBranches,
+} from '../config.ts';
+import { restackTree, type RestackContext } from './restack.ts';
 import {
   listWorktrees,
   findWorktreeByDirectory,
@@ -8,7 +14,9 @@ import {
   getRebaseBranch,
   rebaseContinue,
   setBaseRef,
+  deleteBaseRef,
   getHeadCommit,
+  runGitCommand,
 } from '../git.ts';
 import { print, printError } from '../output.ts';
 
@@ -75,6 +83,7 @@ export async function continueCommand(ctx: CommandContext): Promise<void> {
       parentBranch
     );
 
+    let parentHead: string;
     if (parentWorktree) {
       const parentHeadResult = await getHeadCommit(parentWorktree.path);
       if (!parentHeadResult.success) {
@@ -83,20 +92,67 @@ export async function continueCommand(ctx: CommandContext): Promise<void> {
         );
         process.exit(1);
       }
-
-      const setRefResult = await setBaseRef(
-        repo.path,
-        currentBranch,
-        parentHeadResult.data
+      parentHead = parentHeadResult.data;
+    } else {
+      // Parent worktree doesn't exist, resolve branch ref from main repo
+      const parentRefResult = await runGitCommand(
+        ['rev-parse', parentBranch],
+        repo.path
       );
-      if (!setRefResult.success) {
-        printError(`Error: Failed to update fork point: ${setRefResult.error}`);
-        process.exit(1);
+      if (parentRefResult.exitCode === 0) {
+        parentHead = parentRefResult.stdout.trim();
+      } else {
+        // Parent branch is gone, delete the base ref
+        await deleteBaseRef(repo.path, currentBranch);
+        print('Parent branch no longer exists, removed fork point tracking.');
+        print('Rebase completed successfully.');
+        return;
       }
-
-      print('Updated fork point reference.');
     }
+
+    const setRefResult = await setBaseRef(repo.path, currentBranch, parentHead);
+    if (!setRefResult.success) {
+      printError(`Error: Failed to update fork point: ${setRefResult.error}`);
+      process.exit(1);
+    }
+
+    print('Updated fork point reference.');
   }
 
   print('Rebase completed successfully.');
+
+  // Check for children to restack recursively
+  const children = getChildBranches(repo, currentBranch);
+  if (children.length > 0) {
+    // Reload worktrees since the rebase may have changed things
+    const freshWorktreesResult = await listWorktrees(repo.path);
+    if (!freshWorktreesResult.success) {
+      printError(`Error: ${freshWorktreesResult.error}`);
+      process.exit(1);
+    }
+
+    // Check if any children have worktrees
+    const childrenWithWorktrees = children.filter((child) =>
+      findWorktreeByBranch(freshWorktreesResult.data, child)
+    );
+
+    if (childrenWithWorktrees.length > 0) {
+      print(`Restacking ${childrenWithWorktrees.length} child branch(es)...`);
+
+      const rctx = {
+        ctx,
+        repo,
+        config,
+        worktrees: freshWorktreesResult.data,
+      } satisfies RestackContext;
+
+      for (const child of childrenWithWorktrees) {
+        const childSuccess = await restackTree(rctx, child);
+        if (!childSuccess) {
+          // Child has conflicts - user needs to resolve and continue again
+          process.exit(1);
+        }
+      }
+    }
+  }
 }
