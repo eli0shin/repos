@@ -641,7 +641,7 @@ repos collapse
 
 ---
 
-#### `repos squash [-m, --message <message>] [-f, --first]`
+#### `repos squash [-m, --message <message>] [-f, --first] [--dry-run]`
 
 Squash all commits since the base branch into a single commit.
 
@@ -650,12 +650,14 @@ repos squash                    # Opens editor for commit message
 repos squash -m "Add feature"   # Use provided message
 repos squash --first            # Use first commit's message
 repos squash -f                 # Short form of --first
+repos squash --dry-run          # Preview what would be squashed
 ```
 
 **Options:**
 
 - `-m, --message <message>` - Commit message for the squashed commit
 - `-f, --first` - Use the first commit's message as the squash commit message
+- `--dry-run` - Preview commits that would be squashed without performing the squash
 
 **Base branch determination:**
 
@@ -715,6 +717,35 @@ repos squash -m "Add user profile endpoint"
 repos squash --first
 # Uses the message from your first commit after the base
 # Useful when your first commit has a good descriptive message
+```
+
+**Previewing with dry-run:**
+
+```bash
+repos squash --dry-run
+# Shows what would be squashed without making changes
+```
+
+**Example dry-run output:**
+
+```
+Squashing commits since "main"...
+Found 3 commits to squash.
+
+Dry run: 3 commit(s) would be squashed
+
+Commits to be squashed:
+  abc1234 Add user authentication (Alice, 2 days ago)
+  def5678 Add login endpoint (Alice, 1 day ago)
+  ghi9012 Add logout endpoint (Bob, 3 hours ago)
+
+Merge base (boundary commit):
+  xyz7890 Initial commit
+  Base ref: origin/main
+
+Branches containing merge-base:
+  main
+  feature-other
 ```
 
 ---
@@ -1183,25 +1214,25 @@ cat ~/.config/repos/config.json | grep updateBehavior
 
 ## Command Quick Reference
 
-| Command                          | Description                                 |
-| -------------------------------- | ------------------------------------------- |
-| `repos list`                     | List tracked repos and worktrees            |
-| `repos add <url> [--bare]`       | Clone and track a repository                |
-| `repos clone [name]`             | Clone repos from config                     |
-| `repos remove <name> [-d]`       | Remove repo from tracking                   |
-| `repos latest`                   | Pull all repos in parallel                  |
-| `repos adopt`                    | Add existing repos to config                |
-| `repos sync`                     | Adopt + clone missing repos                 |
-| `repos init [--print] [--force]` | Set up shell for work command               |
-| `repos work <branch> [repo]`     | Create worktree for branch                  |
-| `repos stack <branch>`           | Create stacked worktree from current branch |
-| `repos restack`                  | Rebase current branch on parent branch      |
-| `repos unstack`                  | Unstack branch onto default branch          |
-| `repos collapse`                 | Collapse parent into current stacked branch |
-| `repos squash [-m msg] [-f]`     | Squash commits since base into one commit   |
-| `repos clean <branch> [repo]`    | Remove a worktree (--force for parents)     |
-| `repos rebase [branch] [repo]`   | Rebase worktree on default branch           |
-| `repos cleanup [--dry-run]`      | Remove merged/deleted worktrees             |
-| `repos update`                   | Update CLI to latest version                |
-| `repos -v`                       | Show version                                |
-| `work <branch>`                  | Create worktree and cd into it (shell fn)   |
+| Command                              | Description                                 |
+| ------------------------------------ | ------------------------------------------- |
+| `repos list`                         | List tracked repos and worktrees            |
+| `repos add <url> [--bare]`           | Clone and track a repository                |
+| `repos clone [name]`                 | Clone repos from config                     |
+| `repos remove <name> [-d]`           | Remove repo from tracking                   |
+| `repos latest`                       | Pull all repos in parallel                  |
+| `repos adopt`                        | Add existing repos to config                |
+| `repos sync`                         | Adopt + clone missing repos                 |
+| `repos init [--print] [--force]`     | Set up shell for work command               |
+| `repos work <branch> [repo]`         | Create worktree for branch                  |
+| `repos stack <branch>`               | Create stacked worktree from current branch |
+| `repos restack`                      | Rebase current branch on parent branch      |
+| `repos unstack`                      | Unstack branch onto default branch          |
+| `repos collapse`                     | Collapse parent into current stacked branch |
+| `repos squash [-m] [-f] [--dry-run]` | Squash commits since base into one commit   |
+| `repos clean <branch> [repo]`        | Remove a worktree (--force for parents)     |
+| `repos rebase [branch] [repo]`       | Rebase worktree on default branch           |
+| `repos cleanup [--dry-run]`          | Remove merged/deleted worktrees             |
+| `repos update`                       | Update CLI to latest version                |
+| `repos -v`                           | Show version                                |
+| `work <branch>`                      | Create worktree and cd into it (shell fn)   |
