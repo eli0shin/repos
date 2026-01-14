@@ -26,8 +26,6 @@ import { anyString } from './helpers.ts';
 async function createTestRepo(dir: string): Promise<void> {
   await mkdir(dir, { recursive: true });
   await runGitCommand(['init'], dir);
-  await runGitCommand(['config', 'user.email', 'test@test.com'], dir);
-  await runGitCommand(['config', 'user.name', 'Test'], dir);
   await Bun.write(join(dir, 'test.txt'), 'test');
   await runGitCommand(['add', '.'], dir);
   await runGitCommand(['commit', '-m', 'initial'], dir);
@@ -533,8 +531,6 @@ describe('repos rebase command', () => {
     // Clone the remote
     const localDir = join(testDir, 'local');
     await runGitCommand(['clone', remoteDir, localDir]);
-    await runGitCommand(['config', 'user.email', 'test@test.com'], localDir);
-    await runGitCommand(['config', 'user.name', 'Test'], localDir);
 
     // Create initial commit on main and push
     await Bun.write(join(localDir, 'main.txt'), 'main');
@@ -548,11 +544,6 @@ describe('repos rebase command', () => {
       ['worktree', 'add', '-b', 'feature', worktreePath],
       localDir
     );
-    await runGitCommand(
-      ['config', 'user.email', 'test@test.com'],
-      worktreePath
-    );
-    await runGitCommand(['config', 'user.name', 'Test'], worktreePath);
 
     // Add commit to feature branch
     await Bun.write(join(worktreePath, 'feature.txt'), 'feature');
@@ -616,11 +607,6 @@ describe('worktree workflow integration', () => {
     expect(await isGitRepo(worktreePath)).toBe(true);
 
     // Step 2: Make changes and commit
-    await runGitCommand(
-      ['config', 'user.email', 'test@test.com'],
-      worktreePath
-    );
-    await runGitCommand(['config', 'user.name', 'Test'], worktreePath);
     await Bun.write(join(worktreePath, 'feature.txt'), 'feature work');
     await runGitCommand(['add', '.'], worktreePath);
     await runGitCommand(['commit', '-m', 'feature work'], worktreePath);
@@ -690,11 +676,6 @@ describe('repos stack command', () => {
     expect(await isGitRepo(parentWorktreePath)).toBe(true);
 
     // Step 2: Make a commit on parent branch
-    await runGitCommand(
-      ['config', 'user.email', 'test@test.com'],
-      parentWorktreePath
-    );
-    await runGitCommand(['config', 'user.name', 'Test'], parentWorktreePath);
     await Bun.write(join(parentWorktreePath, 'parent.txt'), 'parent content');
     await runGitCommand(['add', '.'], parentWorktreePath);
     await runGitCommand(['commit', '-m', 'parent commit'], parentWorktreePath);
@@ -831,12 +812,6 @@ describe('repos restack command', () => {
     const parentWorktreePath = join(testDir, 'bare.git-parent-branch');
 
     // Step 2: Add git config to parent
-    await runGitCommand(
-      ['config', 'user.email', 'test@test.com'],
-      parentWorktreePath
-    );
-    await runGitCommand(['config', 'user.name', 'Test'], parentWorktreePath);
-
     // Step 3: Make a commit on parent branch
     await Bun.write(join(parentWorktreePath, 'parent.txt'), 'parent content');
     await runGitCommand(['add', '.'], parentWorktreePath);
@@ -847,14 +822,7 @@ describe('repos restack command', () => {
     process.chdir(parentWorktreePath);
     await stackCommand(ctx, 'child-branch');
 
-    // Step 5: Add git config to child
-    await runGitCommand(
-      ['config', 'user.email', 'test@test.com'],
-      childWorktreePath
-    );
-    await runGitCommand(['config', 'user.name', 'Test'], childWorktreePath);
-
-    // Step 6: Make a commit on child branch
+    // Step 5: Make a commit on child branch
     await Bun.write(join(childWorktreePath, 'child.txt'), 'child content');
     await runGitCommand(['add', '.'], childWorktreePath);
     await runGitCommand(['commit', '-m', 'child commit'], childWorktreePath);
@@ -904,13 +872,6 @@ describe('repos restack command', () => {
     // Create orphan worktree (the parent doesn't exist as a worktree)
     await workCommand(ctx, 'orphan-branch', 'bare');
     const orphanWorktreePath = join(testDir, 'bare.git-orphan-branch');
-
-    // Add git config
-    await runGitCommand(
-      ['config', 'user.email', 'test@test.com'],
-      orphanWorktreePath
-    );
-    await runGitCommand(['config', 'user.name', 'Test'], orphanWorktreePath);
 
     // Make a commit
     await Bun.write(join(orphanWorktreePath, 'orphan.txt'), 'orphan content');
@@ -989,8 +950,6 @@ describe('repos restack command', () => {
     // Create a stack: branch-a -> branch-b -> branch-c
     await workCommand(ctx, 'branch-a', 'bare');
     const branchAPath = join(testDir, 'bare.git-branch-a');
-    await runGitCommand(['config', 'user.email', 'test@test.com'], branchAPath);
-    await runGitCommand(['config', 'user.name', 'Test'], branchAPath);
     await Bun.write(join(branchAPath, 'file-a.txt'), 'content from a');
     await runGitCommand(['add', '.'], branchAPath);
     await runGitCommand(['commit', '-m', 'commit in a'], branchAPath);
@@ -998,8 +957,6 @@ describe('repos restack command', () => {
     process.chdir(branchAPath);
     await stackCommand(ctx, 'branch-b');
     const branchBPath = join(testDir, 'bare.git-branch-b');
-    await runGitCommand(['config', 'user.email', 'test@test.com'], branchBPath);
-    await runGitCommand(['config', 'user.name', 'Test'], branchBPath);
     await Bun.write(join(branchBPath, 'file-b.txt'), 'content from b');
     await runGitCommand(['add', '.'], branchBPath);
     await runGitCommand(['commit', '-m', 'commit in b'], branchBPath);
@@ -1007,8 +964,6 @@ describe('repos restack command', () => {
     process.chdir(branchBPath);
     await stackCommand(ctx, 'branch-c');
     const branchCPath = join(testDir, 'bare.git-branch-c');
-    await runGitCommand(['config', 'user.email', 'test@test.com'], branchCPath);
-    await runGitCommand(['config', 'user.name', 'Test'], branchCPath);
     await Bun.write(join(branchCPath, 'file-c.txt'), 'content from c');
     await runGitCommand(['add', '.'], branchCPath);
     await runGitCommand(['commit', '-m', 'commit in c'], branchCPath);
@@ -1054,8 +1009,6 @@ describe('repos restack command', () => {
     // Step 1: Create branch-a worktree
     await workCommand(ctx, 'branch-a', 'bare');
     const branchAPath = join(testDir, 'bare.git-branch-a');
-    await runGitCommand(['config', 'user.email', 'test@test.com'], branchAPath);
-    await runGitCommand(['config', 'user.name', 'Test'], branchAPath);
 
     // Step 2: Make initial commit on branch-a
     await Bun.write(join(branchAPath, 'file-a.txt'), 'content from a');
@@ -1073,8 +1026,6 @@ describe('repos restack command', () => {
     process.chdir(branchAPath);
     await stackCommand(ctx, 'branch-b');
     const branchBPath = join(testDir, 'bare.git-branch-b');
-    await runGitCommand(['config', 'user.email', 'test@test.com'], branchBPath);
-    await runGitCommand(['config', 'user.name', 'Test'], branchBPath);
 
     // Step 4: Make a commit on branch-b
     await Bun.write(join(branchBPath, 'file-b.txt'), 'content from b');
@@ -1135,8 +1086,6 @@ describe('repos restack command', () => {
     // Create a stack: branch-a -> branch-b -> branch-c
     await workCommand(ctx, 'branch-a', 'bare');
     const branchAPath = join(testDir, 'bare.git-branch-a');
-    await runGitCommand(['config', 'user.email', 'test@test.com'], branchAPath);
-    await runGitCommand(['config', 'user.name', 'Test'], branchAPath);
     await Bun.write(join(branchAPath, 'file-a.txt'), 'content from a');
     await runGitCommand(['add', '.'], branchAPath);
     await runGitCommand(['commit', '-m', 'commit in a'], branchAPath);
@@ -1144,8 +1093,6 @@ describe('repos restack command', () => {
     process.chdir(branchAPath);
     await stackCommand(ctx, 'branch-b');
     const branchBPath = join(testDir, 'bare.git-branch-b');
-    await runGitCommand(['config', 'user.email', 'test@test.com'], branchBPath);
-    await runGitCommand(['config', 'user.name', 'Test'], branchBPath);
     await Bun.write(join(branchBPath, 'file-b.txt'), 'content from b');
     await runGitCommand(['add', '.'], branchBPath);
     await runGitCommand(['commit', '-m', 'commit in b'], branchBPath);
@@ -1153,8 +1100,6 @@ describe('repos restack command', () => {
     process.chdir(branchBPath);
     await stackCommand(ctx, 'branch-c');
     const branchCPath = join(testDir, 'bare.git-branch-c');
-    await runGitCommand(['config', 'user.email', 'test@test.com'], branchCPath);
-    await runGitCommand(['config', 'user.name', 'Test'], branchCPath);
     await Bun.write(join(branchCPath, 'file-c.txt'), 'content from c');
     await runGitCommand(['add', '.'], branchCPath);
     await runGitCommand(['commit', '-m', 'commit in c'], branchCPath);
@@ -1224,12 +1169,6 @@ describe('repos unstack command', () => {
     const parentWorktreePath = join(testDir, 'bare.git-parent-branch');
 
     // Step 2: Add git config to parent
-    await runGitCommand(
-      ['config', 'user.email', 'test@test.com'],
-      parentWorktreePath
-    );
-    await runGitCommand(['config', 'user.name', 'Test'], parentWorktreePath);
-
     // Step 3: Make a commit on parent branch
     await Bun.write(join(parentWorktreePath, 'parent.txt'), 'parent content');
     await runGitCommand(['add', '.'], parentWorktreePath);
@@ -1240,14 +1179,7 @@ describe('repos unstack command', () => {
     process.chdir(parentWorktreePath);
     await stackCommand(ctx, 'child-branch');
 
-    // Step 5: Add git config to child
-    await runGitCommand(
-      ['config', 'user.email', 'test@test.com'],
-      childWorktreePath
-    );
-    await runGitCommand(['config', 'user.name', 'Test'], childWorktreePath);
-
-    // Step 6: Make a commit on child branch
+    // Step 5: Make a commit on child branch
     await Bun.write(join(childWorktreePath, 'child.txt'), 'child content');
     await runGitCommand(['add', '.'], childWorktreePath);
     await runGitCommand(['commit', '-m', 'child commit'], childWorktreePath);
@@ -1388,8 +1320,6 @@ describe('repos continue command', () => {
     // Create parent branch with initial commit
     await workCommand(ctx, 'parent-branch', 'bare');
     const parentPath = join(testDir, 'bare.git-parent-branch');
-    await runGitCommand(['config', 'user.email', 'test@test.com'], parentPath);
-    await runGitCommand(['config', 'user.name', 'Test'], parentPath);
     await Bun.write(join(parentPath, 'shared.txt'), 'parent version 1');
     await runGitCommand(['add', '.'], parentPath);
     await runGitCommand(['commit', '-m', 'parent initial'], parentPath);
@@ -1399,8 +1329,6 @@ describe('repos continue command', () => {
     process.chdir(parentPath);
     await stackCommand(ctx, 'child-branch');
     const childPath = join(testDir, 'bare.git-child-branch');
-    await runGitCommand(['config', 'user.email', 'test@test.com'], childPath);
-    await runGitCommand(['config', 'user.name', 'Test'], childPath);
 
     // Child modifies the same file (will cause conflict)
     await Bun.write(join(childPath, 'shared.txt'), 'child version');
@@ -1462,8 +1390,6 @@ describe('repos continue command', () => {
     // Create a stack: branch-a -> branch-b -> branch-c
     await workCommand(ctx, 'branch-a', 'bare');
     const branchAPath = join(testDir, 'bare.git-branch-a');
-    await runGitCommand(['config', 'user.email', 'test@test.com'], branchAPath);
-    await runGitCommand(['config', 'user.name', 'Test'], branchAPath);
     await Bun.write(join(branchAPath, 'shared.txt'), 'content from a');
     await runGitCommand(['add', '.'], branchAPath);
     await runGitCommand(['commit', '-m', 'commit in a'], branchAPath);
@@ -1471,8 +1397,6 @@ describe('repos continue command', () => {
     process.chdir(branchAPath);
     await stackCommand(ctx, 'branch-b');
     const branchBPath = join(testDir, 'bare.git-branch-b');
-    await runGitCommand(['config', 'user.email', 'test@test.com'], branchBPath);
-    await runGitCommand(['config', 'user.name', 'Test'], branchBPath);
     // branch-b modifies the shared file (will conflict with a's change)
     await Bun.write(join(branchBPath, 'shared.txt'), 'content from b');
     await runGitCommand(['add', '.'], branchBPath);
@@ -1481,8 +1405,6 @@ describe('repos continue command', () => {
     process.chdir(branchBPath);
     await stackCommand(ctx, 'branch-c');
     const branchCPath = join(testDir, 'bare.git-branch-c');
-    await runGitCommand(['config', 'user.email', 'test@test.com'], branchCPath);
-    await runGitCommand(['config', 'user.name', 'Test'], branchCPath);
     await Bun.write(join(branchCPath, 'file-c.txt'), 'content from c');
     await runGitCommand(['add', '.'], branchCPath);
     await runGitCommand(['commit', '-m', 'commit in c'], branchCPath);

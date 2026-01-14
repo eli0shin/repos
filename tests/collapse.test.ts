@@ -13,8 +13,6 @@ import { mockProcessExit, type MockExit } from './utils.ts';
 async function createTestRepo(dir: string): Promise<void> {
   await mkdir(dir, { recursive: true });
   await runGitCommand(['init'], dir);
-  await runGitCommand(['config', 'user.email', 'test@test.com'], dir);
-  await runGitCommand(['config', 'user.name', 'Test'], dir);
   await Bun.write(join(dir, 'test.txt'), 'test');
   await runGitCommand(['add', '.'], dir);
   await runGitCommand(['commit', '-m', 'initial'], dir);
@@ -64,11 +62,6 @@ describe('repos collapse command', () => {
     const childWorktreePath = join(testDir, 'bare.git-child-branch');
 
     // Step 2: Add git config and make commits on parent
-    await runGitCommand(
-      ['config', 'user.email', 'test@test.com'],
-      parentWorktreePath
-    );
-    await runGitCommand(['config', 'user.name', 'Test'], parentWorktreePath);
     await Bun.write(join(parentWorktreePath, 'parent.txt'), 'parent content');
     await runGitCommand(['add', '.'], parentWorktreePath);
     await runGitCommand(['commit', '-m', 'parent commit'], parentWorktreePath);
@@ -78,11 +71,6 @@ describe('repos collapse command', () => {
     await stackCommand(ctx, 'child-branch');
 
     // Step 4: Add git config and make commits on child
-    await runGitCommand(
-      ['config', 'user.email', 'test@test.com'],
-      childWorktreePath
-    );
-    await runGitCommand(['config', 'user.name', 'Test'], childWorktreePath);
     await Bun.write(join(childWorktreePath, 'child.txt'), 'child content');
     await runGitCommand(['add', '.'], childWorktreePath);
     await runGitCommand(['commit', '-m', 'child commit'], childWorktreePath);
@@ -159,8 +147,6 @@ describe('repos collapse command', () => {
     const pathC = join(testDir, 'bare.git-branch-c');
 
     // Configure git for all worktrees
-    await runGitCommand(['config', 'user.email', 'test@test.com'], pathA);
-    await runGitCommand(['config', 'user.name', 'Test'], pathA);
     await Bun.write(join(pathA, 'a.txt'), 'a content');
     await runGitCommand(['add', '.'], pathA);
     await runGitCommand(['commit', '-m', 'commit A'], pathA);
@@ -168,8 +154,6 @@ describe('repos collapse command', () => {
     process.chdir(pathA);
     await stackCommand(ctx, 'branch-b');
 
-    await runGitCommand(['config', 'user.email', 'test@test.com'], pathB);
-    await runGitCommand(['config', 'user.name', 'Test'], pathB);
     await Bun.write(join(pathB, 'b.txt'), 'b content');
     await runGitCommand(['add', '.'], pathB);
     await runGitCommand(['commit', '-m', 'commit B'], pathB);
@@ -177,8 +161,6 @@ describe('repos collapse command', () => {
     process.chdir(pathB);
     await stackCommand(ctx, 'branch-c');
 
-    await runGitCommand(['config', 'user.email', 'test@test.com'], pathC);
-    await runGitCommand(['config', 'user.name', 'Test'], pathC);
     await Bun.write(join(pathC, 'c.txt'), 'c content');
     await runGitCommand(['add', '.'], pathC);
     await runGitCommand(['commit', '-m', 'commit C'], pathC);
@@ -299,11 +281,6 @@ describe('repos collapse command', () => {
     const child1Path = join(testDir, 'bare.git-child-1');
     const child2Path = join(testDir, 'bare.git-child-2');
 
-    await runGitCommand(
-      ['config', 'user.email', 'test@test.com'],
-      parentWorktreePath
-    );
-    await runGitCommand(['config', 'user.name', 'Test'], parentWorktreePath);
     await Bun.write(join(parentWorktreePath, 'parent.txt'), 'parent content');
     await runGitCommand(['add', '.'], parentWorktreePath);
     await runGitCommand(['commit', '-m', 'parent commit'], parentWorktreePath);
@@ -362,11 +339,6 @@ describe('repos collapse command', () => {
     const parentWorktreePath = join(testDir, 'bare.git-parent-branch');
     const childWorktreePath = join(testDir, 'bare.git-child-branch');
 
-    await runGitCommand(
-      ['config', 'user.email', 'test@test.com'],
-      parentWorktreePath
-    );
-    await runGitCommand(['config', 'user.name', 'Test'], parentWorktreePath);
     await Bun.write(join(parentWorktreePath, 'parent.txt'), 'parent content');
     await runGitCommand(['add', '.'], parentWorktreePath);
     await runGitCommand(['commit', '-m', 'parent commit'], parentWorktreePath);

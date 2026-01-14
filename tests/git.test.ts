@@ -76,8 +76,6 @@ describe('getCurrentBranch', () => {
   beforeEach(async () => {
     await mkdir(testDir, { recursive: true });
     await runGitCommand(['init'], testDir);
-    await runGitCommand(['config', 'user.email', 'test@test.com'], testDir);
-    await runGitCommand(['config', 'user.name', 'Test'], testDir);
     // Create initial commit so branch exists
     await Bun.write(join(testDir, 'test.txt'), 'test');
     await runGitCommand(['add', '.'], testDir);
@@ -199,8 +197,6 @@ describe('cloneRepo', () => {
     // Create a source repo to clone from
     await mkdir(sourceDir, { recursive: true });
     await runGitCommand(['init'], sourceDir);
-    await runGitCommand(['config', 'user.email', 'test@test.com'], sourceDir);
-    await runGitCommand(['config', 'user.name', 'Test'], sourceDir);
     await Bun.write(join(sourceDir, 'test.txt'), 'test');
     await runGitCommand(['add', '.'], sourceDir);
     await runGitCommand(['commit', '-m', 'initial'], sourceDir);
@@ -256,8 +252,6 @@ describe('pullCurrentBranch', () => {
     // Clone the bare repo
     const localDir = join(testDir, 'local');
     await runGitCommand(['clone', remoteDir, localDir]);
-    await runGitCommand(['config', 'user.email', 'test@test.com'], localDir);
-    await runGitCommand(['config', 'user.name', 'Test'], localDir);
 
     // Create initial commit and push
     await Bun.write(join(localDir, 'test.txt'), 'test');
@@ -314,8 +308,6 @@ describe('getDefaultBranch', () => {
   beforeEach(async () => {
     await mkdir(testDir, { recursive: true });
     await runGitCommand(['init'], testDir);
-    await runGitCommand(['config', 'user.email', 'test@test.com'], testDir);
-    await runGitCommand(['config', 'user.name', 'Test'], testDir);
     await Bun.write(join(testDir, 'test.txt'), 'test');
     await runGitCommand(['add', '.'], testDir);
     await runGitCommand(['commit', '-m', 'initial'], testDir);
@@ -340,8 +332,6 @@ describe('hasUncommittedChanges', () => {
   beforeEach(async () => {
     await mkdir(testDir, { recursive: true });
     await runGitCommand(['init'], testDir);
-    await runGitCommand(['config', 'user.email', 'test@test.com'], testDir);
-    await runGitCommand(['config', 'user.name', 'Test'], testDir);
     await Bun.write(join(testDir, 'test.txt'), 'test');
     await runGitCommand(['add', '.'], testDir);
     await runGitCommand(['commit', '-m', 'initial'], testDir);
@@ -384,8 +374,6 @@ describe('cloneBare', () => {
     await mkdir(testDir, { recursive: true });
     await mkdir(sourceDir, { recursive: true });
     await runGitCommand(['init'], sourceDir);
-    await runGitCommand(['config', 'user.email', 'test@test.com'], sourceDir);
-    await runGitCommand(['config', 'user.name', 'Test'], sourceDir);
     await Bun.write(join(sourceDir, 'test.txt'), 'test');
     await runGitCommand(['add', '.'], sourceDir);
     await runGitCommand(['commit', '-m', 'initial'], sourceDir);
@@ -430,8 +418,6 @@ describe('listWorktrees', () => {
     const repoDir = join(testDir, 'repo');
     await mkdir(repoDir, { recursive: true });
     await runGitCommand(['init'], repoDir);
-    await runGitCommand(['config', 'user.email', 'test@test.com'], repoDir);
-    await runGitCommand(['config', 'user.name', 'Test'], repoDir);
     await Bun.write(join(repoDir, 'test.txt'), 'test');
     await runGitCommand(['add', '.'], repoDir);
     await runGitCommand(['commit', '-m', 'initial'], repoDir);
@@ -455,8 +441,6 @@ describe('listWorktrees', () => {
     const sourceDir = join(testDir, 'source');
     await mkdir(sourceDir, { recursive: true });
     await runGitCommand(['init'], sourceDir);
-    await runGitCommand(['config', 'user.email', 'test@test.com'], sourceDir);
-    await runGitCommand(['config', 'user.name', 'Test'], sourceDir);
     await Bun.write(join(sourceDir, 'test.txt'), 'test');
     await runGitCommand(['add', '.'], sourceDir);
     await runGitCommand(['commit', '-m', 'initial'], sourceDir);
@@ -501,8 +485,6 @@ describe('createWorktree and removeWorktree', () => {
     // Create source repo
     await mkdir(sourceDir, { recursive: true });
     await runGitCommand(['init'], sourceDir);
-    await runGitCommand(['config', 'user.email', 'test@test.com'], sourceDir);
-    await runGitCommand(['config', 'user.name', 'Test'], sourceDir);
     await Bun.write(join(sourceDir, 'test.txt'), 'test');
     await runGitCommand(['add', '.'], sourceDir);
     await runGitCommand(['commit', '-m', 'initial'], sourceDir);
@@ -591,8 +573,6 @@ describe('fetchOrigin', () => {
   test('fetches from origin successfully', async () => {
     const localDir = join(testDir, 'local');
     await runGitCommand(['clone', remoteDir, localDir]);
-    await runGitCommand(['config', 'user.email', 'test@test.com'], localDir);
-    await runGitCommand(['config', 'user.name', 'Test'], localDir);
 
     // Create initial commit and push
     await Bun.write(join(localDir, 'test.txt'), 'test');
@@ -625,8 +605,6 @@ describe('rebaseOnBranch', () => {
   test('rebases branch on target successfully', async () => {
     const localDir = join(testDir, 'local');
     await runGitCommand(['clone', remoteDir, localDir]);
-    await runGitCommand(['config', 'user.email', 'test@test.com'], localDir);
-    await runGitCommand(['config', 'user.name', 'Test'], localDir);
 
     // Create initial commit on main and push
     await Bun.write(join(localDir, 'test.txt'), 'initial');
@@ -660,8 +638,6 @@ describe('localBranchExists', () => {
   beforeEach(async () => {
     await mkdir(testDir, { recursive: true });
     await runGitCommand(['init'], testDir);
-    await runGitCommand(['config', 'user.email', 'test@test.com'], testDir);
-    await runGitCommand(['config', 'user.name', 'Test'], testDir);
     await Bun.write(join(testDir, 'test.txt'), 'test');
     await runGitCommand(['add', '.'], testDir);
     await runGitCommand(['commit', '-m', 'initial'], testDir);
@@ -690,8 +666,6 @@ describe('createWorktree with existing local branch', () => {
     // Create source repo
     await mkdir(sourceDir, { recursive: true });
     await runGitCommand(['init'], sourceDir);
-    await runGitCommand(['config', 'user.email', 'test@test.com'], sourceDir);
-    await runGitCommand(['config', 'user.name', 'Test'], sourceDir);
     await Bun.write(join(sourceDir, 'test.txt'), 'test');
     await runGitCommand(['add', '.'], sourceDir);
     await runGitCommand(['commit', '-m', 'initial'], sourceDir);
@@ -744,8 +718,6 @@ describe('createWorktreeFromBranch', () => {
 
     // Create a source repo with commits
     await runGitCommand(['init'], sourceDir);
-    await runGitCommand(['config', 'user.email', 'test@test.com'], sourceDir);
-    await runGitCommand(['config', 'user.name', 'Test'], sourceDir);
     await Bun.write(join(sourceDir, 'file.txt'), 'initial');
     await runGitCommand(['add', '.'], sourceDir);
     await runGitCommand(['commit', '-m', 'initial'], sourceDir);
@@ -765,11 +737,6 @@ describe('createWorktreeFromBranch', () => {
     // Create parent branch worktree
     const parentWorktreeDir = join(testDir, 'parent-worktree');
     await createWorktree(bareDir, parentWorktreeDir, 'parent-branch');
-    await runGitCommand(
-      ['config', 'user.email', 'test@test.com'],
-      parentWorktreeDir
-    );
-    await runGitCommand(['config', 'user.name', 'Test'], parentWorktreeDir);
 
     // Add a commit to parent branch
     await Bun.write(join(parentWorktreeDir, 'parent.txt'), 'parent content');
@@ -842,8 +809,6 @@ describe('rebaseOnRef', () => {
 
     // Create a source repo with commits
     await runGitCommand(['init'], sourceDir);
-    await runGitCommand(['config', 'user.email', 'test@test.com'], sourceDir);
-    await runGitCommand(['config', 'user.name', 'Test'], sourceDir);
     await Bun.write(join(sourceDir, 'file.txt'), 'initial');
     await runGitCommand(['add', '.'], sourceDir);
     await runGitCommand(['commit', '-m', 'initial'], sourceDir);
@@ -863,11 +828,6 @@ describe('rebaseOnRef', () => {
     // Create parent branch worktree and add commit
     const parentWorktreeDir = join(testDir, 'parent-worktree');
     await createWorktree(bareDir, parentWorktreeDir, 'parent-branch');
-    await runGitCommand(
-      ['config', 'user.email', 'test@test.com'],
-      parentWorktreeDir
-    );
-    await runGitCommand(['config', 'user.name', 'Test'], parentWorktreeDir);
     await Bun.write(join(parentWorktreeDir, 'parent.txt'), 'parent content');
     await runGitCommand(['add', '.'], parentWorktreeDir);
     await runGitCommand(['commit', '-m', 'parent commit'], parentWorktreeDir);
@@ -880,11 +840,6 @@ describe('rebaseOnRef', () => {
       'child-branch',
       'parent-branch'
     );
-    await runGitCommand(
-      ['config', 'user.email', 'test@test.com'],
-      childWorktreeDir
-    );
-    await runGitCommand(['config', 'user.name', 'Test'], childWorktreeDir);
 
     // Add commit to child
     await Bun.write(join(childWorktreeDir, 'child.txt'), 'child content');
@@ -918,11 +873,6 @@ describe('rebaseOnRef', () => {
     // Create parent branch worktree and modify file.txt
     const parentWorktreeDir = join(testDir, 'parent-worktree');
     await createWorktree(bareDir, parentWorktreeDir, 'parent-branch');
-    await runGitCommand(
-      ['config', 'user.email', 'test@test.com'],
-      parentWorktreeDir
-    );
-    await runGitCommand(['config', 'user.name', 'Test'], parentWorktreeDir);
     await Bun.write(join(parentWorktreeDir, 'file.txt'), 'parent content');
     await runGitCommand(['add', '.'], parentWorktreeDir);
     await runGitCommand(
@@ -938,11 +888,6 @@ describe('rebaseOnRef', () => {
       'child-branch',
       'parent-branch'
     );
-    await runGitCommand(
-      ['config', 'user.email', 'test@test.com'],
-      childWorktreeDir
-    );
-    await runGitCommand(['config', 'user.name', 'Test'], childWorktreeDir);
 
     // Reset child to before parent's change, then make conflicting change
     await runGitCommand(['reset', '--hard', 'HEAD~1'], childWorktreeDir);
