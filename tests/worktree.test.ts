@@ -367,7 +367,7 @@ describe('repos clean command', () => {
 
     // Clean parent with --force - should succeed
     const ctx = { configPath };
-    await cleanCommand(ctx, 'parent', 'bare', { force: true });
+    await cleanCommand(ctx, 'parent', 'bare', { force: true, dryRun: false });
 
     // Verify parent worktree was removed
     expect(await isGitRepo(parentPath)).toBe(false);
