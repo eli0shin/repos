@@ -768,7 +768,7 @@ export async function getCommitList(
   const format = `%H${delimiter}%h${delimiter}%s${delimiter}%an${delimiter}%ar`;
 
   const result = await runGitCommand(
-    ['log', '--reverse', `${base}..HEAD`, `--format=${format}`],
+    ['log', `${base}..HEAD`, `--format=${format}`],
     repoDir
   );
 

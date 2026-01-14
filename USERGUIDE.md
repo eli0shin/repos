@@ -735,9 +735,9 @@ Found 3 commits to squash.
 Dry run: 3 commit(s) would be squashed
 
 Commits to be squashed:
-  abc1234 Add user authentication (Alice, 2 days ago)
-  def5678 Add login endpoint (Alice, 1 day ago)
   ghi9012 Add logout endpoint (Bob, 3 hours ago)
+  def5678 Add login endpoint (Alice, 1 day ago)
+  abc1234 Add user authentication (Alice, 2 days ago)
 
 Merge base (boundary commit):
   xyz7890 Initial commit
