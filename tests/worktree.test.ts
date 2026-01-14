@@ -442,6 +442,69 @@ describe('repos clean command', () => {
     );
     expect(mockExit).toHaveBeenCalledWith(1);
   });
+
+  test('dry-run shows what would be removed without removing', async () => {
+    // Clone as bare
+    const bareDir = join(testDir, 'bare.git');
+    await cloneBare(sourceDir, bareDir);
+
+    // Create worktree
+    const worktreePath = join(testDir, 'bare.git-feature');
+    await runGitCommand(
+      ['worktree', 'add', '-b', 'feature', worktreePath],
+      bareDir
+    );
+
+    // Create config with stack entry to verify it's not removed
+    const config = {
+      repos: [
+        {
+          name: 'bare',
+          url: sourceDir,
+          path: bareDir,
+          bare: true,
+          stacks: [{ parent: 'feature', child: 'child' }],
+        },
+      ],
+    } satisfies ReposConfig;
+    await writeConfig(configPath, config);
+
+    // Capture stdout
+    const output: string[] = [];
+    const originalWrite = process.stdout.write.bind(process.stdout);
+    process.stdout.write = (chunk: string) => {
+      output.push(chunk);
+      return true;
+    };
+
+    // Run clean with dry-run
+    const ctx = { configPath };
+    await cleanCommand(ctx, 'feature', 'bare', { force: true, dryRun: true });
+    process.stdout.write = originalWrite;
+
+    // Verify worktree still exists
+    expect(await isGitRepo(worktreePath)).toBe(true);
+
+    // Verify stack entry still exists (config not modified)
+    const configResult = await readConfig(configPath);
+    expect(configResult).toEqual({
+      success: true,
+      data: {
+        repos: [
+          {
+            name: 'bare',
+            url: sourceDir,
+            path: bareDir,
+            bare: true,
+            stacks: [{ parent: 'feature', child: 'child' }],
+          },
+        ],
+      },
+    });
+
+    // Verify output shows "Would remove"
+    expect(output.join('')).toBe('Would remove worktree "bare-feature"\n');
+  });
 });
 
 describe('repos rebase command', () => {
