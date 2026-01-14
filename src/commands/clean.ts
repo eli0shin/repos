@@ -11,6 +11,7 @@ import {
   removeWorktree,
   hasUncommittedChanges,
   resolveWorktree,
+  deleteBaseRef,
 } from '../git.ts';
 import { print, printError } from '../output.ts';
 
@@ -78,6 +79,14 @@ export async function cleanCommand(
     updatedRepo = removeStackEntriesByParent(updatedRepo, worktree.branch);
     if (updatedRepo !== repo) {
       await saveStackUpdate(ctx.configPath, config, updatedRepo);
+    }
+
+    // Delete base ref for fork point tracking
+    await deleteBaseRef(repo.path, worktree.branch);
+
+    // Also delete base refs for any children (they're now independent)
+    for (const child of childBranches) {
+      await deleteBaseRef(repo.path, child);
     }
   }
 

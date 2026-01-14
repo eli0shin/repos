@@ -1,6 +1,6 @@
 import { describe, expect, test, beforeEach, afterEach } from 'bun:test';
 import { mkdir, rm } from 'node:fs/promises';
-import { realpathSync } from 'node:fs';
+import { realpathSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   runGitCommand,
@@ -968,6 +968,154 @@ describe('repos restack command', () => {
     await expect(restackCommand(ctx)).rejects.toThrow('process.exit(1)');
     expect(mockExit).toHaveBeenCalledWith(1);
     mockExit.mockRestore();
+  });
+
+  test('restack recursively restacks children by default', async () => {
+    // Test that restack propagates changes through entire stack
+
+    // Clone as bare
+    const bareDir = join(testDir, 'bare.git');
+    await cloneBare(sourceDir, bareDir);
+
+    // Create config
+    const config = {
+      repos: [{ name: 'bare', url: sourceDir, path: bareDir, bare: true }],
+    } satisfies ReposConfig;
+    await writeConfig(configPath, config);
+
+    const ctx = { configPath };
+
+    // Create a stack: branch-a -> branch-b -> branch-c
+    await workCommand(ctx, 'branch-a', 'bare');
+    const branchAPath = join(testDir, 'bare.git-branch-a');
+    await runGitCommand(['config', 'user.email', 'test@test.com'], branchAPath);
+    await runGitCommand(['config', 'user.name', 'Test'], branchAPath);
+    await Bun.write(join(branchAPath, 'file-a.txt'), 'content from a');
+    await runGitCommand(['add', '.'], branchAPath);
+    await runGitCommand(['commit', '-m', 'commit in a'], branchAPath);
+
+    process.chdir(branchAPath);
+    await stackCommand(ctx, 'branch-b');
+    const branchBPath = join(testDir, 'bare.git-branch-b');
+    await runGitCommand(['config', 'user.email', 'test@test.com'], branchBPath);
+    await runGitCommand(['config', 'user.name', 'Test'], branchBPath);
+    await Bun.write(join(branchBPath, 'file-b.txt'), 'content from b');
+    await runGitCommand(['add', '.'], branchBPath);
+    await runGitCommand(['commit', '-m', 'commit in b'], branchBPath);
+
+    process.chdir(branchBPath);
+    await stackCommand(ctx, 'branch-c');
+    const branchCPath = join(testDir, 'bare.git-branch-c');
+    await runGitCommand(['config', 'user.email', 'test@test.com'], branchCPath);
+    await runGitCommand(['config', 'user.name', 'Test'], branchCPath);
+    await Bun.write(join(branchCPath, 'file-c.txt'), 'content from c');
+    await runGitCommand(['add', '.'], branchCPath);
+    await runGitCommand(['commit', '-m', 'commit in c'], branchCPath);
+
+    // Now add a new commit to branch-a
+    await Bun.write(join(branchAPath, 'file-a2.txt'), 'more content from a');
+    await runGitCommand(['add', '.'], branchAPath);
+    await runGitCommand(['commit', '-m', 'second commit in a'], branchAPath);
+
+    // Restack from branch-b (should also restack branch-c)
+    process.chdir(branchBPath);
+    await restackCommand(ctx);
+
+    // Verify branch-b has the new commit from a
+    const logB = await runGitCommand(['log', '--oneline'], branchBPath);
+    expect(logB.stdout).toContain('second commit in a');
+    expect(logB.stdout).toContain('commit in b');
+
+    // Verify branch-c also has the new commit from a (propagated through b)
+    const logC = await runGitCommand(['log', '--oneline'], branchCPath);
+    expect(logC.stdout).toContain('second commit in a');
+    expect(logC.stdout).toContain('commit in b');
+    expect(logC.stdout).toContain('commit in c');
+  });
+
+  test('restack succeeds after parent commits are amended (fork point tracking)', async () => {
+    // This test verifies the fix for the stacked branch rebase problem:
+    // When parent's commits are rewritten (amend/rebase), child's restack
+    // should use --onto with fork point to avoid conflicts
+
+    // Clone as bare
+    const bareDir = join(testDir, 'bare.git');
+    await cloneBare(sourceDir, bareDir);
+
+    // Create config
+    const config = {
+      repos: [{ name: 'bare', url: sourceDir, path: bareDir, bare: true }],
+    } satisfies ReposConfig;
+    await writeConfig(configPath, config);
+
+    const ctx = { configPath };
+
+    // Step 1: Create branch-a worktree
+    await workCommand(ctx, 'branch-a', 'bare');
+    const branchAPath = join(testDir, 'bare.git-branch-a');
+    await runGitCommand(['config', 'user.email', 'test@test.com'], branchAPath);
+    await runGitCommand(['config', 'user.name', 'Test'], branchAPath);
+
+    // Step 2: Make initial commit on branch-a
+    await Bun.write(join(branchAPath, 'file-a.txt'), 'content from a');
+    await runGitCommand(['add', '.'], branchAPath);
+    await runGitCommand(['commit', '-m', 'commit in a'], branchAPath);
+
+    // Get the commit hash before stacking
+    const beforeStackResult = await runGitCommand(
+      ['rev-parse', 'HEAD'],
+      branchAPath
+    );
+    const originalACommit = beforeStackResult.stdout.trim();
+
+    // Step 3: Stack branch-b on branch-a (this records fork point = originalACommit)
+    process.chdir(branchAPath);
+    await stackCommand(ctx, 'branch-b');
+    const branchBPath = join(testDir, 'bare.git-branch-b');
+    await runGitCommand(['config', 'user.email', 'test@test.com'], branchBPath);
+    await runGitCommand(['config', 'user.name', 'Test'], branchBPath);
+
+    // Step 4: Make a commit on branch-b
+    await Bun.write(join(branchBPath, 'file-b.txt'), 'content from b');
+    await runGitCommand(['add', '.'], branchBPath);
+    await runGitCommand(['commit', '-m', 'commit in b'], branchBPath);
+
+    // Step 5: Amend the commit on branch-a (this creates a new hash)
+    // This simulates the scenario where the user modifies branch-a after stacking branch-b
+    await Bun.write(join(branchAPath, 'file-a.txt'), 'amended content from a');
+    await runGitCommand(['add', '.'], branchAPath);
+    await runGitCommand(
+      ['commit', '--amend', '-m', 'amended commit in a'],
+      branchAPath
+    );
+
+    // Verify the commit hash changed
+    const afterAmendResult = await runGitCommand(
+      ['rev-parse', 'HEAD'],
+      branchAPath
+    );
+    const amendedACommit = afterAmendResult.stdout.trim();
+    expect(amendedACommit).not.toBe(originalACommit);
+
+    // Step 6: Restack branch-b on branch-a
+    // Without fork point tracking: git would try to apply the original commit from a,
+    // causing conflicts because the file already has different content
+    // With fork point tracking: git rebase --onto branch-a <fork-point> branch-b
+    // only replays branch-b's commits, avoiding conflicts
+    process.chdir(branchBPath);
+    await restackCommand(ctx);
+
+    // Verify branch-b has the amended commit from a and its own commit
+    const logResult = await runGitCommand(['log', '--oneline'], branchBPath);
+    expect(logResult.stdout).toContain('commit in b');
+    expect(logResult.stdout).toContain('amended commit in a');
+
+    // Verify branch-b has the amended content from branch-a
+    const fileAContent = await Bun.file(join(branchBPath, 'file-a.txt')).text();
+    expect(fileAContent).toBe('amended content from a');
+
+    // Verify branch-b kept its own file
+    expect(existsSync(join(branchBPath, 'file-b.txt'))).toBe(true);
   });
 });
 

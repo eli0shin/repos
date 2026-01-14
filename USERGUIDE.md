@@ -510,26 +510,35 @@ Prints the worktree path to stdout.
 
 ---
 
-#### `repos restack`
+#### `repos restack [--only]`
 
-Rebase current branch on its parent branch.
+Rebase stacked branches on their parent branches.
 
 ```bash
-repos restack    # Inside a stacked worktree
+repos restack         # Restack current branch and all children (default)
+repos restack --only  # Restack only the current branch
 ```
 
 **Prerequisites:**
 
 - Must be run from inside a worktree that was created with `repos stack`
 
+**Options:**
+
+- `--only` - Only restack the current branch, not its children
+
 **Behavior:**
 
 1. Looks up the parent branch from your config
 2. If parent worktree still exists: rebases on the local parent branch
 3. If parent is gone (merged/deleted): automatically falls back to default branch and removes the stale parent relationship from config
+4. By default, recursively restacks all child branches after the current branch
+
+**Fork point tracking:**
+When you create a stacked branch with `repos stack`, the CLI records the exact commit where the child branched off (stored as a git ref `refs/bases/<branch>`). This enables correct rebasing even when the parent branch is squashed or amended - only the child's unique commits are replayed.
 
 **Use case:**
-After making new commits on a parent branch, sync the child branch to include those changes.
+After making new commits on a parent branch (or squashing/amending it), sync child branches to include those changes.
 
 **Example:**
 
@@ -538,10 +547,18 @@ After making new commits on a parent branch, sync the child branch to include th
 cd ~/code/my-project-feature-profile
 repos restack
 # feature-profile is now rebased on latest feature-auth
+# Any children of feature-profile are also rebased
+```
+
+**Restacking only the current branch:**
+
+```bash
+repos restack --only
+# Only restacks current branch, children are not affected
 ```
 
 **On conflicts:**
-Rebase is aborted and an error is reported. Resolve conflicts manually.
+When conflicts occur, the restack pauses. Use `repos continue` after resolving conflicts to complete the restack (see below).
 
 **Auto-fallback:**
 When the parent branch no longer exists (worktree removed after merge), `restack` automatically:
@@ -549,6 +566,46 @@ When the parent branch no longer exists (worktree removed after merge), `restack
 1. Detects the parent is gone
 2. Falls back to rebasing on `origin/<default-branch>`
 3. Removes the stale parent relationship from config
+
+---
+
+#### `repos continue`
+
+Continue a restack operation after resolving conflicts.
+
+```bash
+repos continue    # Inside a worktree with a paused rebase
+```
+
+**Prerequisites:**
+
+- Must be run from inside a worktree where `repos restack` encountered conflicts
+- All conflicts must be resolved and staged
+
+**Behavior:**
+
+1. Runs `git rebase --continue` to complete the rebase
+2. Updates the fork point ref to the new parent HEAD
+3. If recursive restacking was in progress, continues restacking child branches
+
+**Use case:**
+When `repos restack` encounters merge conflicts, it pauses and lets you resolve them. After resolving and staging the files, use `repos continue` to complete the operation.
+
+**Example:**
+
+```bash
+cd ~/code/my-project-feature-profile
+repos restack
+# Error: Rebase conflicts in file.ts
+
+# Resolve conflicts in your editor
+git add file.ts
+repos continue
+# Restack completes, fork point is updated
+```
+
+**Why not just `git rebase --continue`?**
+Using `repos continue` ensures the fork point ref is updated correctly. If you use raw `git rebase --continue`, the fork point will be stale and future restacks may not work correctly.
 
 ---
 
@@ -968,6 +1025,36 @@ The `stacks` field inside each repo entry tracks parent-child relationships betw
 - Enables bidirectional lookups: find parent of a child, or find all children of a parent
 - Cleaned up when parent branch is gone or worktree is removed with `repos clean`
 
+### Fork Point Refs
+
+In addition to the config file, repos stores fork point information as git refs in `refs/bases/<branch>`. These refs track the exact commit where a child branch was created from its parent.
+
+**Why fork points matter:**
+When you squash or amend commits on a parent branch, the original commits become orphaned. Without fork point tracking, `git rebase` would try to replay commits that are now part of the parent's history, causing conflicts.
+
+**How it works:**
+
+1. When you run `repos stack child-branch`, repos stores the parent's current HEAD as `refs/bases/child-branch`
+2. When you run `repos restack`, repos uses `git rebase --onto <parent> <fork-point>` to replay only the child's unique commits
+3. After a successful restack, the fork point is updated to the parent's new HEAD
+
+**Inspecting fork points:**
+
+```bash
+# View fork point for a branch
+git show-ref refs/bases/feature-profile
+
+# View the commit
+git log -1 refs/bases/feature-profile
+```
+
+**Fork points are:**
+
+- Created by `repos stack`
+- Updated by `repos restack` and `repos continue`
+- Deleted by `repos clean`, `repos unstack`, and `repos collapse`
+- Stored in the git repository (not the config file), so they survive garbage collection
+
 ### Editing Config Manually
 
 You can edit the config file directly. repos will pick up changes on next command. Make sure to use absolute paths and valid JSON.
@@ -1198,6 +1285,25 @@ git rebase --abort   # Cancel and return to previous state
 # or resolve conflicts manually
 ```
 
+### Restack conflicts
+
+When `repos restack` fails due to conflicts:
+
+```bash
+cd ~/code/my-repo-feature-x
+git status           # See conflicting files
+
+# Option 1: Resolve and continue
+# Edit conflicting files to resolve
+git add <resolved-files>
+repos continue       # Complete the restack (updates fork point)
+
+# Option 2: Abort
+git rebase --abort   # Cancel and return to previous state
+```
+
+**Important:** Always use `repos continue` instead of `git rebase --continue` when restacking. This ensures the fork point ref is updated correctly for future restacks.
+
 ### Update check disabled
 
 If auto-update isn't working:
@@ -1226,7 +1332,8 @@ cat ~/.config/repos/config.json | grep updateBehavior
 | `repos init [--print] [--force]`     | Set up shell for work command               |
 | `repos work <branch> [repo]`         | Create worktree for branch                  |
 | `repos stack <branch>`               | Create stacked worktree from current branch |
-| `repos restack`                      | Rebase current branch on parent branch      |
+| `repos restack [--only]`             | Rebase stacked branch(es) on parent         |
+| `repos continue`                     | Continue restack after resolving conflicts  |
 | `repos unstack`                      | Unstack branch onto default branch          |
 | `repos collapse`                     | Collapse parent into current stacked branch |
 | `repos squash [-m] [-f] [--dry-run]` | Squash commits since base into one commit   |
