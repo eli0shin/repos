@@ -37,13 +37,16 @@ describe('repos cleanup command', () => {
   const testDir = '/tmp/repos-test-cleanup-cmd';
   const sourceDir = '/tmp/repos-test-cleanup-cmd-source';
   const configPath = '/tmp/repos-test-cleanup-cmd-config/config.json';
+  let originalCwd: string;
 
   beforeEach(async () => {
+    originalCwd = process.cwd();
     await mkdir(testDir, { recursive: true });
     await createTestRepo(sourceDir);
   });
 
   afterEach(async () => {
+    process.chdir(originalCwd);
     await rm(testDir, { recursive: true, force: true });
     await rm(sourceDir, { recursive: true, force: true });
     await rm('/tmp/repos-test-cleanup-cmd-config', {
@@ -562,5 +565,158 @@ describe('repos cleanup command', () => {
 
     // Verify worktree was removed (rebase merge detected via git cherry)
     expect(await isGitRepo(worktreePath)).toBe(false);
+  });
+
+  test('only cleans up current repo when run inside a tracked repo', async () => {
+    // Create second source repo
+    const sourceDir2 = '/tmp/repos-test-cleanup-cmd-source2';
+    await createTestRepo(sourceDir2);
+
+    // Clone both as bare
+    const bareDir1 = join(testDir, 'bare1.git');
+    const bareDir2 = join(testDir, 'bare2.git');
+    await cloneBare(sourceDir, bareDir1);
+    await cloneBare(sourceDir2, bareDir2);
+
+    // Create worktrees for both
+    const worktreePath1 = join(testDir, 'bare1.git-feature');
+    const worktreePath2 = join(testDir, 'bare2.git-feature');
+    await runGitCommand(
+      ['worktree', 'add', '-b', 'feature', worktreePath1],
+      bareDir1
+    );
+    await runGitCommand(
+      ['worktree', 'add', '-b', 'feature', worktreePath2],
+      bareDir2
+    );
+
+    // Push both branches
+    await runGitCommand(
+      ['config', 'user.email', 'test@test.com'],
+      worktreePath1
+    );
+    await runGitCommand(['config', 'user.name', 'Test'], worktreePath1);
+    await Bun.write(join(worktreePath1, 'feature.txt'), 'feature');
+    await runGitCommand(['add', '.'], worktreePath1);
+    await runGitCommand(['commit', '-m', 'feature work'], worktreePath1);
+    await runGitCommand(['push', '-u', 'origin', 'feature'], worktreePath1);
+
+    await runGitCommand(
+      ['config', 'user.email', 'test@test.com'],
+      worktreePath2
+    );
+    await runGitCommand(['config', 'user.name', 'Test'], worktreePath2);
+    await Bun.write(join(worktreePath2, 'feature.txt'), 'feature');
+    await runGitCommand(['add', '.'], worktreePath2);
+    await runGitCommand(['commit', '-m', 'feature work'], worktreePath2);
+    await runGitCommand(['push', '-u', 'origin', 'feature'], worktreePath2);
+
+    // Delete remote branches on both
+    await runGitCommand(['branch', '-D', 'feature'], sourceDir);
+    await runGitCommand(['branch', '-D', 'feature'], sourceDir2);
+
+    // Create config
+    const config = {
+      repos: [
+        { name: 'bare1', url: sourceDir, path: bareDir1, bare: true },
+        { name: 'bare2', url: sourceDir2, path: bareDir2, bare: true },
+      ],
+    } satisfies ReposConfig;
+    await writeConfig(configPath, config);
+
+    // Verify worktrees exist before
+    expect(await isGitRepo(worktreePath1)).toBe(true);
+    expect(await isGitRepo(worktreePath2)).toBe(true);
+
+    // Change to bare1's worktree to simulate being inside it
+    process.chdir(worktreePath1);
+
+    // Run cleanup
+    const ctx = { configPath };
+    await cleanupCommand(ctx, { dryRun: false });
+
+    // Verify only bare1's worktree was removed
+    expect(await isGitRepo(worktreePath1)).toBe(false);
+    // bare2's worktree should still exist
+    expect(await isGitRepo(worktreePath2)).toBe(true);
+
+    // Cleanup second source
+    await rm(sourceDir2, { recursive: true, force: true });
+  });
+
+  test('cleans up all repos when run outside any tracked repo', async () => {
+    // Create second source repo
+    const sourceDir2 = '/tmp/repos-test-cleanup-cmd-source2';
+    await createTestRepo(sourceDir2);
+
+    // Clone both as bare
+    const bareDir1 = join(testDir, 'bare1.git');
+    const bareDir2 = join(testDir, 'bare2.git');
+    await cloneBare(sourceDir, bareDir1);
+    await cloneBare(sourceDir2, bareDir2);
+
+    // Create worktrees for both
+    const worktreePath1 = join(testDir, 'bare1.git-feature');
+    const worktreePath2 = join(testDir, 'bare2.git-feature');
+    await runGitCommand(
+      ['worktree', 'add', '-b', 'feature', worktreePath1],
+      bareDir1
+    );
+    await runGitCommand(
+      ['worktree', 'add', '-b', 'feature', worktreePath2],
+      bareDir2
+    );
+
+    // Push both branches
+    await runGitCommand(
+      ['config', 'user.email', 'test@test.com'],
+      worktreePath1
+    );
+    await runGitCommand(['config', 'user.name', 'Test'], worktreePath1);
+    await Bun.write(join(worktreePath1, 'feature.txt'), 'feature');
+    await runGitCommand(['add', '.'], worktreePath1);
+    await runGitCommand(['commit', '-m', 'feature work'], worktreePath1);
+    await runGitCommand(['push', '-u', 'origin', 'feature'], worktreePath1);
+
+    await runGitCommand(
+      ['config', 'user.email', 'test@test.com'],
+      worktreePath2
+    );
+    await runGitCommand(['config', 'user.name', 'Test'], worktreePath2);
+    await Bun.write(join(worktreePath2, 'feature.txt'), 'feature');
+    await runGitCommand(['add', '.'], worktreePath2);
+    await runGitCommand(['commit', '-m', 'feature work'], worktreePath2);
+    await runGitCommand(['push', '-u', 'origin', 'feature'], worktreePath2);
+
+    // Delete remote branches on both
+    await runGitCommand(['branch', '-D', 'feature'], sourceDir);
+    await runGitCommand(['branch', '-D', 'feature'], sourceDir2);
+
+    // Create config
+    const config = {
+      repos: [
+        { name: 'bare1', url: sourceDir, path: bareDir1, bare: true },
+        { name: 'bare2', url: sourceDir2, path: bareDir2, bare: true },
+      ],
+    } satisfies ReposConfig;
+    await writeConfig(configPath, config);
+
+    // Verify worktrees exist before
+    expect(await isGitRepo(worktreePath1)).toBe(true);
+    expect(await isGitRepo(worktreePath2)).toBe(true);
+
+    // Change to /tmp to simulate being outside any tracked repo
+    process.chdir('/tmp');
+
+    // Run cleanup
+    const ctx = { configPath };
+    await cleanupCommand(ctx, { dryRun: false });
+
+    // Verify both worktrees were removed
+    expect(await isGitRepo(worktreePath1)).toBe(false);
+    expect(await isGitRepo(worktreePath2)).toBe(false);
+
+    // Cleanup second source
+    await rm(sourceDir2, { recursive: true, force: true });
   });
 });

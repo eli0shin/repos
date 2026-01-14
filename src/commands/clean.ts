@@ -16,13 +16,14 @@ import { print, printError } from '../output.ts';
 
 type CleanOptions = {
   force: boolean;
+  dryRun: boolean;
 };
 
 export async function cleanCommand(
   ctx: CommandContext,
   branch?: string,
   repoName?: string,
-  options: CleanOptions = { force: false }
+  options: CleanOptions = { force: false, dryRun: false }
 ): Promise<void> {
   const config = await loadConfig(ctx.configPath);
   const repo = await resolveRepo(config, repoName);
@@ -59,22 +60,26 @@ export async function cleanCommand(
     process.exit(1);
   }
 
-  print(`Removing worktree for "${worktree.branch}"...`);
+  const prefix = options.dryRun ? 'Would remove' : 'Removed';
 
-  const result = await removeWorktree(repo.path, worktree.path);
-  if (!result.success) {
-    printError(`Error: ${result.error}`);
-    process.exit(1);
+  if (!options.dryRun) {
+    print(`Removing worktree for "${worktree.branch}"...`);
+
+    const result = await removeWorktree(repo.path, worktree.path);
+    if (!result.success) {
+      printError(`Error: ${result.error}`);
+      process.exit(1);
+    }
+
+    // Clean up stack entries for this branch
+    // 1. Remove entries where this branch is the child (its own parent relationship)
+    // 2. Remove entries where this branch is the parent (children become independent)
+    let updatedRepo = removeStackEntry(repo, worktree.branch);
+    updatedRepo = removeStackEntriesByParent(updatedRepo, worktree.branch);
+    if (updatedRepo !== repo) {
+      await saveStackUpdate(ctx.configPath, config, updatedRepo);
+    }
   }
 
-  // Clean up stack entries for this branch
-  // 1. Remove entries where this branch is the child (its own parent relationship)
-  // 2. Remove entries where this branch is the parent (children become independent)
-  let updatedRepo = removeStackEntry(repo, worktree.branch);
-  updatedRepo = removeStackEntriesByParent(updatedRepo, worktree.branch);
-  if (updatedRepo !== repo) {
-    await saveStackUpdate(ctx.configPath, config, updatedRepo);
-  }
-
-  print(`Removed worktree "${repo.name}-${worktree.branch}"`);
+  print(`${prefix} worktree "${repo.name}-${worktree.branch}"`);
 }
