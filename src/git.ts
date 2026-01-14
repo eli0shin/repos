@@ -764,8 +764,8 @@ export async function getCommitList(
   repoDir: string,
   base: string
 ): Promise<OperationResult<CommitInfo[]>> {
-  const delimiter = '---COMMIT---';
-  const format = `%H${delimiter}%h${delimiter}%s${delimiter}%an${delimiter}%ar`;
+  // Use %x00 (git's null byte format specifier) for delimiter
+  const format = '%H%x00%h%x00%s%x00%an%x00%ar';
 
   const result = await runGitCommand(
     ['log', `${base}..HEAD`, `--format=${format}`],
@@ -784,10 +784,11 @@ export async function getCommitList(
   }
 
   const commits = result.stdout
+    .trim()
     .split('\n')
     .filter(Boolean)
     .map((line) => {
-      const [hash, shortHash, subject, author, date] = line.split(delimiter);
+      const [hash, shortHash, subject, author, date] = line.split('\x00');
       return { hash, shortHash, subject, author, date };
     });
 
@@ -822,8 +823,8 @@ export async function getCommitInfo(
   repoDir: string,
   commitRef: string
 ): Promise<OperationResult<CommitInfo>> {
-  const delimiter = '---FIELD---';
-  const format = `%H${delimiter}%h${delimiter}%s${delimiter}%an${delimiter}%ar`;
+  // Use %x00 (git's null byte format specifier) for delimiter
+  const format = '%H%x00%h%x00%s%x00%an%x00%ar';
 
   const result = await runGitCommand(
     ['log', '-1', `--format=${format}`, commitRef],
@@ -837,7 +838,8 @@ export async function getCommitInfo(
     };
   }
 
-  const [hash, shortHash, subject, author, date] =
-    result.stdout.split(delimiter);
+  const [hash, shortHash, subject, author, date] = result.stdout
+    .trim()
+    .split('\x00');
   return { success: true, data: { hash, shortHash, subject, author, date } };
 }

@@ -17,6 +17,7 @@ import {
   getCommitInfo,
 } from '../git.ts';
 import { print, printError, printStatus } from '../output.ts';
+import type { OperationResult } from '../types.ts';
 
 type SquashOptions = {
   message?: string;
@@ -29,19 +30,17 @@ async function printDryRunOutput(
   mergeBase: string,
   baseRef: string,
   commitCount: number
-): Promise<void> {
+): Promise<OperationResult<void>> {
   // Get list of commits to be squashed
   const commitsResult = await getCommitList(workDir, mergeBase);
   if (!commitsResult.success) {
-    printError(`Error: ${commitsResult.error}`);
-    process.exit(1);
+    return { success: false, error: commitsResult.error };
   }
 
   // Get merge-base commit info
   const baseCommitResult = await getCommitInfo(workDir, mergeBase);
   if (!baseCommitResult.success) {
-    printError(`Error: ${baseCommitResult.error}`);
-    process.exit(1);
+    return { success: false, error: baseCommitResult.error };
   }
 
   // Get branches containing merge-base
@@ -77,6 +76,7 @@ async function printDryRunOutput(
   }
 
   print('');
+  return { success: true, data: undefined };
 }
 
 export async function squashCommand(
@@ -203,7 +203,16 @@ export async function squashCommand(
 
   // Handle dry-run mode
   if (options.dryRun) {
-    await printDryRunOutput(workDir, mergeBase, baseRef, commitCount);
+    const dryRunResult = await printDryRunOutput(
+      workDir,
+      mergeBase,
+      baseRef,
+      commitCount
+    );
+    if (!dryRunResult.success) {
+      printError(`Error: ${dryRunResult.error}`);
+      process.exit(1);
+    }
     return;
   }
 
