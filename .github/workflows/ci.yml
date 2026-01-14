@@ -12,6 +12,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Configure Git
+        run: |
+          git config --global user.email "test@test.com"
+          git config --global user.name "Test"
+
       - uses: oven-sh/setup-bun@v2
 
       - name: Install dependencies
@@ -31,3 +36,5 @@ jobs:
 
       - name: Run tests
         run: bun run test
+        env:
+          GIT_EDITOR: 'true'

@@ -12,8 +12,6 @@ import { mockProcessExit, type MockExit } from './utils.ts';
 async function createTestRepo(dir: string): Promise<void> {
   await mkdir(dir, { recursive: true });
   await runGitCommand(['init', '-b', 'main'], dir);
-  await runGitCommand(['config', 'user.email', 'test@test.com'], dir);
-  await runGitCommand(['config', 'user.name', 'Test'], dir);
   await Bun.write(join(dir, 'test.txt'), 'test');
   await runGitCommand(['add', '.'], dir);
   await runGitCommand(['commit', '-m', 'initial'], dir);
@@ -84,13 +82,6 @@ describe('repos squash command', () => {
     await workCommand(ctx, 'feature', 'bare');
     const worktreePath = join(testDir, 'bare.git-feature');
 
-    // Configure git user
-    await runGitCommand(
-      ['config', 'user.email', 'test@test.com'],
-      worktreePath
-    );
-    await runGitCommand(['config', 'user.name', 'Test'], worktreePath);
-
     // Add 3 commits
     await addCommit(worktreePath, 'file1.txt', 'first commit');
     await addCommit(worktreePath, 'file2.txt', 'second commit');
@@ -130,13 +121,6 @@ describe('repos squash command', () => {
     await workCommand(ctx, 'feature', 'bare');
     const worktreePath = join(testDir, 'bare.git-feature');
 
-    // Configure git user
-    await runGitCommand(
-      ['config', 'user.email', 'test@test.com'],
-      worktreePath
-    );
-    await runGitCommand(['config', 'user.name', 'Test'], worktreePath);
-
     // Add 3 commits
     await addCommit(worktreePath, 'file1.txt', 'First: add user login');
     await addCommit(worktreePath, 'file2.txt', 'Second: add logout');
@@ -172,13 +156,6 @@ describe('repos squash command', () => {
     await workCommand(ctx, 'parent-branch', 'bare');
     const parentWorktreePath = join(testDir, 'bare.git-parent-branch');
 
-    // Configure git user
-    await runGitCommand(
-      ['config', 'user.email', 'test@test.com'],
-      parentWorktreePath
-    );
-    await runGitCommand(['config', 'user.name', 'Test'], parentWorktreePath);
-
     // Add commit to parent
     await addCommit(parentWorktreePath, 'parent.txt', 'parent commit');
 
@@ -188,11 +165,6 @@ describe('repos squash command', () => {
 
     // Step 3: Add commits to child
     const childWorktreePath = join(testDir, 'bare.git-child-branch');
-    await runGitCommand(
-      ['config', 'user.email', 'test@test.com'],
-      childWorktreePath
-    );
-    await runGitCommand(['config', 'user.name', 'Test'], childWorktreePath);
 
     await addCommit(childWorktreePath, 'child1.txt', 'child commit 1');
     await addCommit(childWorktreePath, 'child2.txt', 'child commit 2');
@@ -234,13 +206,6 @@ describe('repos squash command', () => {
     // Create worktree
     await workCommand(ctx, 'feature', 'bare');
     const worktreePath = join(testDir, 'bare.git-feature');
-
-    // Configure git user
-    await runGitCommand(
-      ['config', 'user.email', 'test@test.com'],
-      worktreePath
-    );
-    await runGitCommand(['config', 'user.name', 'Test'], worktreePath);
 
     // Add a commit then make uncommitted changes
     await addCommit(worktreePath, 'file1.txt', 'first commit');
@@ -296,13 +261,6 @@ describe('repos squash command', () => {
     await workCommand(ctx, 'feature', 'bare');
     const worktreePath = join(testDir, 'bare.git-feature');
 
-    // Configure git user
-    await runGitCommand(
-      ['config', 'user.email', 'test@test.com'],
-      worktreePath
-    );
-    await runGitCommand(['config', 'user.name', 'Test'], worktreePath);
-
     // Add only 1 commit
     await addCommit(worktreePath, 'file1.txt', 'only commit');
 
@@ -342,8 +300,6 @@ describe('repos squash command', () => {
 
     // Create branch and checkout
     await runGitCommand(['checkout', '-b', 'feature'], repoDir);
-    await runGitCommand(['config', 'user.email', 'test@test.com'], repoDir);
-    await runGitCommand(['config', 'user.name', 'Test'], repoDir);
 
     // Add 2 commits
     await addCommit(repoDir, 'file1.txt', 'first commit');
@@ -393,13 +349,6 @@ describe('repos squash command', () => {
     // Create worktree
     await workCommand(ctx, 'feature', 'bare');
     const worktreePath = join(testDir, 'bare.git-feature');
-
-    // Configure git user
-    await runGitCommand(
-      ['config', 'user.email', 'test@test.com'],
-      worktreePath
-    );
-    await runGitCommand(['config', 'user.name', 'Test'], worktreePath);
 
     // Add first commit with multi-line message
     await Bun.write(join(worktreePath, 'file1.txt'), 'content');
@@ -494,13 +443,6 @@ describe('repos squash command', () => {
     await workCommand(ctx, 'feature', 'bare');
     const worktreePath = join(testDir, 'bare.git-feature');
 
-    // Configure git user
-    await runGitCommand(
-      ['config', 'user.email', 'test@test.com'],
-      worktreePath
-    );
-    await runGitCommand(['config', 'user.name', 'Test'], worktreePath);
-
     // Add 3 commits
     await addCommit(worktreePath, 'file1.txt', 'first commit');
     await addCommit(worktreePath, 'file2.txt', 'second commit');
@@ -552,13 +494,6 @@ describe('repos squash command', () => {
     await workCommand(ctx, 'feature', 'bare');
     const worktreePath = join(testDir, 'bare.git-feature');
 
-    // Configure git user
-    await runGitCommand(
-      ['config', 'user.email', 'test@test.com'],
-      worktreePath
-    );
-    await runGitCommand(['config', 'user.name', 'Test'], worktreePath);
-
     // Add only 1 commit
     await addCommit(worktreePath, 'file1.txt', 'only commit');
 
@@ -599,11 +534,6 @@ describe('repos squash command', () => {
     // Create parent worktree with commit
     await workCommand(ctx, 'parent-branch', 'bare');
     const parentWorktreePath = join(testDir, 'bare.git-parent-branch');
-    await runGitCommand(
-      ['config', 'user.email', 'test@test.com'],
-      parentWorktreePath
-    );
-    await runGitCommand(['config', 'user.name', 'Test'], parentWorktreePath);
     await addCommit(parentWorktreePath, 'parent.txt', 'parent commit');
 
     // Stack child from parent
@@ -612,11 +542,6 @@ describe('repos squash command', () => {
 
     // Add commits to child
     const childWorktreePath = join(testDir, 'bare.git-child-branch');
-    await runGitCommand(
-      ['config', 'user.email', 'test@test.com'],
-      childWorktreePath
-    );
-    await runGitCommand(['config', 'user.name', 'Test'], childWorktreePath);
     await addCommit(childWorktreePath, 'child1.txt', 'child commit 1');
     await addCommit(childWorktreePath, 'child2.txt', 'child commit 2');
 
@@ -688,13 +613,6 @@ describe('repos squash command', () => {
     await workCommand(ctx, 'feature', 'bare');
     const worktreePath = join(testDir, 'bare.git-feature');
 
-    // Configure git user
-    await runGitCommand(
-      ['config', 'user.email', 'test@test.com'],
-      worktreePath
-    );
-    await runGitCommand(['config', 'user.name', 'Test'], worktreePath);
-
     // Add 2 commits
     await addCommit(worktreePath, 'file1.txt', 'first commit');
     await addCommit(worktreePath, 'file2.txt', 'second commit');
@@ -724,13 +642,6 @@ describe('repos squash command', () => {
     // Create worktree
     await workCommand(ctx, 'feature', 'bare');
     const worktreePath = join(testDir, 'bare.git-feature');
-
-    // Configure git user
-    await runGitCommand(
-      ['config', 'user.email', 'test@test.com'],
-      worktreePath
-    );
-    await runGitCommand(['config', 'user.name', 'Test'], worktreePath);
 
     // Add commit then make uncommitted changes
     await addCommit(worktreePath, 'file1.txt', 'first commit');

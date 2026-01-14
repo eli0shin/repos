@@ -12,6 +12,8 @@ import {
   ensureRefspecConfig,
   findWorktreeByDirectory,
   findWorktreeByBranch,
+  getHeadCommit,
+  setBaseRef,
 } from '../git.ts';
 import { print, printError, printStatus } from '../output.ts';
 
@@ -76,6 +78,27 @@ export async function stackCommand(
   if (!result.success) {
     printError(`Error: ${result.error}`);
     process.exit(1);
+  }
+
+  // Get the current HEAD of the parent branch (before cd'ing to new worktree)
+  // This becomes the fork point for future restack operations
+  const parentHeadResult = await getHeadCommit(currentWorktree.path);
+  if (!parentHeadResult.success) {
+    printError(`Error: ${parentHeadResult.error}`);
+    process.exit(1);
+  }
+
+  // Create the base ref to track the fork point
+  // This ref prevents the fork point commit from being garbage collected
+  // and enables correct `rebase --onto` behavior after parent is rebased/squashed
+  const baseRefResult = await setBaseRef(
+    repo.path,
+    newBranch,
+    parentHeadResult.data
+  );
+  if (!baseRefResult.success) {
+    printError(`Warning: Failed to create base ref: ${baseRefResult.error}`);
+    // Continue anyway - restack will compute fork point as fallback
   }
 
   // Record parent-child relationship in config

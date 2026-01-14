@@ -11,6 +11,7 @@ import {
   listWorktrees,
   findWorktreeByDirectory,
   fetchAndRebase,
+  deleteBaseRef,
 } from '../git.ts';
 import { print, printError } from '../output.ts';
 
@@ -72,6 +73,9 @@ export async function unstackCommand(ctx: CommandContext): Promise<void> {
   // Remove the stack relationship
   const updatedRepo = removeStackEntry(repo, currentBranch);
   await saveStackUpdate(ctx.configPath, config, updatedRepo);
+
+  // Delete base ref for fork point tracking (no longer stacked)
+  await deleteBaseRef(repo.path, currentBranch);
 
   print(`Unstacked "${currentBranch}" - now independent on "${defaultBranch}"`);
 }

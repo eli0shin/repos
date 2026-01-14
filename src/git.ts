@@ -499,7 +499,7 @@ export async function rebaseOnRef(
           'To resolve:\n' +
           '  1. Fix conflicts in the affected files\n' +
           '  2. Stage resolved files: git add <file>\n' +
-          '  3. Continue rebase: git rebase --continue\n\n' +
+          '  3. Continue rebase: repos continue\n\n' +
           'To abort: git rebase --abort',
       };
     }
@@ -842,4 +842,259 @@ export async function getCommitInfo(
     .trim()
     .split('\x00');
   return { success: true, data: { hash, shortHash, subject, author, date } };
+}
+
+// Base ref helpers for stacked branch fork point tracking
+// These refs store the commit hash of the parent branch at the time of stacking
+// to enable correct rebase --onto behavior after parent is rebased/squashed
+
+export async function getBaseRef(
+  repoDir: string,
+  branch: string
+): Promise<OperationResult<string>> {
+  const result = await runGitCommand(
+    ['rev-parse', `refs/bases/${branch}`],
+    repoDir
+  );
+
+  if (result.exitCode !== 0) {
+    return {
+      success: false,
+      error: `No base ref found for branch "${branch}"`,
+    };
+  }
+
+  return { success: true, data: result.stdout.trim() };
+}
+
+export async function setBaseRef(
+  repoDir: string,
+  branch: string,
+  commit: string
+): Promise<OperationResult> {
+  const result = await runGitCommand(
+    ['update-ref', `refs/bases/${branch}`, commit],
+    repoDir
+  );
+
+  if (result.exitCode !== 0) {
+    return {
+      success: false,
+      error: result.stderr || 'Failed to set base ref',
+    };
+  }
+
+  return { success: true, data: undefined };
+}
+
+export async function deleteBaseRef(
+  repoDir: string,
+  branch: string
+): Promise<OperationResult> {
+  const result = await runGitCommand(
+    ['update-ref', '-d', `refs/bases/${branch}`],
+    repoDir
+  );
+
+  // Ignore errors if ref doesn't exist
+  if (result.exitCode !== 0 && !result.stderr.includes('not found')) {
+    return {
+      success: false,
+      error: result.stderr || 'Failed to delete base ref',
+    };
+  }
+
+  return { success: true, data: undefined };
+}
+
+export async function rebaseOnto(
+  repoDir: string,
+  onto: string,
+  forkPoint: string
+): Promise<OperationResult> {
+  const result = await runGitCommand(
+    ['rebase', '--onto', onto, forkPoint],
+    repoDir
+  );
+
+  if (result.exitCode !== 0) {
+    if (
+      result.stderr.includes('CONFLICT') ||
+      result.stdout.includes('CONFLICT')
+    ) {
+      return {
+        success: false,
+        error:
+          'Rebase paused due to conflicts.\n\n' +
+          'To resolve:\n' +
+          '  1. Fix conflicts in the affected files\n' +
+          '  2. Stage resolved files: git add <file>\n' +
+          '  3. Continue rebase: repos continue\n\n' +
+          'To abort: git rebase --abort',
+      };
+    }
+    return { success: false, error: result.stderr || 'Failed to rebase' };
+  }
+
+  return { success: true, data: undefined };
+}
+
+export async function getHeadCommit(
+  repoDir: string
+): Promise<OperationResult<string>> {
+  const result = await runGitCommand(['rev-parse', 'HEAD'], repoDir);
+
+  if (result.exitCode !== 0) {
+    return {
+      success: false,
+      error: result.stderr || 'Failed to get HEAD commit',
+    };
+  }
+
+  return { success: true, data: result.stdout.trim() };
+}
+
+export async function isRebaseInProgress(repoDir: string): Promise<boolean> {
+  // Check for rebase state by looking for REBASE_HEAD
+  const checkExists = await runGitCommand(
+    ['rev-parse', '--verify', '--quiet', 'REBASE_HEAD'],
+    repoDir
+  );
+
+  return checkExists.exitCode === 0;
+}
+
+/**
+ * Get the branch name being rebased (during an active rebase).
+ * During a rebase, HEAD is detached so git worktree list doesn't show the branch.
+ * We read the branch name from the rebase state file.
+ */
+export async function getRebaseBranch(
+  repoDir: string
+): Promise<OperationResult<string>> {
+  const gitDir = await getGitDir(repoDir);
+  if (!gitDir.success) {
+    return { success: false, error: gitDir.error };
+  }
+
+  // Try rebase-merge first (used by default rebase and interactive rebase)
+  const mergeBranch = await readBranchFromFile(
+    join(gitDir.data, 'rebase-merge', 'head-name')
+  );
+  if (mergeBranch) {
+    return { success: true, data: mergeBranch };
+  }
+
+  // Try rebase-apply (used by git rebase --apply)
+  const applyBranch = await readBranchFromFile(
+    join(gitDir.data, 'rebase-apply', 'head-name')
+  );
+  if (applyBranch) {
+    return { success: true, data: applyBranch };
+  }
+
+  return {
+    success: false,
+    error: 'Could not determine branch from rebase state',
+  };
+}
+
+async function readBranchFromFile(path: string): Promise<string | undefined> {
+  try {
+    const content = await Bun.file(path).text();
+    const branch = content.trim().replace(/^refs\/heads\//, '');
+    return branch || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+async function getGitDir(repoDir: string): Promise<OperationResult<string>> {
+  const result = await runGitCommand(['rev-parse', '--git-dir'], repoDir);
+  if (result.exitCode !== 0) {
+    return { success: false, error: 'Not a git repository' };
+  }
+  const gitDir = result.stdout.trim();
+  // If relative, make absolute
+  if (!gitDir.startsWith('/')) {
+    return { success: true, data: join(repoDir, gitDir) };
+  }
+  return { success: true, data: gitDir };
+}
+
+export async function rebaseContinue(
+  repoDir: string
+): Promise<OperationResult> {
+  const result = await runGitCommand(['rebase', '--continue'], repoDir);
+
+  if (result.exitCode !== 0) {
+    if (
+      result.stderr.includes('CONFLICT') ||
+      result.stdout.includes('CONFLICT')
+    ) {
+      return {
+        success: false,
+        error:
+          'Rebase paused due to conflicts.\n\n' +
+          'To resolve:\n' +
+          '  1. Fix conflicts in the affected files\n' +
+          '  2. Stage resolved files: git add <file>\n' +
+          '  3. Continue rebase: repos continue\n\n' +
+          'To abort: git rebase --abort',
+      };
+    }
+    return {
+      success: false,
+      error: result.stderr || 'Failed to continue rebase',
+    };
+  }
+
+  return { success: true, data: undefined };
+}
+
+export async function computeForkPoint(
+  repoDir: string,
+  childBranch: string,
+  parentBranch: string
+): Promise<OperationResult<string>> {
+  // Get commits in child not reachable from parent
+  // This only works correctly BEFORE parent is rebased
+  const log = await runGitCommand(
+    ['log', `${parentBranch}..${childBranch}`, '--format=%H'],
+    repoDir
+  );
+
+  if (log.exitCode !== 0) {
+    return {
+      success: false,
+      error: log.stderr || 'Failed to compute fork point',
+    };
+  }
+
+  const commits = log.stdout.trim().split('\n').filter(Boolean);
+
+  if (commits.length === 0) {
+    // No unique commits, fork point is the parent branch
+    const parentHead = await runGitCommand(
+      ['rev-parse', parentBranch],
+      repoDir
+    );
+    if (parentHead.exitCode !== 0) {
+      return { success: false, error: 'Failed to resolve parent branch' };
+    }
+    return { success: true, data: parentHead.stdout.trim() };
+  }
+
+  // The fork point is the parent of the oldest unique commit
+  const oldest = commits[commits.length - 1];
+  const forkPoint = await runGitCommand(['rev-parse', `${oldest}^`], repoDir);
+
+  if (forkPoint.exitCode !== 0) {
+    return {
+      success: false,
+      error: forkPoint.stderr || 'Failed to get fork point parent',
+    };
+  }
+
+  return { success: true, data: forkPoint.stdout.trim() };
 }

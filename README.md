@@ -30,7 +30,8 @@ curl -fsSL https://raw.githubusercontent.com/eli0shin/repos/main/install.sh | ba
 | `repos update`                       | Update repos CLI to latest version                   |
 | `repos work <branch> [repo]`         | Create a worktree for a branch                       |
 | `repos stack <branch>`               | Create a stacked worktree from current branch        |
-| `repos restack`                      | Rebase current branch on its parent branch           |
+| `repos restack [--only]`             | Rebase stacked branch(es) on parent (recursive)      |
+| `repos continue`                     | Continue restack after resolving conflicts           |
 | `repos unstack`                      | Rebase onto default branch and remove stack relation |
 | `repos collapse`                     | Collapse parent branch into current stacked branch   |
 | `repos squash [-m] [-f] [--dry-run]` | Squash commits since base into single commit         |

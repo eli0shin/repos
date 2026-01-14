@@ -59,10 +59,12 @@ Commands:
   work <branch> [repo-name]             Create a worktree for a branch
   stack <branch>                        Create a stacked worktree from current
                                         branch
-  restack                               Rebase current branch on its parent
-                                        branch
+  restack [options]                     Rebase current branch and children on
+                                        parent branch
   unstack                               Rebase current branch on default branch
                                         and remove stack relationship
+  continue                              Continue a paused rebase and update fork
+                                        point tracking
   collapse                              Collapse parent branch into current
                                         stacked branch
   squash [options]                      Squash commits since base branch into a

@@ -10,8 +10,6 @@ import type { ReposConfig } from '../src/types.ts';
 async function createTestRepo(dir: string): Promise<void> {
   await mkdir(dir, { recursive: true });
   await runGitCommand(['init'], dir);
-  await runGitCommand(['config', 'user.email', 'test@test.com'], dir);
-  await runGitCommand(['config', 'user.name', 'Test'], dir);
   await Bun.write(join(dir, 'test.txt'), 'test');
   await runGitCommand(['add', '.'], dir);
   await runGitCommand(['commit', '-m', 'initial'], dir);
@@ -68,11 +66,6 @@ describe('repos cleanup command', () => {
     );
 
     // Push the branch to origin so it has upstream
-    await runGitCommand(
-      ['config', 'user.email', 'test@test.com'],
-      worktreePath
-    );
-    await runGitCommand(['config', 'user.name', 'Test'], worktreePath);
     await Bun.write(join(worktreePath, 'feature.txt'), 'feature');
     await runGitCommand(['add', '.'], worktreePath);
     await runGitCommand(['commit', '-m', 'feature work'], worktreePath);
@@ -111,11 +104,6 @@ describe('repos cleanup command', () => {
     );
 
     // Make a commit on feature
-    await runGitCommand(
-      ['config', 'user.email', 'test@test.com'],
-      worktreePath
-    );
-    await runGitCommand(['config', 'user.name', 'Test'], worktreePath);
     await Bun.write(join(worktreePath, 'feature.txt'), 'feature');
     await runGitCommand(['add', '.'], worktreePath);
     await runGitCommand(['commit', '-m', 'feature work'], worktreePath);
@@ -159,11 +147,6 @@ describe('repos cleanup command', () => {
     );
 
     // Push the branch
-    await runGitCommand(
-      ['config', 'user.email', 'test@test.com'],
-      worktreePath
-    );
-    await runGitCommand(['config', 'user.name', 'Test'], worktreePath);
     await Bun.write(join(worktreePath, 'feature.txt'), 'feature');
     await runGitCommand(['add', '.'], worktreePath);
     await runGitCommand(['commit', '-m', 'feature work'], worktreePath);
@@ -239,11 +222,6 @@ describe('repos cleanup command', () => {
     );
 
     // Push the branch
-    await runGitCommand(
-      ['config', 'user.email', 'test@test.com'],
-      worktreePath
-    );
-    await runGitCommand(['config', 'user.name', 'Test'], worktreePath);
     await Bun.write(join(worktreePath, 'feature.txt'), 'feature');
     await runGitCommand(['add', '.'], worktreePath);
     await runGitCommand(['commit', '-m', 'feature work'], worktreePath);
@@ -299,21 +277,11 @@ describe('repos cleanup command', () => {
     );
 
     // Push both branches
-    await runGitCommand(
-      ['config', 'user.email', 'test@test.com'],
-      worktreePath1
-    );
-    await runGitCommand(['config', 'user.name', 'Test'], worktreePath1);
     await Bun.write(join(worktreePath1, 'feature.txt'), 'feature');
     await runGitCommand(['add', '.'], worktreePath1);
     await runGitCommand(['commit', '-m', 'feature work'], worktreePath1);
     await runGitCommand(['push', '-u', 'origin', 'feature'], worktreePath1);
 
-    await runGitCommand(
-      ['config', 'user.email', 'test@test.com'],
-      worktreePath2
-    );
-    await runGitCommand(['config', 'user.name', 'Test'], worktreePath2);
     await Bun.write(join(worktreePath2, 'feature.txt'), 'feature');
     await runGitCommand(['add', '.'], worktreePath2);
     await runGitCommand(['commit', '-m', 'feature work'], worktreePath2);
@@ -361,11 +329,6 @@ describe('repos cleanup command', () => {
     );
 
     // Make a commit but don't push
-    await runGitCommand(
-      ['config', 'user.email', 'test@test.com'],
-      worktreePath
-    );
-    await runGitCommand(['config', 'user.name', 'Test'], worktreePath);
     await Bun.write(join(worktreePath, 'feature.txt'), 'feature');
     await runGitCommand(['add', '.'], worktreePath);
     await runGitCommand(['commit', '-m', 'feature work'], worktreePath);
@@ -426,11 +389,6 @@ describe('repos cleanup command', () => {
     );
 
     // Push the branch (but don't delete it)
-    await runGitCommand(
-      ['config', 'user.email', 'test@test.com'],
-      worktreePath
-    );
-    await runGitCommand(['config', 'user.name', 'Test'], worktreePath);
     await Bun.write(join(worktreePath, 'feature.txt'), 'feature');
     await runGitCommand(['add', '.'], worktreePath);
     await runGitCommand(['commit', '-m', 'feature work'], worktreePath);
@@ -465,11 +423,6 @@ describe('repos cleanup command', () => {
     );
 
     // Make a commit on feature
-    await runGitCommand(
-      ['config', 'user.email', 'test@test.com'],
-      worktreePath
-    );
-    await runGitCommand(['config', 'user.name', 'Test'], worktreePath);
     await Bun.write(join(worktreePath, 'feature.txt'), 'feature content');
     await runGitCommand(['add', '.'], worktreePath);
     await runGitCommand(['commit', '-m', 'feature work'], worktreePath);
@@ -518,11 +471,6 @@ describe('repos cleanup command', () => {
     );
 
     // Make commits on feature
-    await runGitCommand(
-      ['config', 'user.email', 'test@test.com'],
-      worktreePath
-    );
-    await runGitCommand(['config', 'user.name', 'Test'], worktreePath);
     await Bun.write(join(worktreePath, 'feature1.txt'), 'feature 1');
     await runGitCommand(['add', '.'], worktreePath);
     await runGitCommand(['commit', '-m', 'feature commit 1'], worktreePath);
@@ -591,21 +539,11 @@ describe('repos cleanup command', () => {
     );
 
     // Push both branches
-    await runGitCommand(
-      ['config', 'user.email', 'test@test.com'],
-      worktreePath1
-    );
-    await runGitCommand(['config', 'user.name', 'Test'], worktreePath1);
     await Bun.write(join(worktreePath1, 'feature.txt'), 'feature');
     await runGitCommand(['add', '.'], worktreePath1);
     await runGitCommand(['commit', '-m', 'feature work'], worktreePath1);
     await runGitCommand(['push', '-u', 'origin', 'feature'], worktreePath1);
 
-    await runGitCommand(
-      ['config', 'user.email', 'test@test.com'],
-      worktreePath2
-    );
-    await runGitCommand(['config', 'user.name', 'Test'], worktreePath2);
     await Bun.write(join(worktreePath2, 'feature.txt'), 'feature');
     await runGitCommand(['add', '.'], worktreePath2);
     await runGitCommand(['commit', '-m', 'feature work'], worktreePath2);
@@ -668,21 +606,11 @@ describe('repos cleanup command', () => {
     );
 
     // Push both branches
-    await runGitCommand(
-      ['config', 'user.email', 'test@test.com'],
-      worktreePath1
-    );
-    await runGitCommand(['config', 'user.name', 'Test'], worktreePath1);
     await Bun.write(join(worktreePath1, 'feature.txt'), 'feature');
     await runGitCommand(['add', '.'], worktreePath1);
     await runGitCommand(['commit', '-m', 'feature work'], worktreePath1);
     await runGitCommand(['push', '-u', 'origin', 'feature'], worktreePath1);
 
-    await runGitCommand(
-      ['config', 'user.email', 'test@test.com'],
-      worktreePath2
-    );
-    await runGitCommand(['config', 'user.name', 'Test'], worktreePath2);
     await Bun.write(join(worktreePath2, 'feature.txt'), 'feature');
     await runGitCommand(['add', '.'], worktreePath2);
     await runGitCommand(['commit', '-m', 'feature work'], worktreePath2);

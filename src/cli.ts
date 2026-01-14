@@ -19,6 +19,7 @@ import { workCommand } from './commands/work.ts';
 import { stackCommand } from './commands/stack.ts';
 import { restackCommand } from './commands/restack.ts';
 import { unstackCommand } from './commands/unstack.ts';
+import { continueCommand } from './commands/continue.ts';
 import { collapseCommand } from './commands/collapse.ts';
 import { squashCommand } from './commands/squash.ts';
 import { cleanCommand } from './commands/clean.ts';
@@ -155,9 +156,10 @@ program
 
 program
   .command('restack')
-  .description('Rebase current branch on its parent branch')
-  .action(async () => {
-    await restackCommand(getCommandContext());
+  .description('Rebase current branch and children on parent branch')
+  .option('--only', 'Only restack current branch, skip children')
+  .action(async (options) => {
+    await restackCommand(getCommandContext(), { only: options.only ?? false });
   });
 
 program
@@ -167,6 +169,13 @@ program
   )
   .action(async () => {
     await unstackCommand(getCommandContext());
+  });
+
+program
+  .command('continue')
+  .description('Continue a paused rebase and update fork point tracking')
+  .action(async () => {
+    await continueCommand(getCommandContext());
   });
 
 program

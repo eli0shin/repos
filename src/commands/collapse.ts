@@ -16,6 +16,9 @@ import {
   findWorktreeByDirectory,
   findWorktreeByBranch,
   fetchAndRebase,
+  deleteBaseRef,
+  setBaseRef,
+  getHeadCommit,
 } from '../git.ts';
 import { print, printError } from '../output.ts';
 
@@ -133,6 +136,29 @@ export async function collapseCommand(ctx: CommandContext): Promise<void> {
   updatedRepo = removeStackEntry(updatedRepo, parentBranch);
 
   await saveStackUpdate(ctx.configPath, config, updatedRepo);
+
+  // Update base refs for fork point tracking
+  // Delete the old base ref for current branch (it referenced parent)
+  await deleteBaseRef(repo.path, currentBranch);
+
+  // Delete base ref for parent branch (parent is being removed)
+  await deleteBaseRef(repo.path, parentBranch);
+
+  // If there's a grandparent, create a new base ref for current branch
+  if (grandparentBranch) {
+    const grandparentWorktree = findWorktreeByBranch(
+      worktreesResult.data,
+      grandparentBranch
+    );
+    if (grandparentWorktree) {
+      const grandparentHeadResult = await getHeadCommit(
+        grandparentWorktree.path
+      );
+      if (grandparentHeadResult.success) {
+        await setBaseRef(repo.path, currentBranch, grandparentHeadResult.data);
+      }
+    }
+  }
 
   // Remove parent worktree
   print(`Removing parent worktree "${parentBranch}"...`);
