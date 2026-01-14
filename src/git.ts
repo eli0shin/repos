@@ -751,3 +751,93 @@ export async function getMergeBase(
 
   return { success: true, data: result.stdout.trim() };
 }
+
+export type CommitInfo = {
+  hash: string;
+  shortHash: string;
+  subject: string;
+  author: string;
+  date: string;
+};
+
+export async function getCommitList(
+  repoDir: string,
+  base: string
+): Promise<OperationResult<CommitInfo[]>> {
+  const delimiter = '---COMMIT---';
+  const format = `%H${delimiter}%h${delimiter}%s${delimiter}%an${delimiter}%ar`;
+
+  const result = await runGitCommand(
+    ['log', '--reverse', `${base}..HEAD`, `--format=${format}`],
+    repoDir
+  );
+
+  if (result.exitCode !== 0) {
+    return {
+      success: false,
+      error: result.stderr || 'Failed to get commit list',
+    };
+  }
+
+  if (!result.stdout) {
+    return { success: true, data: [] };
+  }
+
+  const commits = result.stdout
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => {
+      const [hash, shortHash, subject, author, date] = line.split(delimiter);
+      return { hash, shortHash, subject, author, date };
+    });
+
+  return { success: true, data: commits };
+}
+
+export async function getBranchesContaining(
+  repoDir: string,
+  commitRef: string
+): Promise<OperationResult<string[]>> {
+  const result = await runGitCommand(
+    ['branch', '--contains', commitRef, '--format=%(refname:short)'],
+    repoDir
+  );
+
+  if (result.exitCode !== 0) {
+    return {
+      success: false,
+      error: result.stderr || 'Failed to get branches containing commit',
+    };
+  }
+
+  const branches = result.stdout
+    .split('\n')
+    .map((b) => b.trim())
+    .filter(Boolean);
+
+  return { success: true, data: branches };
+}
+
+export async function getCommitInfo(
+  repoDir: string,
+  commitRef: string
+): Promise<OperationResult<CommitInfo>> {
+  const delimiter = '---FIELD---';
+  const format = `%H${delimiter}%h${delimiter}%s${delimiter}%an${delimiter}%ar`;
+
+  const result = await runGitCommand(
+    ['log', '-1', `--format=${format}`, commitRef],
+    repoDir
+  );
+
+  if (result.exitCode !== 0) {
+    return {
+      success: false,
+      error: result.stderr || 'Failed to get commit info',
+    };
+  }
+
+  const [hash, shortHash, subject, author, date] =
+    result.stdout.split(delimiter);
+  return { success: true, data: { hash, shortHash, subject, author, date } };
+}

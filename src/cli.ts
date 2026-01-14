@@ -181,10 +181,15 @@ program
   .description('Squash commits since base branch into a single commit')
   .option('-m, --message <message>', 'Commit message for squashed commit')
   .option('-f, --first', 'Use first commit message as squash message')
+  .option(
+    '--dry-run',
+    'Preview commits to be squashed without performing squash'
+  )
   .action(async (options) => {
     await squashCommand(getCommandContext(), {
       message: options.message,
       first: options.first ?? false,
+      dryRun: options.dryRun ?? false,
     });
   });
 

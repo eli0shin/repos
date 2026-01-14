@@ -476,4 +476,270 @@ describe('repos squash command', () => {
     );
     expect(mockExit).toHaveBeenCalledWith(1);
   });
+
+  test('--dry-run shows commits without squashing', async () => {
+    // Clone as bare
+    const bareDir = join(testDir, 'bare.git');
+    await cloneBare(sourceDir, bareDir);
+
+    // Create config
+    const config = {
+      repos: [{ name: 'bare', url: sourceDir, path: bareDir, bare: true }],
+    } satisfies ReposConfig;
+    await writeConfig(configPath, config);
+
+    const ctx = { configPath };
+
+    // Create worktree
+    await workCommand(ctx, 'feature', 'bare');
+    const worktreePath = join(testDir, 'bare.git-feature');
+
+    // Configure git user
+    await runGitCommand(
+      ['config', 'user.email', 'test@test.com'],
+      worktreePath
+    );
+    await runGitCommand(['config', 'user.name', 'Test'], worktreePath);
+
+    // Add 3 commits
+    await addCommit(worktreePath, 'file1.txt', 'first commit');
+    await addCommit(worktreePath, 'file2.txt', 'second commit');
+    await addCommit(worktreePath, 'file3.txt', 'third commit');
+
+    // Capture stdout
+    const output: string[] = [];
+    const originalWrite = process.stdout.write.bind(process.stdout);
+    process.stdout.write = (chunk: string) => {
+      output.push(chunk);
+      return true;
+    };
+
+    // Run dry-run
+    process.chdir(worktreePath);
+    await squashCommand(ctx, { dryRun: true });
+    process.stdout.write = originalWrite;
+
+    const outputStr = output.join('');
+
+    // Verify output contains expected sections
+    expect(outputStr).toContain('Dry run: 3 commit(s) would be squashed');
+    expect(outputStr).toContain('Commits to be squashed:');
+    expect(outputStr).toContain('first commit');
+    expect(outputStr).toContain('second commit');
+    expect(outputStr).toContain('third commit');
+    expect(outputStr).toContain('Merge base');
+    expect(outputStr).toContain('Branches containing merge-base:');
+
+    // Verify commits are NOT squashed
+    const countAfter = await getCommitCount(worktreePath, 'origin/main');
+    expect(countAfter).toBe(3);
+  });
+
+  test('--dry-run with single commit shows nothing to squash', async () => {
+    // Clone as bare
+    const bareDir = join(testDir, 'bare.git');
+    await cloneBare(sourceDir, bareDir);
+
+    // Create config
+    const config = {
+      repos: [{ name: 'bare', url: sourceDir, path: bareDir, bare: true }],
+    } satisfies ReposConfig;
+    await writeConfig(configPath, config);
+
+    const ctx = { configPath };
+
+    // Create worktree
+    await workCommand(ctx, 'feature', 'bare');
+    const worktreePath = join(testDir, 'bare.git-feature');
+
+    // Configure git user
+    await runGitCommand(
+      ['config', 'user.email', 'test@test.com'],
+      worktreePath
+    );
+    await runGitCommand(['config', 'user.name', 'Test'], worktreePath);
+
+    // Add only 1 commit
+    await addCommit(worktreePath, 'file1.txt', 'only commit');
+
+    // Capture stdout
+    const output: string[] = [];
+    const originalWrite = process.stdout.write.bind(process.stdout);
+    process.stdout.write = (chunk: string) => {
+      output.push(chunk);
+      return true;
+    };
+
+    // Run dry-run
+    process.chdir(worktreePath);
+    await squashCommand(ctx, { dryRun: true });
+    process.stdout.write = originalWrite;
+
+    // Should exit early with "nothing to squash" message
+    expect(output.join('')).toContain('1 commit');
+
+    // Verify commit is unchanged
+    const countAfter = await getCommitCount(worktreePath, 'origin/main');
+    expect(countAfter).toBe(1);
+  });
+
+  test('--dry-run on stacked branch shows parent as base', async () => {
+    // Clone as bare
+    const bareDir = join(testDir, 'bare.git');
+    await cloneBare(sourceDir, bareDir);
+
+    // Create config
+    const config = {
+      repos: [{ name: 'bare', url: sourceDir, path: bareDir, bare: true }],
+    } satisfies ReposConfig;
+    await writeConfig(configPath, config);
+
+    const ctx = { configPath };
+
+    // Create parent worktree with commit
+    await workCommand(ctx, 'parent-branch', 'bare');
+    const parentWorktreePath = join(testDir, 'bare.git-parent-branch');
+    await runGitCommand(
+      ['config', 'user.email', 'test@test.com'],
+      parentWorktreePath
+    );
+    await runGitCommand(['config', 'user.name', 'Test'], parentWorktreePath);
+    await addCommit(parentWorktreePath, 'parent.txt', 'parent commit');
+
+    // Stack child from parent
+    process.chdir(parentWorktreePath);
+    await stackCommand(ctx, 'child-branch');
+
+    // Add commits to child
+    const childWorktreePath = join(testDir, 'bare.git-child-branch');
+    await runGitCommand(
+      ['config', 'user.email', 'test@test.com'],
+      childWorktreePath
+    );
+    await runGitCommand(['config', 'user.name', 'Test'], childWorktreePath);
+    await addCommit(childWorktreePath, 'child1.txt', 'child commit 1');
+    await addCommit(childWorktreePath, 'child2.txt', 'child commit 2');
+
+    // Capture stdout
+    const output: string[] = [];
+    const originalWrite = process.stdout.write.bind(process.stdout);
+    process.stdout.write = (chunk: string) => {
+      output.push(chunk);
+      return true;
+    };
+
+    // Run dry-run
+    process.chdir(childWorktreePath);
+    await squashCommand(ctx, { dryRun: true });
+    process.stdout.write = originalWrite;
+
+    const outputStr = output.join('');
+
+    // Verify output shows parent branch as base
+    expect(outputStr).toContain('Dry run: 2 commit(s) would be squashed');
+    expect(outputStr).toContain('child commit 1');
+    expect(outputStr).toContain('child commit 2');
+    expect(outputStr).toContain('Base ref: parent-branch');
+
+    // Verify commits are NOT squashed
+    const countAfter = await getCommitCount(childWorktreePath, 'parent-branch');
+    expect(countAfter).toBe(2);
+  });
+
+  test('--dry-run with no commits shows error', async () => {
+    // Clone as bare
+    const bareDir = join(testDir, 'bare.git');
+    await cloneBare(sourceDir, bareDir);
+
+    // Create config
+    const config = {
+      repos: [{ name: 'bare', url: sourceDir, path: bareDir, bare: true }],
+    } satisfies ReposConfig;
+    await writeConfig(configPath, config);
+
+    const ctx = { configPath };
+
+    // Create worktree (no extra commits)
+    await workCommand(ctx, 'feature', 'bare');
+    const worktreePath = join(testDir, 'bare.git-feature');
+
+    // Attempt dry-run with no commits
+    process.chdir(worktreePath);
+    await expect(squashCommand(ctx, { dryRun: true })).rejects.toThrow(
+      'process.exit(1)'
+    );
+    expect(mockExit).toHaveBeenCalledWith(1);
+  });
+
+  test('--dry-run works without -m or -f flags', async () => {
+    // Clone as bare
+    const bareDir = join(testDir, 'bare.git');
+    await cloneBare(sourceDir, bareDir);
+
+    // Create config
+    const config = {
+      repos: [{ name: 'bare', url: sourceDir, path: bareDir, bare: true }],
+    } satisfies ReposConfig;
+    await writeConfig(configPath, config);
+
+    const ctx = { configPath };
+
+    // Create worktree
+    await workCommand(ctx, 'feature', 'bare');
+    const worktreePath = join(testDir, 'bare.git-feature');
+
+    // Configure git user
+    await runGitCommand(
+      ['config', 'user.email', 'test@test.com'],
+      worktreePath
+    );
+    await runGitCommand(['config', 'user.name', 'Test'], worktreePath);
+
+    // Add 2 commits
+    await addCommit(worktreePath, 'file1.txt', 'first commit');
+    await addCommit(worktreePath, 'file2.txt', 'second commit');
+
+    // Should work without -m or -f
+    process.chdir(worktreePath);
+    await squashCommand(ctx, { dryRun: true });
+
+    // Verify commits unchanged
+    const countAfter = await getCommitCount(worktreePath, 'origin/main');
+    expect(countAfter).toBe(2);
+  });
+
+  test('--dry-run fails with uncommitted changes', async () => {
+    // Clone as bare
+    const bareDir = join(testDir, 'bare.git');
+    await cloneBare(sourceDir, bareDir);
+
+    // Create config
+    const config = {
+      repos: [{ name: 'bare', url: sourceDir, path: bareDir, bare: true }],
+    } satisfies ReposConfig;
+    await writeConfig(configPath, config);
+
+    const ctx = { configPath };
+
+    // Create worktree
+    await workCommand(ctx, 'feature', 'bare');
+    const worktreePath = join(testDir, 'bare.git-feature');
+
+    // Configure git user
+    await runGitCommand(
+      ['config', 'user.email', 'test@test.com'],
+      worktreePath
+    );
+    await runGitCommand(['config', 'user.name', 'Test'], worktreePath);
+
+    // Add commit then make uncommitted changes
+    await addCommit(worktreePath, 'file1.txt', 'first commit');
+    await Bun.write(join(worktreePath, 'dirty.txt'), 'uncommitted');
+
+    process.chdir(worktreePath);
+    await expect(squashCommand(ctx, { dryRun: true })).rejects.toThrow(
+      'process.exit(1)'
+    );
+    expect(mockExit).toHaveBeenCalledWith(1);
+  });
 });
