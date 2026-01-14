@@ -1,5 +1,15 @@
 # repos
 
+## 0.9.0
+
+### Minor Changes
+
+- [#35](https://github.com/eli0shin/repos/pull/35) [`c9e063a`](https://github.com/eli0shin/repos/commit/c9e063ac7816883afd3e91538335e7d2e2ae9691) Thanks [@eli0shin](https://github.com/eli0shin)! - Add `--dry-run` flag to `repos squash` command to preview commits that would be squashed without performing the operation. Shows commits to be squashed, the merge-base boundary commit, and all branches containing the merge-base.
+
+### Patch Changes
+
+- [#36](https://github.com/eli0shin/repos/pull/36) [`37e7e14`](https://github.com/eli0shin/repos/commit/37e7e14e142c683ba51324065539acb8833c4239) Thanks [@eli0shin](https://github.com/eli0shin)! - Fix cleanup command to scope to current repo when run inside a tracked repo instead of cleaning all repos
+
 ## 0.8.0
 
 ### Minor Changes
