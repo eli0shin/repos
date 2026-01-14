@@ -23,6 +23,8 @@ jobs:
 
       - name: Test
         run: bun run test
+        env:
+          GIT_EDITOR: 'true'
 
       - name: Create Release Pull Request or Publish
         id: changesets

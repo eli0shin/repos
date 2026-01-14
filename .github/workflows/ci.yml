@@ -31,3 +31,5 @@ jobs:
 
       - name: Run tests
         run: bun run test
+        env:
+          GIT_EDITOR: 'true'
