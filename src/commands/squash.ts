@@ -12,13 +12,72 @@ import {
   getMergeBase,
   fetchOrigin,
   getCurrentBranch,
+  getCommitList,
+  getBranchesContaining,
+  getCommitInfo,
 } from '../git.ts';
 import { print, printError, printStatus } from '../output.ts';
+import type { OperationResult } from '../types.ts';
 
 type SquashOptions = {
   message?: string;
   first?: boolean;
+  dryRun?: boolean;
 };
+
+async function printDryRunOutput(
+  workDir: string,
+  mergeBase: string,
+  baseRef: string,
+  commitCount: number
+): Promise<OperationResult<void>> {
+  // Get list of commits to be squashed
+  const commitsResult = await getCommitList(workDir, mergeBase);
+  if (!commitsResult.success) {
+    return { success: false, error: commitsResult.error };
+  }
+
+  // Get merge-base commit info
+  const baseCommitResult = await getCommitInfo(workDir, mergeBase);
+  if (!baseCommitResult.success) {
+    return { success: false, error: baseCommitResult.error };
+  }
+
+  // Get branches containing merge-base
+  const branchesResult = await getBranchesContaining(workDir, mergeBase);
+  const branches = branchesResult.success ? branchesResult.data : [];
+
+  // Output header
+  print(`\nDry run: ${commitCount} commit(s) would be squashed\n`);
+
+  // Output commits to be squashed
+  print('Commits to be squashed:');
+  for (const commit of commitsResult.data) {
+    print(
+      `  ${commit.shortHash} ${commit.subject} (${commit.author}, ${commit.date})`
+    );
+  }
+
+  // Output merge-base info
+  print(`\nMerge base (boundary commit):`);
+  print(
+    `  ${baseCommitResult.data.shortHash} ${baseCommitResult.data.subject}`
+  );
+  print(`  Base ref: ${baseRef}`);
+
+  // Output branches containing merge-base
+  if (branches.length > 0) {
+    print(`\nBranches containing merge-base:`);
+    for (const branch of branches) {
+      print(`  ${branch}`);
+    }
+  } else {
+    print(`\nNo branches contain the merge-base commit.`);
+  }
+
+  print('');
+  return { success: true, data: undefined };
+}
 
 export async function squashCommand(
   ctx: CommandContext,
@@ -141,6 +200,21 @@ export async function squashCommand(
   }
 
   printStatus(`Found ${commitCount} commits to squash.`);
+
+  // Handle dry-run mode
+  if (options.dryRun) {
+    const dryRunResult = await printDryRunOutput(
+      workDir,
+      mergeBase,
+      baseRef,
+      commitCount
+    );
+    if (!dryRunResult.success) {
+      printError(`Error: ${dryRunResult.error}`);
+      process.exit(1);
+    }
+    return;
+  }
 
   // Step 7: Get commit message (if using --first flag)
   let commitMessage: string | undefined = options.message;
