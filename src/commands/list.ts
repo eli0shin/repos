@@ -5,8 +5,8 @@ import {
   getChildBranches,
   findRepoFromCwd,
 } from '../config.ts';
-import { isGitRepoOrBare, listWorktrees } from '../git.ts';
-import type { WorktreeInfo } from '../git.ts';
+import { isGitRepoOrBare, listWorktrees } from '../git/index.ts';
+import type { WorktreeInfo } from '../git/index.ts';
 import type { RepoEntry } from '../types.ts';
 import { print } from '../output.ts';
 

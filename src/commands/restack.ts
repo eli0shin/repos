@@ -22,7 +22,7 @@ import {
   getHeadCommit,
   computeForkPoint,
   type WorktreeInfo,
-} from '../git.ts';
+} from '../git/index.ts';
 import { print, printError } from '../output.ts';
 
 type RestackOptions = {

@@ -22,7 +22,7 @@ import {
   cloneBare,
   ensureRefspecConfig,
   localBranchExists,
-} from '../src/git.ts';
+} from '../src/git/index.ts';
 
 import { anyString, arrayContaining, matchString } from './helpers.ts';
 

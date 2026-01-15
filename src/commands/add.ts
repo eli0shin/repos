@@ -7,7 +7,7 @@ import {
   addRepoToConfig,
   findRepo,
 } from '../config.ts';
-import { cloneRepo, cloneBare } from '../git.ts';
+import { cloneRepo, cloneBare } from '../git/index.ts';
 import { print, printError } from '../output.ts';
 
 type AddOptions = {

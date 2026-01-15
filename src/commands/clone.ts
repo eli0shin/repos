@@ -1,6 +1,6 @@
 import type { CommandContext } from '../cli.ts';
 import { loadConfig, findRepo } from '../config.ts';
-import { cloneRepo, cloneBare, isGitRepo, isBareRepo } from '../git.ts';
+import { cloneRepo, cloneBare, isGitRepo, isBareRepo } from '../git/index.ts';
 import { print, printError } from '../output.ts';
 import type { RepoEntry } from '../types.ts';
 

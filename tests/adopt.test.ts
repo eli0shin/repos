@@ -2,7 +2,7 @@ import { describe, expect, test, beforeEach, afterEach } from 'bun:test';
 import { mkdir, rm } from 'node:fs/promises';
 import { realpathSync } from 'node:fs';
 import { join } from 'node:path';
-import { runGitCommand, cloneBare } from '../src/git.ts';
+import { runGitCommand, cloneBare } from '../src/git/index.ts';
 import { adoptCommand } from '../src/commands/adopt.ts';
 import { readConfig, writeConfig } from '../src/config.ts';
 import { arrayContaining } from './helpers.ts';

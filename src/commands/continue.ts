@@ -17,7 +17,7 @@ import {
   deleteBaseRef,
   getHeadCommit,
   runGitCommand,
-} from '../git.ts';
+} from '../git/index.ts';
 import { print, printError } from '../output.ts';
 
 export async function continueCommand(ctx: CommandContext): Promise<void> {

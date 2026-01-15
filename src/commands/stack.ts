@@ -14,7 +14,7 @@ import {
   findWorktreeByBranch,
   getHeadCommit,
   setBaseRef,
-} from '../git.ts';
+} from '../git/index.ts';
 import { print, printError, printStatus } from '../output.ts';
 
 export async function stackCommand(

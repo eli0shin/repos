@@ -1,6 +1,10 @@
 import type { CommandContext } from '../cli.ts';
 import { loadConfig, resolveRepo } from '../config.ts';
-import { getDefaultBranch, resolveWorktree, fetchAndRebase } from '../git.ts';
+import {
+  getDefaultBranch,
+  resolveWorktree,
+  fetchAndRebase,
+} from '../git/index.ts';
 import { print, printError } from '../output.ts';
 
 export async function rebaseCommand(

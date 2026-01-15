@@ -12,7 +12,7 @@ import {
   findWorktreeByDirectory,
   fetchAndRebase,
   deleteBaseRef,
-} from '../git.ts';
+} from '../git/index.ts';
 import { print, printError } from '../output.ts';
 
 export async function unstackCommand(ctx: CommandContext): Promise<void> {

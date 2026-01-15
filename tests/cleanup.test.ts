@@ -1,7 +1,7 @@
 import { describe, expect, test, beforeEach, afterEach } from 'bun:test';
 import { mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { runGitCommand, cloneBare, isGitRepo } from '../src/git.ts';
+import { runGitCommand, cloneBare, isGitRepo } from '../src/git/index.ts';
 import { cleanupCommand } from '../src/commands/cleanup.ts';
 import { writeConfig } from '../src/config.ts';
 import type { ReposConfig } from '../src/types.ts';
