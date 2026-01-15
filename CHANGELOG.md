@@ -1,5 +1,19 @@
 # repos
 
+## 0.10.0
+
+### Minor Changes
+
+- [#38](https://github.com/eli0shin/repos/pull/38) [`5d36917`](https://github.com/eli0shin/repos/commit/5d36917b193cfe6a1e300bbd68c1eb29d02c4e07) Thanks [@eli0shin](https://github.com/eli0shin)! - Add recursive restack and continue command
+
+  **Problem**: When stacking branches (a → b → c) and rebasing branch `a` on `main`, the merge-base between `b` and `a` was lost. This caused conflicts when restacking `b` on `a` because git couldn't determine which commits belonged to `b` vs inherited from `a`.
+
+  **Solution**: Store fork points in git refs (`refs/bases/<branch>`) and use `git rebase --onto` to rebase only the commits that belong to the child branch.
+  - `restack` now uses `--onto` with stored fork points to avoid false conflicts after parent is rebased
+  - `restack` recursively restacks all children branches (use `--only` to limit to current branch)
+  - New `continue` command to resume a paused rebase and update fork point tracking
+  - Fork points stored in git refs prevent garbage collection of orphan commits (works even after squashing parent)
+
 ## 0.9.0
 
 ### Minor Changes
