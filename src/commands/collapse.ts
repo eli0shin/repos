@@ -19,7 +19,7 @@ import {
   deleteBaseRef,
   setBaseRef,
   getHeadCommit,
-} from '../git.ts';
+} from '../git/index.ts';
 import { print, printError } from '../output.ts';
 
 export async function collapseCommand(ctx: CommandContext): Promise<void> {

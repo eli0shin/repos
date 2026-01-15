@@ -9,7 +9,7 @@ import {
   isGitRepo,
   getCurrentBranch,
   hasUncommittedChanges,
-} from '../src/git.ts';
+} from '../src/git/index.ts';
 import { workCommand } from '../src/commands/work.ts';
 import { stackCommand } from '../src/commands/stack.ts';
 import { restackCommand } from '../src/commands/restack.ts';

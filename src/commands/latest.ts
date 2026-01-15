@@ -1,6 +1,6 @@
 import type { CommandContext } from '../cli.ts';
 import { loadConfig } from '../config.ts';
-import { isGitRepo, pullCurrentBranch } from '../git.ts';
+import { isGitRepo, pullCurrentBranch } from '../git/index.ts';
 import { print } from '../output.ts';
 
 type PullResult = {

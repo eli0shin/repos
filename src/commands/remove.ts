@@ -6,7 +6,7 @@ import {
   removeRepoFromConfig,
   findRepo,
 } from '../config.ts';
-import { isGitRepo } from '../git.ts';
+import { isGitRepo } from '../git/index.ts';
 import { print, printError } from '../output.ts';
 
 export async function removeCommand(

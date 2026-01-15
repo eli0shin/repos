@@ -1,7 +1,7 @@
 import type { CommandContext } from '../cli.ts';
 import { loadConfig, findRepoFromCwd } from '../config.ts';
 import type { RepoEntry } from '../types.ts';
-import type { WorktreeInfo } from '../git.ts';
+import type { WorktreeInfo } from '../git/index.ts';
 import {
   listWorktrees,
   fetchWithPrune,
@@ -11,7 +11,7 @@ import {
   hasUncommittedChanges,
   removeWorktree,
   ensureRefspecConfig,
-} from '../git.ts';
+} from '../git/index.ts';
 import { print, printError } from '../output.ts';
 
 export type CleanupOptions = {

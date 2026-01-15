@@ -1,7 +1,7 @@
 import { mkdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
-import { listWorktrees, findWorktreeByDirectory } from './git.ts';
+import { listWorktrees, findWorktreeByDirectory } from './git/index.ts';
 import { printError } from './output.ts';
 import type {
   RepoEntry,

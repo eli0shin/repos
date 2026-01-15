@@ -12,7 +12,7 @@ import {
   isGitRepo,
   isBareRepo,
   listWorktrees,
-} from '../git.ts';
+} from '../git/index.ts';
 import { print, printError } from '../output.ts';
 import type { ReposConfig } from '../types.ts';
 

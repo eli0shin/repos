@@ -6,7 +6,12 @@ import {
   addRepoToConfig,
   findRepo,
 } from '../config.ts';
-import { findGitRepos, getRemoteUrl, cloneRepo, isGitRepo } from '../git.ts';
+import {
+  findGitRepos,
+  getRemoteUrl,
+  cloneRepo,
+  isGitRepo,
+} from '../git/index.ts';
 import { print, printError } from '../output.ts';
 
 export async function syncCommand(ctx: CommandContext): Promise<void> {

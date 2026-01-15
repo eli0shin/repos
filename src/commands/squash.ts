@@ -15,7 +15,7 @@ import {
   getCommitList,
   getBranchesContaining,
   getCommitInfo,
-} from '../git.ts';
+} from '../git/index.ts';
 import { print, printError, printStatus } from '../output.ts';
 import type { OperationResult } from '../types.ts';
 
