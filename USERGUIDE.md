@@ -492,7 +492,7 @@ This is a convenience wrapper around `repos work` that automatically `cd`s into 
 
 #### `work-clean [args...]` (Shell Function)
 
-Remove a worktree and change directory to its parent.
+Remove a worktree and change directory to its logical parent destination.
 
 ```bash
 cd ~/code/my-project-feature-auth
@@ -503,7 +503,9 @@ work-clean
 **Behavior:**
 
 - Wraps `repos clean` and forwards arguments (for example `work-clean --force`)
-- Uses the parent path returned by `repos clean` and `cd`s there on success
+- Uses the destination path returned by `repos clean` and `cd`s there on success
+  - Stacked branch: parent branch worktree path (when present)
+  - Otherwise: main worktree path (or bare repo directory)
 - In `--dry-run`, does not change directories
 
 **Prerequisite:** Run `repos init` first to install the shell function.
@@ -893,7 +895,8 @@ Error: Cannot remove worktree with uncommitted changes
 **Output behavior:**
 
 - Human-readable status is written to stderr
-- On successful non-dry-run cleanup, stdout prints the parent path of the removed worktree (used by `work-clean`)
+- On successful non-dry-run cleanup, stdout prints a logical destination path for `work-clean`
+  (stack parent worktree when available, otherwise main worktree or bare repo directory)
 
 ---
 

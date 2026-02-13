@@ -1,7 +1,7 @@
 import { describe, expect, test, beforeEach, afterEach } from 'bun:test';
 import { mkdir, rm } from 'node:fs/promises';
 import { realpathSync, existsSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 import {
   runGitCommand,
   cloneBare,
@@ -422,7 +422,7 @@ describe('repos clean command', () => {
     expect(await isGitRepo(worktreePath)).toBe(false);
   });
 
-  test('outputs parent path to stdout on successful removal', async () => {
+  test('outputs main worktree path to stdout on successful bare removal', async () => {
     // Clone as bare
     const bareDir = join(testDir, 'bare.git');
     await cloneBare(sourceDir, bareDir);
@@ -433,7 +433,7 @@ describe('repos clean command', () => {
       ['worktree', 'add', '-b', 'feature', worktreePathRaw],
       bareDir
     );
-    const worktreePath = realpathSync(worktreePathRaw);
+    const expectedMainPath = realpathSync(bareDir);
 
     // Create config
     const config = {
@@ -461,10 +461,145 @@ describe('repos clean command', () => {
     process.stdout.write = originalStdoutWrite;
     process.stderr.write = originalStderrWrite;
 
-    expect(stdoutOutput.join('')).toBe(`${dirname(worktreePath)}\n`);
+    expect(stdoutOutput.join('')).toBe(`${expectedMainPath}\n`);
     expect(stderrOutput.join('')).toBe(
       'Removing worktree for "feature"...\nRemoved worktree "bare-feature"\n'
     );
+  });
+
+  test('outputs parent worktree path when cleaning a stacked child', async () => {
+    // Clone as bare
+    const bareDir = join(testDir, 'bare.git');
+    await cloneBare(sourceDir, bareDir);
+
+    // Create parent and child worktrees
+    const parentPathRaw = join(testDir, 'bare.git-parent');
+    await runGitCommand(
+      ['worktree', 'add', '-b', 'parent', parentPathRaw],
+      bareDir
+    );
+    const parentPath = realpathSync(parentPathRaw);
+
+    const childPathRaw = join(testDir, 'bare.git-child');
+    await runGitCommand(
+      ['worktree', 'add', '-b', 'child', childPathRaw],
+      bareDir
+    );
+    const childPath = realpathSync(childPathRaw);
+
+    // Create config with stack relationship
+    const config = {
+      repos: [
+        {
+          name: 'bare',
+          url: sourceDir,
+          path: bareDir,
+          bare: true,
+          stacks: [{ parent: 'parent', child: 'child' }],
+        },
+      ],
+    } satisfies ReposConfig;
+    await writeConfig(configPath, config);
+
+    // Capture stdout/stderr
+    const stdoutOutput: string[] = [];
+    const stderrOutput: string[] = [];
+    const originalStdoutWrite = process.stdout.write.bind(process.stdout);
+    const originalStderrWrite = process.stderr.write.bind(process.stderr);
+    process.stdout.write = (chunk: string) => {
+      stdoutOutput.push(chunk);
+      return true;
+    };
+    process.stderr.write = (chunk: string) => {
+      stderrOutput.push(chunk);
+      return true;
+    };
+
+    // Clean child
+    const ctx = { configPath };
+    await cleanCommand(ctx, 'child', 'bare', { force: false, dryRun: false });
+    process.stdout.write = originalStdoutWrite;
+    process.stderr.write = originalStderrWrite;
+
+    expect(stdoutOutput.join('')).toBe(`${parentPath}\n`);
+    expect(stderrOutput.join('')).toBe(
+      'Removing worktree for "child"...\nRemoved worktree "bare-child"\n'
+    );
+    expect(await isGitRepo(childPath)).toBe(false);
+    expect(await isGitRepo(parentPath)).toBe(true);
+  });
+
+  test('falls back to main worktree path when stacked parent worktree is missing', async () => {
+    // Clone as bare
+    const bareDir = join(testDir, 'bare.git');
+    await cloneBare(sourceDir, bareDir);
+    const expectedMainPath = realpathSync(bareDir);
+
+    // Create only child worktree
+    const childPath = join(testDir, 'bare.git-child');
+    await runGitCommand(['worktree', 'add', '-b', 'child', childPath], bareDir);
+
+    // Create config with stale stack relationship (parent branch has no worktree)
+    const config = {
+      repos: [
+        {
+          name: 'bare',
+          url: sourceDir,
+          path: bareDir,
+          bare: true,
+          stacks: [{ parent: 'missing-parent', child: 'child' }],
+        },
+      ],
+    } satisfies ReposConfig;
+    await writeConfig(configPath, config);
+
+    // Capture stdout
+    const stdoutOutput: string[] = [];
+    const originalStdoutWrite = process.stdout.write.bind(process.stdout);
+    process.stdout.write = (chunk: string) => {
+      stdoutOutput.push(chunk);
+      return true;
+    };
+
+    const ctx = { configPath };
+    await cleanCommand(ctx, 'child', 'bare', { force: false, dryRun: false });
+    process.stdout.write = originalStdoutWrite;
+
+    expect(stdoutOutput.join('')).toBe(`${expectedMainPath}\n`);
+  });
+
+  test('outputs main checkout path when cleaning a non-stacked branch in regular repo', async () => {
+    // Clone regular repo
+    const repoDirRaw = join(testDir, 'repo');
+    await runGitCommand(['clone', sourceDir, repoDirRaw]);
+    const repoDir = realpathSync(repoDirRaw);
+
+    // Create feature worktree
+    const featurePath = join(testDir, 'repo-feature');
+    await runGitCommand(
+      ['worktree', 'add', '-b', 'feature', featurePath],
+      repoDir
+    );
+
+    // Create config
+    const config = {
+      repos: [{ name: 'repo', url: sourceDir, path: repoDir }],
+    } satisfies ReposConfig;
+    await writeConfig(configPath, config);
+
+    // Capture stdout
+    const stdoutOutput: string[] = [];
+    const originalStdoutWrite = process.stdout.write.bind(process.stdout);
+    process.stdout.write = (chunk: string) => {
+      stdoutOutput.push(chunk);
+      return true;
+    };
+
+    const ctx = { configPath };
+    await cleanCommand(ctx, 'feature', 'repo', { force: false, dryRun: false });
+    process.stdout.write = originalStdoutWrite;
+
+    expect(stdoutOutput.join('')).toBe(`${repoDir}\n`);
   });
 
   test('fails when not in worktree and no branch specified', async () => {

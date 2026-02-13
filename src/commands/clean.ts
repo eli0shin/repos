@@ -1,20 +1,41 @@
 import type { CommandContext } from '../cli.ts';
-import { dirname } from 'node:path';
 import {
   loadConfig,
   resolveRepo,
   removeStackEntry,
   removeStackEntriesByParent,
   getChildBranches,
+  getParentBranch,
   saveStackUpdate,
 } from '../config.ts';
 import {
   removeWorktree,
   hasUncommittedChanges,
   resolveWorktree,
+  listWorktrees,
+  findWorktreeByBranch,
   deleteBaseRef,
 } from '../git/index.ts';
 import { print, printError, printStatus } from '../output.ts';
+
+function resolveCleanOutputPath(
+  repoPath: string,
+  parentBranch: string | undefined,
+  worktrees: { path: string; branch: string; isMain: boolean }[]
+): string {
+  const mainWorktreePath = worktrees.find(
+    (candidate) => candidate.isMain
+  )?.path;
+  if (!parentBranch) {
+    return mainWorktreePath ?? repoPath;
+  }
+
+  const parentWorktreePath = findWorktreeByBranch(
+    worktrees,
+    parentBranch
+  )?.path;
+  return parentWorktreePath ?? mainWorktreePath ?? repoPath;
+}
 
 type CleanOptions = {
   force: boolean;
@@ -30,13 +51,23 @@ export async function cleanCommand(
   const config = await loadConfig(ctx.configPath);
   const repo = await resolveRepo(config, repoName);
   const worktree = await resolveWorktree(repo.path, branch);
-  // Parent directory of the removed worktree (used by `work-clean` shell helper).
-  const worktreeParentPath = dirname(worktree.path);
 
   if (worktree.isMain) {
     printError('Error: Cannot remove the main worktree');
     process.exit(1);
   }
+
+  const worktreesResult = await listWorktrees(repo.path);
+  if (!worktreesResult.success) {
+    printError(`Error: ${worktreesResult.error}`);
+    process.exit(1);
+  }
+
+  const outputPath = resolveCleanOutputPath(
+    repo.path,
+    getParentBranch(repo, worktree.branch),
+    worktreesResult.data
+  );
 
   // Check for uncommitted changes
   const changesResult = await hasUncommittedChanges(worktree.path);
@@ -97,6 +128,6 @@ export async function cleanCommand(
   printStatus(`${prefix} worktree "${worktreeName}"`);
 
   if (!options.dryRun) {
-    print(worktreeParentPath);
+    print(outputPath);
   }
 }
