@@ -1,5 +1,11 @@
 # repos
 
+## 0.10.1
+
+### Patch Changes
+
+- [#42](https://github.com/eli0shin/repos/pull/42) [`de991c7`](https://github.com/eli0shin/repos/commit/de991c7dc491da8b0369cd29f0f5a761d502e483) Thanks [@eli0shin](https://github.com/eli0shin)! - Add a new `work-clean` shell helper (bash/zsh/fish) that forwards to `repos clean` and changes directory using the returned path. Update `repos clean` to emit machine-readable parent-path output on successful non-dry-run cleanup while keeping status messaging on stderr, and make `rebase --continue` non-interactive so conflict-resolution flows complete reliably in tests.
+
 ## 0.10.0
 
 ### Minor Changes
