@@ -74,9 +74,7 @@ export async function rebaseOnto(
 export async function rebaseContinue(
   repoDir: string
 ): Promise<OperationResult> {
-  const result = await runGitCommand(['rebase', '--continue'], repoDir, {
-    GIT_EDITOR: 'true',
-  });
+  const result = await runGitCommand(['rebase', '--continue'], repoDir);
 
   if (result.exitCode !== 0) {
     if (
