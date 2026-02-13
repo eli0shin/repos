@@ -21,11 +21,18 @@ describe('repos init', () => {
   async function runInit(
     args: string[] = []
   ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+    return runInitWithShell('/bin/zsh', args);
+  }
+
+  async function runInitWithShell(
+    shell: string,
+    args: string[] = []
+  ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
     const proc = Bun.spawn(['bun', 'run', 'src/cli.ts', 'init', ...args], {
       stdout: 'pipe',
       stderr: 'pipe',
       cwd: projectDir,
-      env: { ...process.env, HOME: testHome, SHELL: '/bin/zsh' },
+      env: { ...process.env, HOME: testHome, SHELL: shell },
     });
 
     const [stdout, stderr] = await Promise.all([
@@ -123,5 +130,65 @@ export PATH="/usr/bin:$PATH"
     // Count occurrences of the marker
     const matches = zshrc.match(/# repos CLI work command/g);
     expect(matches?.length).toBe(1);
+  });
+
+  test('--print outputs bash/zsh helpers including work-clean', async () => {
+    expect(await runInitWithShell('/bin/zsh', ['--print'])).toEqual({
+      stdout: `
+work() {
+  local path
+  path=$(repos work "$@")
+  local exit_code=$?
+  if [ $exit_code -eq 0 ] && [ -d "$path" ]; then
+    cd "$path"
+  else
+    return $exit_code
+  fi
+}
+
+work-clean() {
+  local path
+  path=$(repos clean "$@")
+  local exit_code=$?
+  if [ $exit_code -eq 0 ] && [ -d "$path" ]; then
+    cd "$path"
+  else
+    return $exit_code
+  fi
+}
+
+`,
+      stderr: '',
+      exitCode: 0,
+    });
+  });
+
+  test('--print outputs fish helpers including work-clean', async () => {
+    expect(await runInitWithShell('/usr/bin/fish', ['--print'])).toEqual({
+      stdout: `
+function work
+  set -l path (repos work $argv)
+  set -l exit_code $status
+  if test $exit_code -eq 0; and test -d "$path"
+    cd $path
+  else
+    return $exit_code
+  end
+end
+
+function work-clean
+  set -l path (repos clean $argv)
+  set -l exit_code $status
+  if test $exit_code -eq 0; and test -d "$path"
+    cd $path
+  else
+    return $exit_code
+  end
+end
+
+`,
+      stderr: '',
+      exitCode: 0,
+    });
   });
 });

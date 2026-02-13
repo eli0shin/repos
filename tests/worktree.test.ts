@@ -1,7 +1,7 @@
 import { describe, expect, test, beforeEach, afterEach } from 'bun:test';
 import { mkdir, rm } from 'node:fs/promises';
 import { realpathSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import {
   runGitCommand,
   cloneBare,
@@ -422,6 +422,51 @@ describe('repos clean command', () => {
     expect(await isGitRepo(worktreePath)).toBe(false);
   });
 
+  test('outputs parent path to stdout on successful removal', async () => {
+    // Clone as bare
+    const bareDir = join(testDir, 'bare.git');
+    await cloneBare(sourceDir, bareDir);
+
+    // Create worktree
+    const worktreePathRaw = join(testDir, 'bare.git-feature');
+    await runGitCommand(
+      ['worktree', 'add', '-b', 'feature', worktreePathRaw],
+      bareDir
+    );
+    const worktreePath = realpathSync(worktreePathRaw);
+
+    // Create config
+    const config = {
+      repos: [{ name: 'bare', url: sourceDir, path: bareDir, bare: true }],
+    } satisfies ReposConfig;
+    await writeConfig(configPath, config);
+
+    // Capture stdout/stderr
+    const stdoutOutput: string[] = [];
+    const stderrOutput: string[] = [];
+    const originalStdoutWrite = process.stdout.write.bind(process.stdout);
+    const originalStderrWrite = process.stderr.write.bind(process.stderr);
+    process.stdout.write = (chunk: string) => {
+      stdoutOutput.push(chunk);
+      return true;
+    };
+    process.stderr.write = (chunk: string) => {
+      stderrOutput.push(chunk);
+      return true;
+    };
+
+    // Run clean command
+    const ctx = { configPath };
+    await cleanCommand(ctx, 'feature', 'bare');
+    process.stdout.write = originalStdoutWrite;
+    process.stderr.write = originalStderrWrite;
+
+    expect(stdoutOutput.join('')).toBe(`${dirname(worktreePath)}\n`);
+    expect(stderrOutput.join('')).toBe(
+      'Removing worktree for "feature"...\nRemoved worktree "bare-feature"\n'
+    );
+  });
+
   test('fails when not in worktree and no branch specified', async () => {
     // Clone as bare
     const bareDir = join(testDir, 'bare.git');
@@ -468,18 +513,25 @@ describe('repos clean command', () => {
     } satisfies ReposConfig;
     await writeConfig(configPath, config);
 
-    // Capture stdout
-    const output: string[] = [];
-    const originalWrite = process.stdout.write.bind(process.stdout);
+    // Capture stdout/stderr
+    const stdoutOutput: string[] = [];
+    const stderrOutput: string[] = [];
+    const originalStdoutWrite = process.stdout.write.bind(process.stdout);
+    const originalStderrWrite = process.stderr.write.bind(process.stderr);
     process.stdout.write = (chunk: string) => {
-      output.push(chunk);
+      stdoutOutput.push(chunk);
+      return true;
+    };
+    process.stderr.write = (chunk: string) => {
+      stderrOutput.push(chunk);
       return true;
     };
 
     // Run clean with dry-run
     const ctx = { configPath };
     await cleanCommand(ctx, 'feature', 'bare', { force: true, dryRun: true });
-    process.stdout.write = originalWrite;
+    process.stdout.write = originalStdoutWrite;
+    process.stderr.write = originalStderrWrite;
 
     // Verify worktree still exists
     expect(await isGitRepo(worktreePath)).toBe(true);
@@ -501,8 +553,11 @@ describe('repos clean command', () => {
       },
     });
 
-    // Verify output shows "Would remove"
-    expect(output.join('')).toBe('Would remove worktree "bare-feature"\n');
+    // Verify dry-run has no stdout path output
+    expect(stdoutOutput.join('')).toBe('');
+    expect(stderrOutput.join('')).toBe(
+      'Would remove worktree "bare-feature"\n'
+    );
   });
 });
 

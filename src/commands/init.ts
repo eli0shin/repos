@@ -20,11 +20,32 @@ work() {
     return $exit_code
   fi
 }
+
+work-clean() {
+  local path
+  path=$(repos clean "$@")
+  local exit_code=$?
+  if [ $exit_code -eq 0 ] && [ -d "$path" ]; then
+    cd "$path"
+  else
+    return $exit_code
+  fi
+}
 `;
 
 const FISH_FUNCTION = `
 function work
   set -l path (repos work $argv)
+  set -l exit_code $status
+  if test $exit_code -eq 0; and test -d "$path"
+    cd $path
+  else
+    return $exit_code
+  end
+end
+
+function work-clean
+  set -l path (repos clean $argv)
   set -l exit_code $status
   if test $exit_code -eq 0; and test -d "$path"
     cd $path
