@@ -1,4 +1,5 @@
 import type { CommandContext } from '../cli.ts';
+import { dirname } from 'node:path';
 import {
   loadConfig,
   resolveRepo,
@@ -13,7 +14,7 @@ import {
   resolveWorktree,
   deleteBaseRef,
 } from '../git/index.ts';
-import { print, printError } from '../output.ts';
+import { print, printError, printStatus } from '../output.ts';
 
 type CleanOptions = {
   force: boolean;
@@ -29,6 +30,8 @@ export async function cleanCommand(
   const config = await loadConfig(ctx.configPath);
   const repo = await resolveRepo(config, repoName);
   const worktree = await resolveWorktree(repo.path, branch);
+  // Parent directory of the removed worktree (used by `work-clean` shell helper).
+  const worktreeParentPath = dirname(worktree.path);
 
   if (worktree.isMain) {
     printError('Error: Cannot remove the main worktree');
@@ -62,9 +65,10 @@ export async function cleanCommand(
   }
 
   const prefix = options.dryRun ? 'Would remove' : 'Removed';
+  const worktreeName = `${repo.name}-${worktree.branch}`;
 
   if (!options.dryRun) {
-    print(`Removing worktree for "${worktree.branch}"...`);
+    printStatus(`Removing worktree for "${worktree.branch}"...`);
 
     const result = await removeWorktree(repo.path, worktree.path);
     if (!result.success) {
@@ -90,5 +94,9 @@ export async function cleanCommand(
     }
   }
 
-  print(`${prefix} worktree "${repo.name}-${worktree.branch}"`);
+  printStatus(`${prefix} worktree "${worktreeName}"`);
+
+  if (!options.dryRun) {
+    print(worktreeParentPath);
+  }
 }

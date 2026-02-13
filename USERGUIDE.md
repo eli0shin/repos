@@ -393,6 +393,17 @@ work() {
     return $exit_code
   fi
 }
+
+work-clean() {
+  local path
+  path=$(repos clean "$@")
+  local exit_code=$?
+  if [ $exit_code -eq 0 ] && [ -d "$path" ]; then
+    cd "$path"
+  else
+    return $exit_code
+  fi
+}
 ```
 
 For fish:
@@ -400,6 +411,16 @@ For fish:
 ```fish
 function work
   set -l path (repos work $argv)
+  set -l exit_code $status
+  if test $exit_code -eq 0; and test -d "$path"
+    cd $path
+  else
+    return $exit_code
+  end
+end
+
+function work-clean
+  set -l path (repos clean $argv)
   set -l exit_code $status
   if test $exit_code -eq 0; and test -d "$path"
     cd $path
@@ -466,6 +487,26 @@ work feature-auth
 **Prerequisite:** Run `repos init` first to install the shell function.
 
 This is a convenience wrapper around `repos work` that automatically `cd`s into the created worktree.
+
+---
+
+#### `work-clean [args...]` (Shell Function)
+
+Remove a worktree and change directory to its parent.
+
+```bash
+cd ~/code/my-project-feature-auth
+work-clean
+# Worktree removed, now in ~/code
+```
+
+**Behavior:**
+
+- Wraps `repos clean` and forwards arguments (for example `work-clean --force`)
+- Uses the parent path returned by `repos clean` and `cd`s there on success
+- In `--dry-run`, does not change directories
+
+**Prerequisite:** Run `repos init` first to install the shell function.
 
 ---
 
@@ -848,6 +889,11 @@ Using `--force` removes the parent worktree and makes child branches independent
 ```
 Error: Cannot remove worktree with uncommitted changes
 ```
+
+**Output behavior:**
+
+- Human-readable status is written to stderr
+- On successful non-dry-run cleanup, stdout prints the parent path of the removed worktree (used by `work-clean`)
 
 ---
 
@@ -1343,3 +1389,4 @@ cat ~/.config/repos/config.json | grep updateBehavior
 | `repos update`                       | Update CLI to latest version                |
 | `repos -v`                           | Show version                                |
 | `work <branch>`                      | Create worktree and cd into it (shell fn)   |
+| `work-clean [args...]`               | Clean worktree and cd to parent (shell fn)  |
