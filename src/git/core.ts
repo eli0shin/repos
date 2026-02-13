@@ -4,12 +4,14 @@ import type { GitCommandResult } from './types.ts';
 
 export async function runGitCommand(
   args: string[],
-  cwd?: string
+  cwd?: string,
+  env?: Record<string, string>
 ): Promise<GitCommandResult> {
   const proc = Bun.spawn(['git', ...args], {
     cwd,
     stdout: 'pipe',
     stderr: 'pipe',
+    ...(env ? { env: { ...process.env, ...env } } : {}),
   });
 
   const [stdout, stderr] = await Promise.all([
