@@ -8,6 +8,7 @@ export async function runGitCommand(
 ): Promise<GitCommandResult> {
   const proc = Bun.spawn(['git', ...args], {
     cwd,
+    stdin: 'ignore',
     stdout: 'pipe',
     stderr: 'pipe',
   });
@@ -20,6 +21,20 @@ export async function runGitCommand(
   const exitCode = await proc.exited;
 
   return { stdout: stdout.trim(), stderr: stderr.trim(), exitCode };
+}
+
+export async function runGitCommandInteractive(
+  args: string[],
+  cwd?: string
+): Promise<number> {
+  const proc = Bun.spawn(['git', ...args], {
+    cwd,
+    stdin: 'inherit',
+    stdout: 'inherit',
+    stderr: 'inherit',
+  });
+
+  return proc.exited;
 }
 
 export async function directoryHasContent(dir: string): Promise<boolean> {
