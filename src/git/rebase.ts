@@ -100,7 +100,7 @@ export async function rebaseContinue(
     }
     return {
       success: false,
-      error: 'Failed to continue rebase',
+      error: 'Rebase was aborted',
     };
   }
 
