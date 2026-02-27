@@ -34,9 +34,9 @@ describe('sessionCommand', () => {
     await writeConfig(configPath, { repos: [] });
 
     process.chdir('/tmp');
-    await expect(
-      sessionCommand({ configPath }, 'feature')
-    ).rejects.toThrow('process.exit(1)');
+    await expect(sessionCommand({ configPath }, 'feature')).rejects.toThrow(
+      'process.exit(1)'
+    );
     expect(mockExit).toHaveBeenCalledWith(1);
   });
 });
