@@ -23,6 +23,7 @@ import { continueCommand } from './commands/continue.ts';
 import { collapseCommand } from './commands/collapse.ts';
 import { squashCommand } from './commands/squash.ts';
 import { cleanCommand } from './commands/clean.ts';
+import { returnCommand } from './commands/return.ts';
 import { cleanupCommand } from './commands/cleanup.ts';
 import { rebaseCommand } from './commands/rebase.ts';
 import { initCommand, initPrintCommand } from './commands/init.ts';
@@ -214,6 +215,14 @@ program
       force: options.force ?? false,
       dryRun: options.dryRun ?? false,
     });
+  });
+
+program
+  .command('return')
+  .description('Output main worktree path (for shell wrapper to cd)')
+  .argument('[repo-name]', 'Repo name (optional if inside a tracked repo)')
+  .action(async (repoName) => {
+    await returnCommand(getCommandContext(), repoName);
   });
 
 program
