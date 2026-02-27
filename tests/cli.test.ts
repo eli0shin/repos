@@ -76,6 +76,8 @@ Commands:
                                         branch
   cleanup [options]                     Remove worktrees for merged or deleted
                                         branches
+  session <branch> [repo-name]          Create a worktree and open a tmux
+                                        session
   init [options]                        Configure shell for work command
   help [command]                        display help for command
 `;
