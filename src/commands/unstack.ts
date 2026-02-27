@@ -107,7 +107,14 @@ export async function unstackCommand(ctx: CommandContext): Promise<void> {
   // Update base ref to track origin/main as the new parent for future rebases
   const targetCommit = await runGitCommand(['rev-parse', targetRef], repo.path);
   if (targetCommit.exitCode === 0) {
-    await setBaseRef(repo.path, currentBranch, targetCommit.stdout.trim());
+    const setResult = await setBaseRef(
+      repo.path,
+      currentBranch,
+      targetCommit.stdout.trim()
+    );
+    if (!setResult.success) {
+      printError(`Warning: Failed to update base ref: ${setResult.error}`);
+    }
   } else {
     // If we can't resolve the target, clean up the stale base ref
     await deleteBaseRef(repo.path, currentBranch);
