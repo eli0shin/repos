@@ -612,6 +612,9 @@ describe('rebaseOnBranch', () => {
     await runGitCommand(['commit', '-m', 'initial'], localDir);
     await runGitCommand(['push', '-u', 'origin', 'HEAD'], localDir);
 
+    // Set origin/HEAD so getDefaultBranch works after cloning empty repos
+    await runGitCommand(['remote', 'set-head', 'origin', '--auto'], localDir);
+
     // Create feature branch with a commit
     await runGitCommand(['checkout', '-b', 'feature'], localDir);
     await Bun.write(join(localDir, 'feature.txt'), 'feature');
