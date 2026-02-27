@@ -68,10 +68,7 @@ export async function rebaseCommand(
 
   // Update base ref to current target for future fork-point rebases
   // repo.path is used (not worktree.path) since refs are stored in the bare repo
-  const targetCommit = await runGitCommand(
-    ['rev-parse', targetRef],
-    repo.path
-  );
+  const targetCommit = await runGitCommand(['rev-parse', targetRef], repo.path);
   if (targetCommit.exitCode === 0) {
     const setResult = await setBaseRef(
       repo.path,
