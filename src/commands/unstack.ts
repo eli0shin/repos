@@ -15,6 +15,8 @@ import {
   rebaseOnRef,
   getBaseRef,
   deleteBaseRef,
+  setBaseRef,
+  runGitCommand,
 } from '../git/index.ts';
 import { print, printError } from '../output.ts';
 
@@ -102,8 +104,17 @@ export async function unstackCommand(ctx: CommandContext): Promise<void> {
   const updatedRepo = removeStackEntry(repo, currentBranch);
   await saveStackUpdate(ctx.configPath, config, updatedRepo);
 
-  // Delete base ref for fork point tracking (no longer stacked)
-  await deleteBaseRef(repo.path, currentBranch);
+  // Update base ref to track origin/main as the new parent for future rebases
+  const targetCommit = await runGitCommand(
+    ['rev-parse', targetRef],
+    repo.path
+  );
+  if (targetCommit.exitCode === 0) {
+    await setBaseRef(repo.path, currentBranch, targetCommit.stdout.trim());
+  } else {
+    // If we can't resolve the target, clean up the stale base ref
+    await deleteBaseRef(repo.path, currentBranch);
+  }
 
   print(`Unstacked "${currentBranch}" - now independent on "${defaultBranch}"`);
 }

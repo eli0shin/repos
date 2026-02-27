@@ -1546,6 +1546,72 @@ describe('repos unstack command', () => {
       },
     });
   });
+
+  test('unstack followed by rebase works without conflicts after squash merge', async () => {
+    // After unstack, the base ref should be preserved so that a subsequent
+    // repos rebase can use --onto to avoid conflicts with squash-merged commits
+
+    // Clone as bare
+    const bareDir = join(testDir, 'bare.git');
+    await cloneBare(sourceDir, bareDir);
+
+    // Create config
+    const config = {
+      repos: [{ name: 'bare', url: sourceDir, path: bareDir, bare: true }],
+    } satisfies ReposConfig;
+    await writeConfig(configPath, config);
+
+    const ctx = { configPath };
+
+    // Step 1: Create parent worktree
+    await workCommand(ctx, 'parent-branch', 'bare');
+    const parentWorktreePath = join(testDir, 'bare.git-parent-branch');
+    const childWorktreePath = join(testDir, 'bare.git-child-branch');
+
+    // Step 2: Make commits on parent branch
+    await Bun.write(join(parentWorktreePath, 'parent.txt'), 'parent content');
+    await runGitCommand(['add', '.'], parentWorktreePath);
+    await runGitCommand(
+      ['commit', '-m', 'parent commit 1'],
+      parentWorktreePath
+    );
+
+    // Step 3: Stack child branch on parent
+    process.chdir(parentWorktreePath);
+    await stackCommand(ctx, 'child-branch');
+
+    // Step 4: Make a commit on child branch
+    await Bun.write(join(childWorktreePath, 'child.txt'), 'child content');
+    await runGitCommand(['add', '.'], childWorktreePath);
+    await runGitCommand(['commit', '-m', 'child commit'], childWorktreePath);
+
+    // Step 5: Simulate squash merge of parent into main on origin
+    await runGitCommand(['fetch', bareDir, 'parent-branch'], sourceDir);
+    await runGitCommand(['merge', '--squash', 'FETCH_HEAD'], sourceDir);
+    await runGitCommand(
+      ['commit', '-m', 'squash merge parent-branch'],
+      sourceDir
+    );
+
+    // Step 6: Unstack child
+    process.chdir(childWorktreePath);
+    await unstackCommand(ctx);
+
+    // Step 7: Now rebase — this should work because base ref was preserved
+    await rebaseCommand(ctx, 'child-branch', 'bare');
+
+    // Verify child has its own commit and the squash merge
+    const logResult = await runGitCommand(
+      ['log', '--oneline'],
+      childWorktreePath
+    );
+    expect(logResult.stdout).toContain('child commit');
+    expect(logResult.stdout).toContain('squash merge parent-branch');
+
+    // Verify child has the correct files
+    expect(existsSync(join(childWorktreePath, 'child.txt'))).toBe(true);
+    expect(existsSync(join(childWorktreePath, 'parent.txt'))).toBe(true);
+  });
 });
 
 describe('repos continue command', () => {

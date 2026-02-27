@@ -3,7 +3,12 @@ import { loadConfig, resolveRepo } from '../config.ts';
 import {
   getDefaultBranch,
   resolveWorktree,
-  fetchAndRebase,
+  fetchOrigin,
+  rebaseOnto,
+  rebaseOnRef,
+  getBaseRef,
+  setBaseRef,
+  runGitCommand,
 } from '../git/index.ts';
 import { print, printError } from '../output.ts';
 
@@ -24,9 +29,43 @@ export async function rebaseCommand(
   }
 
   const defaultBranch = defaultBranchResult.data;
+  const targetRef = `origin/${defaultBranch}`;
   print(`Fetching and rebasing "${worktree.branch}" on "${defaultBranch}"...`);
 
-  await fetchAndRebase(worktree.path, `origin/${defaultBranch}`);
+  const fetchResult = await fetchOrigin(worktree.path);
+  if (!fetchResult.success) {
+    printError(`Error fetching: ${fetchResult.error}`);
+    process.exit(1);
+  }
+
+  // Use fork point for rebase if available (handles squash/rebase merges)
+  const baseRefResult = await getBaseRef(repo.path, worktree.branch);
+  if (baseRefResult.success) {
+    const rebaseResult = await rebaseOnto(
+      worktree.path,
+      targetRef,
+      baseRefResult.data
+    );
+    if (!rebaseResult.success) {
+      printError(`Error: ${rebaseResult.error}`);
+      process.exit(1);
+    }
+
+    // Update base ref to current target
+    const targetCommit = await runGitCommand(
+      ['rev-parse', targetRef],
+      repo.path
+    );
+    if (targetCommit.exitCode === 0) {
+      await setBaseRef(repo.path, worktree.branch, targetCommit.stdout.trim());
+    }
+  } else {
+    const rebaseResult = await rebaseOnRef(worktree.path, targetRef);
+    if (!rebaseResult.success) {
+      printError(`Error: ${rebaseResult.error}`);
+      process.exit(1);
+    }
+  }
 
   print(`Rebased "${worktree.branch}" on "${defaultBranch}"`);
 }
