@@ -79,9 +79,7 @@ export async function rebaseCommand(
       printError(`Warning: Failed to update base ref: ${setResult.error}`);
     }
   } else {
-    printError(
-      `Warning: Failed to resolve ${targetRef}, base ref not updated`
-    );
+    printError(`Warning: Failed to resolve ${targetRef}, base ref not updated`);
   }
 
   print(`Rebased "${worktree.branch}" on "${defaultBranch}"`);
