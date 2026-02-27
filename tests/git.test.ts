@@ -19,6 +19,7 @@ import {
   fetchOrigin,
   rebaseOnBranch,
   rebaseOnRef,
+  rebaseContinue,
   cloneBare,
   ensureRefspecConfig,
   localBranchExists,
@@ -918,6 +919,154 @@ describe('rebaseOnRef', () => {
     expect(statusResult.stdout).toContain('rebase in progress');
 
     // Clean up: abort the rebase so afterEach can delete the directory
+    await runGitCommand(['rebase', '--abort'], childWorktreeDir);
+  });
+});
+
+describe('rebaseContinue', () => {
+  const testDir = '/tmp/repos-test-rebase-continue';
+  const sourceDir = '/tmp/repos-test-source-rebase-continue';
+  let originalGitEditor: string | undefined;
+
+  beforeEach(async () => {
+    await mkdir(testDir, { recursive: true });
+    await mkdir(sourceDir, { recursive: true });
+
+    // Save and set GIT_EDITOR=true to prevent editor from blocking tests
+    originalGitEditor = process.env.GIT_EDITOR;
+    process.env.GIT_EDITOR = 'true';
+
+    // Create a source repo with initial commit
+    await runGitCommand(['init'], sourceDir);
+    await Bun.write(join(sourceDir, 'file.txt'), 'initial');
+    await runGitCommand(['add', '.'], sourceDir);
+    await runGitCommand(['commit', '-m', 'initial'], sourceDir);
+  });
+
+  afterEach(async () => {
+    // Restore GIT_EDITOR
+    if (originalGitEditor === undefined) {
+      delete process.env.GIT_EDITOR;
+    } else {
+      process.env.GIT_EDITOR = originalGitEditor;
+    }
+
+    await rm(testDir, { recursive: true, force: true });
+    await rm(sourceDir, { recursive: true, force: true });
+  });
+
+  test('succeeds after conflict resolution with GIT_EDITOR=true', async () => {
+    // Clone as bare
+    const bareDir = join(testDir, 'bare.git');
+    await cloneBare(sourceDir, bareDir);
+    await ensureRefspecConfig(bareDir);
+
+    // Create parent branch worktree and modify file.txt
+    const parentWorktreeDir = join(testDir, 'parent-worktree');
+    await createWorktree(bareDir, parentWorktreeDir, 'parent-branch');
+    await Bun.write(join(parentWorktreeDir, 'file.txt'), 'parent content');
+    await runGitCommand(['add', '.'], parentWorktreeDir);
+    await runGitCommand(
+      ['commit', '-m', 'parent changes file'],
+      parentWorktreeDir
+    );
+
+    // Create child worktree from parent
+    const childWorktreeDir = join(testDir, 'child-worktree');
+    await createWorktreeFromBranch(
+      bareDir,
+      childWorktreeDir,
+      'child-branch',
+      'parent-branch'
+    );
+
+    // Reset child to before parent's change, then make conflicting change
+    await runGitCommand(['reset', '--hard', 'HEAD~1'], childWorktreeDir);
+    await Bun.write(join(childWorktreeDir, 'file.txt'), 'child content');
+    await runGitCommand(['add', '.'], childWorktreeDir);
+    await runGitCommand(
+      ['commit', '-m', 'child changes file'],
+      childWorktreeDir
+    );
+
+    // Attempt to rebase child on parent - should conflict
+    const rebaseResult = await rebaseOnRef(childWorktreeDir, 'parent-branch');
+    expect(rebaseResult.success).toBe(false);
+
+    // Resolve the conflict by accepting child's version
+    await Bun.write(join(childWorktreeDir, 'file.txt'), 'resolved content');
+    await runGitCommand(['add', 'file.txt'], childWorktreeDir);
+
+    // Continue the rebase - this would have frozen before the fix
+    // because git opens an editor for the commit message
+    const result = await rebaseContinue(childWorktreeDir);
+    expect(result).toEqual({ success: true, data: undefined });
+
+    // Verify rebase completed - log should contain both commits
+    const logResult = await runGitCommand(
+      ['log', '--oneline'],
+      childWorktreeDir
+    );
+    expect(logResult.stdout).toContain('parent changes file');
+    expect(logResult.stdout).toContain('child changes file');
+  });
+
+  test('returns conflict error when new conflicts arise during continue', async () => {
+    // Clone as bare
+    const bareDir = join(testDir, 'bare.git');
+    await cloneBare(sourceDir, bareDir);
+    await ensureRefspecConfig(bareDir);
+
+    // Create parent branch worktree with two commits modifying file.txt
+    const parentWorktreeDir = join(testDir, 'parent-worktree');
+    await createWorktree(bareDir, parentWorktreeDir, 'parent-branch');
+    await Bun.write(join(parentWorktreeDir, 'file.txt'), 'parent v1');
+    await runGitCommand(['add', '.'], parentWorktreeDir);
+    await runGitCommand(['commit', '-m', 'parent commit 1'], parentWorktreeDir);
+    await Bun.write(join(parentWorktreeDir, 'file.txt'), 'parent v2');
+    await runGitCommand(['add', '.'], parentWorktreeDir);
+    await runGitCommand(['commit', '-m', 'parent commit 2'], parentWorktreeDir);
+
+    // Create child worktree from parent (at parent commit 2)
+    const childWorktreeDir = join(testDir, 'child-worktree');
+    await createWorktreeFromBranch(
+      bareDir,
+      childWorktreeDir,
+      'child-branch',
+      'parent-branch'
+    );
+
+    // Reset child to before both parent commits, then make two conflicting commits
+    await runGitCommand(['reset', '--hard', 'HEAD~2'], childWorktreeDir);
+    await Bun.write(join(childWorktreeDir, 'file.txt'), 'child v1');
+    await runGitCommand(['add', '.'], childWorktreeDir);
+    await runGitCommand(['commit', '-m', 'child commit 1'], childWorktreeDir);
+    await Bun.write(join(childWorktreeDir, 'file.txt'), 'child v2');
+    await runGitCommand(['add', '.'], childWorktreeDir);
+    await runGitCommand(['commit', '-m', 'child commit 2'], childWorktreeDir);
+
+    // Attempt to rebase child on parent - should conflict on first commit
+    const rebaseResult = await rebaseOnRef(childWorktreeDir, 'parent-branch');
+    expect(rebaseResult.success).toBe(false);
+
+    // Resolve first conflict
+    await Bun.write(join(childWorktreeDir, 'file.txt'), 'resolved v1');
+    await runGitCommand(['add', 'file.txt'], childWorktreeDir);
+
+    // Continue - should hit second conflict
+    const result = await rebaseContinue(childWorktreeDir);
+    expect(result).toEqual({
+      success: false,
+      error:
+        'Rebase paused due to conflicts.\n\n' +
+        'To resolve:\n' +
+        '  1. Fix conflicts in the affected files\n' +
+        '  2. Stage resolved files: git add <file>\n' +
+        '  3. Continue rebase: repos continue\n\n' +
+        'To abort: git rebase --abort',
+    });
+
+    // Clean up: abort the rebase
     await runGitCommand(['rebase', '--abort'], childWorktreeDir);
   });
 });

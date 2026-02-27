@@ -1,7 +1,12 @@
 import { join } from 'node:path';
 import { printError } from '../output.ts';
 import type { OperationResult } from '../types.ts';
-import { getGitDir, readBranchFromFile, runGitCommand } from './core.ts';
+import {
+  getGitDir,
+  readBranchFromFile,
+  runGitCommand,
+  runGitCommandInteractive,
+} from './core.ts';
 import { fetchOrigin } from './remote.ts';
 
 export async function rebaseOnBranch(
@@ -74,13 +79,14 @@ export async function rebaseOnto(
 export async function rebaseContinue(
   repoDir: string
 ): Promise<OperationResult> {
-  const result = await runGitCommand(['rebase', '--continue'], repoDir);
+  // Use interactive spawning so git can open an editor if needed
+  const exitCode = await runGitCommandInteractive(
+    ['rebase', '--continue'],
+    repoDir
+  );
 
-  if (result.exitCode !== 0) {
-    if (
-      result.stderr.includes('CONFLICT') ||
-      result.stdout.includes('CONFLICT')
-    ) {
+  if (exitCode !== 0) {
+    if (await isRebaseInProgress(repoDir)) {
       return {
         success: false,
         error:
@@ -94,7 +100,7 @@ export async function rebaseContinue(
     }
     return {
       success: false,
-      error: result.stderr || 'Failed to continue rebase',
+      error: 'Rebase was aborted',
     };
   }
 
