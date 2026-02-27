@@ -10,7 +10,10 @@ import {
   getDefaultBranch,
   listWorktrees,
   findWorktreeByDirectory,
-  fetchAndRebase,
+  fetchOrigin,
+  rebaseOnto,
+  rebaseOnRef,
+  getBaseRef,
   deleteBaseRef,
 } from '../git/index.ts';
 import { print, printError } from '../output.ts';
@@ -68,7 +71,32 @@ export async function unstackCommand(ctx: CommandContext): Promise<void> {
     `Unstacking "${currentBranch}" from "${parentBranch}" onto "${defaultBranch}"...`
   );
 
-  await fetchAndRebase(currentWorktree.path, targetRef);
+  // Fetch latest changes
+  const fetchResult = await fetchOrigin(currentWorktree.path);
+  if (!fetchResult.success) {
+    printError(`Error fetching: ${fetchResult.error}`);
+    process.exit(1);
+  }
+
+  // Use fork point for rebase to handle squash/rebase merges correctly
+  const baseRefResult = await getBaseRef(repo.path, currentBranch);
+  if (baseRefResult.success) {
+    const rebaseResult = await rebaseOnto(
+      currentWorktree.path,
+      targetRef,
+      baseRefResult.data
+    );
+    if (!rebaseResult.success) {
+      printError(`Error: ${rebaseResult.error}`);
+      process.exit(1);
+    }
+  } else {
+    const rebaseResult = await rebaseOnRef(currentWorktree.path, targetRef);
+    if (!rebaseResult.success) {
+      printError(`Error: ${rebaseResult.error}`);
+      process.exit(1);
+    }
+  }
 
   // Remove the stack relationship
   const updatedRepo = removeStackEntry(repo, currentBranch);

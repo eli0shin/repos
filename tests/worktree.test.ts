@@ -1444,6 +1444,108 @@ describe('repos unstack command', () => {
     expect(mockExit).toHaveBeenCalledWith(1);
     mockExit.mockRestore();
   });
+
+  test('unstacks correctly when parent was squash-merged into default branch', async () => {
+    // This tests the scenario: main <- parent <- child
+    // Parent is squash-merged into main (new commit with different SHA)
+    // Unstack from child should only replay child's commits, not parent's
+
+    // Clone as bare
+    const bareDir = join(testDir, 'bare.git');
+    await cloneBare(sourceDir, bareDir);
+
+    // Create config
+    const config = {
+      repos: [{ name: 'bare', url: sourceDir, path: bareDir, bare: true }],
+    } satisfies ReposConfig;
+    await writeConfig(configPath, config);
+
+    const ctx = { configPath };
+
+    // Step 1: Create parent worktree
+    await workCommand(ctx, 'parent-branch', 'bare');
+    const parentWorktreePath = join(testDir, 'bare.git-parent-branch');
+    const childWorktreePath = join(testDir, 'bare.git-child-branch');
+
+    // Step 2: Make commits on parent branch
+    await Bun.write(join(parentWorktreePath, 'parent.txt'), 'parent content');
+    await runGitCommand(['add', '.'], parentWorktreePath);
+    await runGitCommand(
+      ['commit', '-m', 'parent commit 1'],
+      parentWorktreePath
+    );
+
+    await Bun.write(
+      join(parentWorktreePath, 'parent2.txt'),
+      'parent content 2'
+    );
+    await runGitCommand(['add', '.'], parentWorktreePath);
+    await runGitCommand(
+      ['commit', '-m', 'parent commit 2'],
+      parentWorktreePath
+    );
+
+    // Step 3: Stack child branch on parent
+    process.chdir(parentWorktreePath);
+    await stackCommand(ctx, 'child-branch');
+
+    // Step 4: Make a commit on child branch
+    await Bun.write(join(childWorktreePath, 'child.txt'), 'child content');
+    await runGitCommand(['add', '.'], childWorktreePath);
+    await runGitCommand(['commit', '-m', 'child commit'], childWorktreePath);
+
+    // Step 5: Simulate squash merge of parent into main on the origin (sourceDir)
+    // Fetch parent-branch from bare repo into sourceDir so we can squash merge it
+    await runGitCommand(
+      ['fetch', bareDir, 'parent-branch'],
+      sourceDir
+    );
+    await runGitCommand(
+      ['merge', '--squash', 'FETCH_HEAD'],
+      sourceDir
+    );
+    await runGitCommand(
+      ['commit', '-m', 'squash merge parent-branch'],
+      sourceDir
+    );
+
+    // Step 6: Unstack from child worktree
+    // Without fork point: git rebase origin/main would try to replay parent's
+    // commits which are already in main (squashed), causing conflicts
+    // With fork point: git rebase --onto origin/main <fork-point> only replays
+    // child's unique commits
+    process.chdir(childWorktreePath);
+    await unstackCommand(ctx);
+
+    // Verify child has its own commit and the squash merge
+    const logResult = await runGitCommand(
+      ['log', '--oneline'],
+      childWorktreePath
+    );
+    expect(logResult.stdout).toContain('child commit');
+    expect(logResult.stdout).toContain('squash merge parent-branch');
+
+    // Verify child has the correct files
+    expect(existsSync(join(childWorktreePath, 'child.txt'))).toBe(true);
+    expect(existsSync(join(childWorktreePath, 'parent.txt'))).toBe(true);
+    expect(existsSync(join(childWorktreePath, 'parent2.txt'))).toBe(true);
+
+    // Verify stack entry was removed
+    const configAfter = await readConfig(configPath);
+    expect(configAfter).toEqual({
+      success: true,
+      data: {
+        repos: [
+          {
+            name: 'bare',
+            url: sourceDir,
+            path: bareDir,
+            bare: true,
+          },
+        ],
+      },
+    });
+  });
 });
 
 describe('repos continue command', () => {
