@@ -35,6 +35,17 @@ work-clean() {
 repos-session() {
   repos session "$@"
 }
+
+work-main() {
+  local path
+  path=$(repos main "$@")
+  local exit_code=$?
+  if [ $exit_code -eq 0 ] && [ -d "$path" ]; then
+    cd "$path"
+  else
+    return $exit_code
+  fi
+}
 `;
 
 const FISH_FUNCTION = `
@@ -60,6 +71,16 @@ end
 
 function repos-session
   repos session $argv
+end
+
+function work-main
+  set -l path (repos main $argv)
+  set -l exit_code $status
+  if test $exit_code -eq 0; and test -d "$path"
+    cd $path
+  else
+    return $exit_code
+  end
 end
 `;
 

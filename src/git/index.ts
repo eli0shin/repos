@@ -1,5 +1,5 @@
 export * from './types.ts';
-export { runGitCommand } from './core.ts';
+export { runGitCommand, runGitCommandInteractive } from './core.ts';
 export * from './repository.ts';
 export * from './branch.ts';
 export * from './remote.ts';

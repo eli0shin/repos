@@ -132,7 +132,7 @@ export PATH="/usr/bin:$PATH"
     expect(matches?.length).toBe(1);
   });
 
-  test('--print outputs bash/zsh helpers including work-clean and repos-session', async () => {
+  test('--print outputs bash/zsh helpers including work-clean, repos-session, and work-main', async () => {
     expect(await runInitWithShell('/bin/zsh', ['--print'])).toEqual({
       stdout: `
 work() {
@@ -161,13 +161,24 @@ repos-session() {
   repos session "$@"
 }
 
+work-main() {
+  local path
+  path=$(repos main "$@")
+  local exit_code=$?
+  if [ $exit_code -eq 0 ] && [ -d "$path" ]; then
+    cd "$path"
+  else
+    return $exit_code
+  fi
+}
+
 `,
       stderr: '',
       exitCode: 0,
     });
   });
 
-  test('--print outputs fish helpers including work-clean and repos-session', async () => {
+  test('--print outputs fish helpers including work-clean, repos-session, and work-main', async () => {
     expect(await runInitWithShell('/usr/bin/fish', ['--print'])).toEqual({
       stdout: `
 function work
@@ -192,6 +203,16 @@ end
 
 function repos-session
   repos session $argv
+end
+
+function work-main
+  set -l path (repos main $argv)
+  set -l exit_code $status
+  if test $exit_code -eq 0; and test -d "$path"
+    cd $path
+  else
+    return $exit_code
+  end
 end
 
 `,
