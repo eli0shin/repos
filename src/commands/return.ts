@@ -3,7 +3,7 @@ import { loadConfig, resolveRepo } from '../config.ts';
 import { listWorktrees } from '../git/index.ts';
 import { print, printError } from '../output.ts';
 
-export async function returnCommand(
+export async function mainCommand(
   ctx: CommandContext,
   repoName?: string
 ): Promise<void> {

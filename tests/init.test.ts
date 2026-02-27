@@ -132,7 +132,7 @@ export PATH="/usr/bin:$PATH"
     expect(matches?.length).toBe(1);
   });
 
-  test('--print outputs bash/zsh helpers including work-clean and work-return', async () => {
+  test('--print outputs bash/zsh helpers including work-clean and work-main', async () => {
     expect(await runInitWithShell('/bin/zsh', ['--print'])).toEqual({
       stdout: `
 work() {
@@ -157,9 +157,9 @@ work-clean() {
   fi
 }
 
-work-return() {
+work-main() {
   local path
-  path=$(repos return "$@")
+  path=$(repos main "$@")
   local exit_code=$?
   if [ $exit_code -eq 0 ] && [ -d "$path" ]; then
     cd "$path"
@@ -174,7 +174,7 @@ work-return() {
     });
   });
 
-  test('--print outputs fish helpers including work-clean and work-return', async () => {
+  test('--print outputs fish helpers including work-clean and work-main', async () => {
     expect(await runInitWithShell('/usr/bin/fish', ['--print'])).toEqual({
       stdout: `
 function work
@@ -197,8 +197,8 @@ function work-clean
   end
 end
 
-function work-return
-  set -l path (repos return $argv)
+function work-main
+  set -l path (repos main $argv)
   set -l exit_code $status
   if test $exit_code -eq 0; and test -d "$path"
     cd $path

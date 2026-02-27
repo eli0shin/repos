@@ -23,7 +23,7 @@ import { continueCommand } from './commands/continue.ts';
 import { collapseCommand } from './commands/collapse.ts';
 import { squashCommand } from './commands/squash.ts';
 import { cleanCommand } from './commands/clean.ts';
-import { returnCommand } from './commands/return.ts';
+import { mainCommand } from './commands/return.ts';
 import { cleanupCommand } from './commands/cleanup.ts';
 import { rebaseCommand } from './commands/rebase.ts';
 import { initCommand, initPrintCommand } from './commands/init.ts';
@@ -218,11 +218,11 @@ program
   });
 
 program
-  .command('return')
+  .command('main')
   .description('Output main worktree path (for shell wrapper to cd)')
   .argument('[repo-name]', 'Repo name (optional if inside a tracked repo)')
   .action(async (repoName) => {
-    await returnCommand(getCommandContext(), repoName);
+    await mainCommand(getCommandContext(), repoName);
   });
 
 program

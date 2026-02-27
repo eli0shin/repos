@@ -16,7 +16,7 @@ import { restackCommand } from '../src/commands/restack.ts';
 import { continueCommand } from '../src/commands/continue.ts';
 import { unstackCommand } from '../src/commands/unstack.ts';
 import { cleanCommand } from '../src/commands/clean.ts';
-import { returnCommand } from '../src/commands/return.ts';
+import { mainCommand } from '../src/commands/return.ts';
 import { rebaseCommand } from '../src/commands/rebase.ts';
 import { writeConfig, readConfig } from '../src/config.ts';
 import type { ReposConfig } from '../src/types.ts';
@@ -697,7 +697,7 @@ describe('repos clean command', () => {
   });
 });
 
-describe('repos return command', () => {
+describe('repos main command', () => {
   const testDir = '/tmp/repos-test-return-cmd';
   const sourceDir = '/tmp/repos-test-return-cmd-source';
   const configPath = '/tmp/repos-test-return-cmd-config/config.json';
@@ -740,7 +740,7 @@ describe('repos return command', () => {
       return true;
     };
 
-    await returnCommand({ configPath }, 'bare');
+    await mainCommand({ configPath }, 'bare');
     process.stdout.write = originalWrite;
 
     // For bare repos, the main worktree is the bare dir itself
@@ -772,7 +772,7 @@ describe('repos return command', () => {
       return true;
     };
 
-    await returnCommand({ configPath }, 'repo');
+    await mainCommand({ configPath }, 'repo');
     process.stdout.write = originalWrite;
 
     expect(output.join('')).toBe(`${repoDir}\n`);

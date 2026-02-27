@@ -32,9 +32,9 @@ work-clean() {
   fi
 }
 
-work-return() {
+work-main() {
   local path
-  path=$(repos return "$@")
+  path=$(repos main "$@")
   local exit_code=$?
   if [ $exit_code -eq 0 ] && [ -d "$path" ]; then
     cd "$path"
@@ -65,8 +65,8 @@ function work-clean
   end
 end
 
-function work-return
-  set -l path (repos return $argv)
+function work-main
+  set -l path (repos main $argv)
   set -l exit_code $status
   if test $exit_code -eq 0; and test -d "$path"
     cd $path
