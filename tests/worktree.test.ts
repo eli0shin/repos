@@ -1496,14 +1496,8 @@ describe('repos unstack command', () => {
 
     // Step 5: Simulate squash merge of parent into main on the origin (sourceDir)
     // Fetch parent-branch from bare repo into sourceDir so we can squash merge it
-    await runGitCommand(
-      ['fetch', bareDir, 'parent-branch'],
-      sourceDir
-    );
-    await runGitCommand(
-      ['merge', '--squash', 'FETCH_HEAD'],
-      sourceDir
-    );
+    await runGitCommand(['fetch', bareDir, 'parent-branch'], sourceDir);
+    await runGitCommand(['merge', '--squash', 'FETCH_HEAD'], sourceDir);
     await runGitCommand(
       ['commit', '-m', 'squash merge parent-branch'],
       sourceDir

@@ -105,10 +105,7 @@ export async function unstackCommand(ctx: CommandContext): Promise<void> {
   await saveStackUpdate(ctx.configPath, config, updatedRepo);
 
   // Update base ref to track origin/main as the new parent for future rebases
-  const targetCommit = await runGitCommand(
-    ['rev-parse', targetRef],
-    repo.path
-  );
+  const targetCommit = await runGitCommand(['rev-parse', targetRef], repo.path);
   if (targetCommit.exitCode === 0) {
     await setBaseRef(repo.path, currentBranch, targetCommit.stdout.trim());
   } else {
