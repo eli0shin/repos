@@ -25,6 +25,7 @@ import { squashCommand } from './commands/squash.ts';
 import { cleanCommand } from './commands/clean.ts';
 import { cleanupCommand } from './commands/cleanup.ts';
 import { rebaseCommand } from './commands/rebase.ts';
+import { sessionCommand } from './commands/session.ts';
 import { initCommand, initPrintCommand } from './commands/init.ts';
 import { runUpdaterWorker } from './updater-worker.ts';
 import { handleAutoUpdate, printUpdateMessage } from './auto-update.ts';
@@ -233,6 +234,15 @@ program
     await cleanupCommand(getCommandContext(), {
       dryRun: options.dryRun ?? false,
     });
+  });
+
+program
+  .command('session')
+  .description('Create a worktree and open a tmux session')
+  .argument('<branch>', 'Branch name for the worktree')
+  .argument('[repo-name]', 'Repo name (optional if inside a tracked repo)')
+  .action(async (branch, repoName) => {
+    await sessionCommand(getCommandContext(), branch, repoName);
   });
 
 program

@@ -31,6 +31,10 @@ work-clean() {
     return $exit_code
   fi
 }
+
+session() {
+  repos session "$@"
+}
 `;
 
 const FISH_FUNCTION = `
@@ -52,6 +56,10 @@ function work-clean
   else
     return $exit_code
   end
+end
+
+function session
+  repos session $argv
 end
 `;
 
