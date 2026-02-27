@@ -717,8 +717,9 @@ describe('repos main command', () => {
   });
 
   test('outputs main worktree path for bare repo', async () => {
-    const bareDir = join(testDir, 'bare.git');
-    await cloneBare(sourceDir, bareDir);
+    const bareDirRaw = join(testDir, 'bare.git');
+    await cloneBare(sourceDir, bareDirRaw);
+    const bareDir = realpathSync(bareDirRaw);
 
     // Create a feature worktree
     const worktreePath = join(testDir, 'bare.git-feature');
