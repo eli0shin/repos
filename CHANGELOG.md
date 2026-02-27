@@ -1,5 +1,19 @@
 # repos
 
+## 0.11.0
+
+### Minor Changes
+
+- [#46](https://github.com/eli0shin/repos/pull/46) [`53d15e6`](https://github.com/eli0shin/repos/commit/53d15e6c87428ed279301339c1fad6092aea7350) Thanks [@eli0shin](https://github.com/eli0shin)! - Add `repos session` command that creates a worktree and opens a tmux session in it, with automatic switch-client when inside tmux or attach when outside.
+
+- [#48](https://github.com/eli0shin/repos/pull/48) [`a1658fa`](https://github.com/eli0shin/repos/commit/a1658fa0a4aefe1fd668c72e186f6d4b862e6b05) Thanks [@eli0shin](https://github.com/eli0shin)! - Add `repos main` command and `work-main` shell function to cd back to the main worktree without cleaning the current one.
+
+### Patch Changes
+
+- [#47](https://github.com/eli0shin/repos/pull/47) [`1163c03`](https://github.com/eli0shin/repos/commit/1163c0370b05b8c067b0333edb10d934ec52d446) Thanks [@eli0shin](https://github.com/eli0shin)! - Fix unstack and rebase to handle squash/rebase-merged parent branches using fork point tracking, preventing conflicts when rebasing after a parent branch has been squash-merged into main.
+
+- [#45](https://github.com/eli0shin/repos/pull/45) [`ec113c0`](https://github.com/eli0shin/repos/commit/ec113c0fd4caad9f9a978cf048af611262919ba5) Thanks [@eli0shin](https://github.com/eli0shin)! - Fix editor freeze in `repos continue` by spawning `git rebase --continue` with inherited stdio, allowing the editor to open normally. Also set `stdin: 'ignore'` on piped git commands to prevent hangs if git unexpectedly invokes an editor.
+
 ## 0.10.1
 
 ### Patch Changes
