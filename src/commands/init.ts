@@ -32,7 +32,7 @@ work-clean() {
   fi
 }
 
-session() {
+repos-session() {
   repos session "$@"
 }
 `;
@@ -58,7 +58,7 @@ function work-clean
   end
 end
 
-function session
+function repos-session
   repos session $argv
 end
 `;

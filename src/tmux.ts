@@ -29,11 +29,12 @@ export async function tmuxHasSession(
   if (result.exitCode === 0) {
     return { success: true, data: true };
   }
-  // Exit code 1 means session doesn't exist, which is not an error
-  if (result.stderr.includes('no server running')) {
+  // Exit code 1 means the session does not exist (including "no server running")
+  if (result.exitCode === 1) {
     return { success: true, data: false };
   }
-  return { success: true, data: false };
+  // Any other exit code indicates an unexpected error (e.g. permission denied)
+  return { success: false, error: result.stderr || 'tmux has-session failed' };
 }
 
 export async function tmuxNewSession(
@@ -79,7 +80,11 @@ export async function tmuxAttachSession(
 
   const exitCode = await proc.exited;
   if (exitCode !== 0) {
-    return { success: false, error: 'Failed to attach to tmux session' };
+    // stderr is inherited (already printed to terminal), so include a hint
+    return {
+      success: false,
+      error: `Failed to attach to tmux session — try: tmux attach-session -t ${name}`,
+    };
   }
   return { success: true, data: undefined };
 }
@@ -88,6 +93,9 @@ export function isInsideTmux(): boolean {
   return process.env.TMUX !== undefined && process.env.TMUX !== '';
 }
 
+// Use ':' as the separator between repo name and branch to avoid collisions.
+// e.g. repo "foo-bar" + branch "baz" vs repo "foo" + branch "bar-baz" would
+// both produce "foo-bar-baz" with a dash separator, but are distinct with ':'.
 export function getSessionName(repoName: string, branch: string): string {
-  return `${repoName}-${branch.replace(/\//g, '-')}`;
+  return `${repoName}:${branch.replace(/\//g, '-')}`;
 }

@@ -1,3 +1,4 @@
+import { basename } from 'node:path';
 import type { CommandContext } from '../cli.ts';
 import { loadConfig, resolveRepo, getWorktreePath } from '../config.ts';
 import {
@@ -31,15 +32,12 @@ export async function sessionCommand(
     const existing = findWorktreeByBranch(worktreesResult.data, branch);
     if (existing) {
       worktreePath = existing.path;
+      printStatus(`Reusing existing worktree at ${worktreePath}`);
     } else {
-      worktreePath = await createWorktreeForSession(
-        repo.path,
-        repo.name,
-        branch
-      );
+      worktreePath = await createWorktreeForSession(repo.path, branch);
     }
   } else {
-    worktreePath = await createWorktreeForSession(repo.path, repo.name, branch);
+    worktreePath = await createWorktreeForSession(repo.path, branch);
   }
 
   const sessionName = getSessionName(repo.name, branch);
@@ -58,6 +56,8 @@ export async function sessionCommand(
       process.exit(1);
     }
     printStatus(`Created tmux session "${sessionName}"`);
+  } else {
+    printStatus(`Attaching to existing session "${sessionName}"`);
   }
 
   // Switch or attach
@@ -78,7 +78,6 @@ export async function sessionCommand(
 
 async function createWorktreeForSession(
   repoPath: string,
-  repoName: string,
   branch: string
 ): Promise<string> {
   await ensureRefspecConfig(repoPath);
@@ -92,6 +91,7 @@ async function createWorktreeForSession(
     process.exit(1);
   }
 
+  const repoName = basename(repoPath).replace(/\.git$/, '');
   printStatus(`Created worktree "${repoName}-${branch.replace(/\//g, '-')}"`);
   return worktreePath;
 }
