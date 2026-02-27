@@ -23,11 +23,13 @@ import { continueCommand } from './commands/continue.ts';
 import { collapseCommand } from './commands/collapse.ts';
 import { squashCommand } from './commands/squash.ts';
 import { cleanCommand } from './commands/clean.ts';
+import { mainCommand } from './commands/main.ts';
 import { cleanupCommand } from './commands/cleanup.ts';
 import { rebaseCommand } from './commands/rebase.ts';
 import { initCommand, initPrintCommand } from './commands/init.ts';
 import { runUpdaterWorker } from './updater-worker.ts';
 import { handleAutoUpdate, printUpdateMessage } from './auto-update.ts';
+import { print, printError } from './output.ts';
 import type { UpdateBehavior } from './types.ts';
 
 // Handle update worker mode early
@@ -214,6 +216,19 @@ program
       force: options.force ?? false,
       dryRun: options.dryRun ?? false,
     });
+  });
+
+program
+  .command('main')
+  .description('Output main worktree path (for shell wrapper to cd)')
+  .argument('[repo-name]', 'Repo name (optional if inside a tracked repo)')
+  .action(async (repoName) => {
+    const result = await mainCommand(getCommandContext(), repoName);
+    if (!result.success) {
+      printError(`Error: ${result.error}`);
+      process.exit(1);
+    }
+    print(result.data);
   });
 
 program

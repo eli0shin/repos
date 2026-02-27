@@ -16,6 +16,7 @@ import { restackCommand } from '../src/commands/restack.ts';
 import { continueCommand } from '../src/commands/continue.ts';
 import { unstackCommand } from '../src/commands/unstack.ts';
 import { cleanCommand } from '../src/commands/clean.ts';
+import { mainCommand } from '../src/commands/main.ts';
 import { rebaseCommand } from '../src/commands/rebase.ts';
 import { writeConfig, readConfig } from '../src/config.ts';
 import type { ReposConfig } from '../src/types.ts';
@@ -693,6 +694,73 @@ describe('repos clean command', () => {
     expect(stderrOutput.join('')).toBe(
       'Would remove worktree "bare-feature"\n'
     );
+  });
+});
+
+describe('repos main command', () => {
+  const testDir = '/tmp/repos-test-return-cmd';
+  const sourceDir = '/tmp/repos-test-return-cmd-source';
+  const configPath = '/tmp/repos-test-return-cmd-config/config.json';
+
+  beforeEach(async () => {
+    await mkdir(testDir, { recursive: true });
+    await createTestRepo(sourceDir);
+  });
+
+  afterEach(async () => {
+    await rm(testDir, { recursive: true, force: true });
+    await rm(sourceDir, { recursive: true, force: true });
+    await rm('/tmp/repos-test-return-cmd-config', {
+      recursive: true,
+      force: true,
+    });
+  });
+
+  test('outputs main worktree path for bare repo', async () => {
+    const bareDirRaw = join(testDir, 'bare.git');
+    await cloneBare(sourceDir, bareDirRaw);
+    const bareDir = realpathSync(bareDirRaw);
+
+    // Create a feature worktree
+    const worktreePath = join(testDir, 'bare.git-feature');
+    await runGitCommand(
+      ['worktree', 'add', '-b', 'feature', worktreePath],
+      bareDir
+    );
+
+    const config = {
+      repos: [{ name: 'bare', url: sourceDir, path: bareDir, bare: true }],
+    } satisfies ReposConfig;
+    await writeConfig(configPath, config);
+
+    // For bare repos, the main worktree is the bare dir itself
+    expect(await mainCommand({ configPath }, 'bare')).toEqual({
+      success: true,
+      data: bareDir,
+    });
+  });
+
+  test('outputs main worktree path for regular repo', async () => {
+    const repoDirRaw = join(testDir, 'repo');
+    await runGitCommand(['clone', sourceDir, repoDirRaw]);
+    const repoDir = realpathSync(repoDirRaw);
+
+    // Create a feature worktree
+    const worktreePath = join(testDir, 'repo-feature');
+    await runGitCommand(
+      ['worktree', 'add', '-b', 'feature', worktreePath],
+      repoDir
+    );
+
+    const config = {
+      repos: [{ name: 'repo', url: sourceDir, path: repoDir }],
+    } satisfies ReposConfig;
+    await writeConfig(configPath, config);
+
+    expect(await mainCommand({ configPath }, 'repo')).toEqual({
+      success: true,
+      data: repoDir,
+    });
   });
 });
 
