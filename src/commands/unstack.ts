@@ -10,8 +10,13 @@ import {
   getDefaultBranch,
   listWorktrees,
   findWorktreeByDirectory,
-  fetchAndRebase,
+  fetchOrigin,
+  rebaseOnto,
+  rebaseOnRef,
+  getBaseRef,
   deleteBaseRef,
+  setBaseRef,
+  runGitCommand,
 } from '../git/index.ts';
 import { print, printError } from '../output.ts';
 
@@ -68,14 +73,52 @@ export async function unstackCommand(ctx: CommandContext): Promise<void> {
     `Unstacking "${currentBranch}" from "${parentBranch}" onto "${defaultBranch}"...`
   );
 
-  await fetchAndRebase(currentWorktree.path, targetRef);
+  // Fetch latest changes
+  const fetchResult = await fetchOrigin(currentWorktree.path);
+  if (!fetchResult.success) {
+    printError(`Error fetching: ${fetchResult.error}`);
+    process.exit(1);
+  }
+
+  // Use fork point for rebase to handle squash/rebase merges correctly
+  const baseRefResult = await getBaseRef(repo.path, currentBranch);
+  if (baseRefResult.success) {
+    const rebaseResult = await rebaseOnto(
+      currentWorktree.path,
+      targetRef,
+      baseRefResult.data
+    );
+    if (!rebaseResult.success) {
+      printError(`Error: ${rebaseResult.error}`);
+      process.exit(1);
+    }
+  } else {
+    const rebaseResult = await rebaseOnRef(currentWorktree.path, targetRef);
+    if (!rebaseResult.success) {
+      printError(`Error: ${rebaseResult.error}`);
+      process.exit(1);
+    }
+  }
 
   // Remove the stack relationship
   const updatedRepo = removeStackEntry(repo, currentBranch);
   await saveStackUpdate(ctx.configPath, config, updatedRepo);
 
-  // Delete base ref for fork point tracking (no longer stacked)
-  await deleteBaseRef(repo.path, currentBranch);
+  // Update base ref to track origin/main as the new parent for future rebases
+  const targetCommit = await runGitCommand(['rev-parse', targetRef], repo.path);
+  if (targetCommit.exitCode === 0) {
+    const setResult = await setBaseRef(
+      repo.path,
+      currentBranch,
+      targetCommit.stdout.trim()
+    );
+    if (!setResult.success) {
+      printError(`Warning: Failed to update base ref: ${setResult.error}`);
+    }
+  } else {
+    // If we can't resolve the target, clean up the stale base ref
+    await deleteBaseRef(repo.path, currentBranch);
+  }
 
   print(`Unstacked "${currentBranch}" - now independent on "${defaultBranch}"`);
 }
