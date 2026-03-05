@@ -1,5 +1,11 @@
 # repos
 
+## 0.11.1
+
+### Patch Changes
+
+- [#53](https://github.com/eli0shin/repos/pull/53) [`932adc4`](https://github.com/eli0shin/repos/commit/932adc451f884c1d5bb7b451f191008bf3a303b6) Thanks [@eli0shin](https://github.com/eli0shin)! - fix: use @ separator in tmux session names instead of : to avoid tmux interpreting it as a session:window separator
+
 ## 0.11.0
 
 ### Minor Changes
