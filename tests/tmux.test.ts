@@ -3,25 +3,25 @@ import { getSessionName, isInsideTmux, tmuxHasSession } from '../src/tmux.ts';
 
 describe('getSessionName', () => {
   test('creates session name from repo and branch', () => {
-    expect(getSessionName('myrepo', 'feature')).toBe('myrepo:feature');
+    expect(getSessionName('myrepo', 'feature')).toBe('myrepo@feature');
   });
 
   test('replaces slashes in branch name with dashes', () => {
     expect(getSessionName('myrepo', 'feature/add-auth')).toBe(
-      'myrepo:feature-add-auth'
+      'myrepo@feature-add-auth'
     );
   });
 
   test('handles multiple slashes', () => {
     expect(getSessionName('myrepo', 'user/feature/deep')).toBe(
-      'myrepo:user-feature-deep'
+      'myrepo@user-feature-deep'
     );
   });
 
   test('avoids collision between repo-with-dash+branch vs repo+branch-with-dash', () => {
     // "foo-bar" repo + "baz" branch vs "foo" repo + "bar-baz" branch
-    expect(getSessionName('foo-bar', 'baz')).toBe('foo-bar:baz');
-    expect(getSessionName('foo', 'bar-baz')).toBe('foo:bar-baz');
+    expect(getSessionName('foo-bar', 'baz')).toBe('foo-bar@baz');
+    expect(getSessionName('foo', 'bar-baz')).toBe('foo@bar-baz');
   });
 });
 
