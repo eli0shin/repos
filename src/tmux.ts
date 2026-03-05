@@ -93,9 +93,11 @@ export function isInsideTmux(): boolean {
   return process.env.TMUX !== undefined && process.env.TMUX !== '';
 }
 
-// Use ':' as the separator between repo name and branch to avoid collisions.
+// Use '@' as the separator between repo name and branch to avoid collisions.
 // e.g. repo "foo-bar" + branch "baz" vs repo "foo" + branch "bar-baz" would
-// both produce "foo-bar-baz" with a dash separator, but are distinct with ':'.
+// both produce "foo-bar-baz" with a dash separator, but are distinct with '@'.
+// Note: ':' cannot be used because tmux interprets it as a session:window separator
+// in -t target strings, causing switch-client and has-session to fail.
 export function getSessionName(repoName: string, branch: string): string {
-  return `${repoName}:${branch.replace(/\//g, '-')}`;
+  return `${repoName}@${branch.replace(/\//g, '-')}`;
 }
