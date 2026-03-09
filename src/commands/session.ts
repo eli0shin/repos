@@ -1,11 +1,19 @@
-import { basename } from 'node:path';
 import type { CommandContext } from '../cli.ts';
-import { loadConfig, resolveRepo, getWorktreePath } from '../config.ts';
+import {
+  loadConfig,
+  resolveRepo,
+  getWorktreePath,
+  getParentBranch,
+  recordStack,
+} from '../config.ts';
 import {
   createWorktree,
   listWorktrees,
   ensureRefspecConfig,
   findWorktreeByBranch,
+  localBranchExists,
+  getDefaultBranch,
+  runGitCommand,
 } from '../git/index.ts';
 import { printError, printStatus } from '../output.ts';
 import {
@@ -16,6 +24,7 @@ import {
   tmuxNewSession,
   tmuxSwitchClient,
 } from '../tmux.ts';
+import type { RepoEntry, ReposConfig } from '../types.ts';
 
 export async function sessionCommand(
   ctx: CommandContext,
@@ -34,10 +43,10 @@ export async function sessionCommand(
       worktreePath = existing.path;
       printStatus(`Reusing existing worktree at ${worktreePath}`);
     } else {
-      worktreePath = await createWorktreeForSession(repo.path, branch);
+      worktreePath = await createWorktreeForSession(ctx, config, repo, branch);
     }
   } else {
-    worktreePath = await createWorktreeForSession(repo.path, branch);
+    worktreePath = await createWorktreeForSession(ctx, config, repo, branch);
   }
 
   const sessionName = getSessionName(repo.name, branch);
@@ -77,21 +86,61 @@ export async function sessionCommand(
 }
 
 async function createWorktreeForSession(
-  repoPath: string,
+  ctx: CommandContext,
+  config: ReposConfig,
+  repo: RepoEntry,
   branch: string
 ): Promise<string> {
-  await ensureRefspecConfig(repoPath);
+  // Check if branch is new before creating worktree
+  const localExists = await localBranchExists(repo.path, branch);
+  let remoteExists = false;
+  if (!localExists) {
+    const remoteBranchResult = await runGitCommand(
+      ['ls-remote', '--heads', 'origin', branch],
+      repo.path
+    );
+    remoteExists =
+      remoteBranchResult.exitCode === 0 &&
+      remoteBranchResult.stdout.includes(`refs/heads/${branch}`);
+  }
+  const isNewBranch = !localExists && !remoteExists;
 
-  const worktreePath = getWorktreePath(repoPath, branch);
+  await ensureRefspecConfig(repo.path);
+
+  const worktreePath = getWorktreePath(repo.path, branch);
   printStatus(`Creating worktree for "${branch}"...`);
 
-  const result = await createWorktree(repoPath, worktreePath, branch);
+  const result = await createWorktree(repo.path, worktreePath, branch);
   if (!result.success) {
     printError(`Error: ${result.error}`);
     process.exit(1);
   }
 
-  const repoName = basename(repoPath).replace(/\.git$/, '');
+  // Stack new branches on the default branch so restack/unstack work
+  // Skip if branch already has a stack relationship in config
+  if (isNewBranch && !getParentBranch(repo, branch)) {
+    const defaultBranchResult = await getDefaultBranch(repo.path);
+    if (defaultBranchResult.success) {
+      const defaultBranch = defaultBranchResult.data;
+      const headResult = await runGitCommand(
+        ['rev-parse', `origin/${defaultBranch}`],
+        repo.path
+      );
+      if (headResult.exitCode === 0) {
+        await recordStack(
+          repo.path,
+          ctx.configPath,
+          config,
+          repo,
+          defaultBranch,
+          branch,
+          headResult.stdout.trim()
+        );
+      }
+    }
+  }
+
+  const repoName = repo.name;
   printStatus(`Created worktree "${repoName}-${branch.replace(/\//g, '-')}"`);
   return worktreePath;
 }

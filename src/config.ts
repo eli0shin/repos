@@ -1,7 +1,11 @@
 import { mkdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
-import { listWorktrees, findWorktreeByDirectory } from './git/index.ts';
+import {
+  listWorktrees,
+  findWorktreeByDirectory,
+  setBaseRef,
+} from './git/index.ts';
 import { printError } from './output.ts';
 import type {
   RepoEntry,
@@ -299,4 +303,24 @@ export async function saveStackUpdate(
   if (!result.success) {
     printError(`Warning: Failed to update config: ${result.error}`);
   }
+}
+
+// Record a stack relationship: set base ref and add config entry
+export async function recordStack(
+  repoPath: string,
+  configPath: string,
+  config: ReposConfig,
+  repo: RepoEntry,
+  parentBranch: string,
+  childBranch: string,
+  parentCommit: string
+): Promise<void> {
+  const baseRefResult = await setBaseRef(repoPath, childBranch, parentCommit);
+  if (!baseRefResult.success) {
+    printError(`Warning: Failed to create base ref: ${baseRefResult.error}`);
+    // Continue anyway - restack will compute fork point as fallback
+  }
+
+  const updatedRepo = addStackEntry(repo, parentBranch, childBranch);
+  await saveStackUpdate(configPath, config, updatedRepo);
 }

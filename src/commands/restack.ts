@@ -21,6 +21,7 @@ import {
   deleteBaseRef,
   getHeadCommit,
   computeForkPoint,
+  runGitCommand,
   type WorktreeInfo,
 } from '../git/index.ts';
 import { print, printError } from '../output.ts';
@@ -65,20 +66,29 @@ async function restackBranch(
   const parentWorktree = findWorktreeByBranch(worktrees, parentBranch);
   const parentStillExists = parentWorktree !== undefined;
 
+  // Check if parent is the default branch (may not have a worktree in bare repos)
+  const defaultBranchResult = await getDefaultBranch(repo.path);
+  const defaultBranch = defaultBranchResult.success
+    ? defaultBranchResult.data
+    : undefined;
+  const parentIsDefaultBranch = parentBranch === defaultBranch;
+
   // Determine target branch for rebase
   let targetRef: string;
 
   if (parentStillExists) {
     targetRef = parentBranch;
     print(`Rebasing "${branch}" on parent branch "${parentBranch}"...`);
+  } else if (parentIsDefaultBranch) {
+    // Parent is the default branch - rebase onto origin/{default} but keep stack
+    targetRef = `origin/${defaultBranch}`;
+    print(`Rebasing "${branch}" on "${defaultBranch}"...`);
   } else {
     // Parent is gone - fallback to default branch
-    const defaultBranchResult = await getDefaultBranch(repo.path);
-    if (!defaultBranchResult.success) {
-      printError(`Error: ${defaultBranchResult.error}`);
+    if (!defaultBranch) {
+      printError('Error: Could not determine default branch');
       return false;
     }
-    const defaultBranch = defaultBranchResult.data;
     targetRef = `origin/${defaultBranch}`;
 
     // Remove the stale parent relationship
@@ -141,6 +151,15 @@ async function restackBranch(
     const parentHeadResult = await getHeadCommit(parentWorktree.path);
     if (parentHeadResult.success) {
       await setBaseRef(repo.path, branch, parentHeadResult.data);
+    }
+  } else if (parentIsDefaultBranch) {
+    // Parent is the default branch - update base ref to origin/{default} HEAD
+    const revResult = await runGitCommand(
+      ['rev-parse', targetRef],
+      worktree.path
+    );
+    if (revResult.exitCode === 0) {
+      await setBaseRef(repo.path, branch, revResult.stdout.trim());
     }
   } else {
     // Parent is gone, delete the base ref since we're no longer stacked
