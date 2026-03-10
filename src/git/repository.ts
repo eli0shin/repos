@@ -73,3 +73,19 @@ export async function getHeadCommit(
 
   return { success: true, data: result.stdout.trim() };
 }
+
+export async function resolveRef(
+  repoDir: string,
+  ref: string
+): Promise<OperationResult<string>> {
+  const result = await runGitCommand(['rev-parse', ref], repoDir);
+
+  if (result.exitCode !== 0) {
+    return {
+      success: false,
+      error: result.stderr || `Failed to resolve ref "${ref}"`,
+    };
+  }
+
+  return { success: true, data: result.stdout.trim() };
+}

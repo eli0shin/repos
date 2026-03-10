@@ -1,7 +1,15 @@
 import { mkdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
-import { listWorktrees, findWorktreeByDirectory } from './git/index.ts';
+import {
+  listWorktrees,
+  findWorktreeByDirectory,
+  setBaseRef,
+  localBranchExists,
+  getDefaultBranch,
+  resolveRef,
+  runGitCommand,
+} from './git/index.ts';
 import { printError } from './output.ts';
 import type {
   RepoEntry,
@@ -299,4 +307,84 @@ export async function saveStackUpdate(
   if (!result.success) {
     printError(`Warning: Failed to update config: ${result.error}`);
   }
+}
+
+// Record a stack relationship: set base ref and add config entry
+export async function recordStack(
+  repoPath: string,
+  configPath: string,
+  config: ReposConfig,
+  repo: RepoEntry,
+  parentBranch: string,
+  childBranch: string,
+  parentCommit: string
+): Promise<void> {
+  const baseRefResult = await setBaseRef(repoPath, childBranch, parentCommit);
+  if (!baseRefResult.success) {
+    printError(`Warning: Failed to create base ref: ${baseRefResult.error}`);
+    // Continue anyway - restack will compute fork point as fallback
+  }
+
+  const updatedRepo = addStackEntry(repo, parentBranch, childBranch);
+  await saveStackUpdate(configPath, config, updatedRepo);
+}
+
+// Check if a branch is new (doesn't exist locally or remotely).
+// If ls-remote fails (e.g., network unavailable), returns false so we don't
+// accidentally create stale stack entries for branches that may already exist.
+export async function checkIsNewBranch(
+  repoPath: string,
+  branch: string
+): Promise<boolean> {
+  const localExists = await localBranchExists(repoPath, branch);
+  if (localExists) return false;
+
+  const remoteBranchResult = await runGitCommand(
+    ['ls-remote', '--heads', 'origin', branch],
+    repoPath
+  );
+  // If ls-remote fails (network unavailable), treat as existing to avoid
+  // false-positive stacking of branches that may already exist on the remote.
+  if (remoteBranchResult.exitCode !== 0) return false;
+
+  // Parse line-by-line to match exact ref names. Using a tab-anchored check
+  // (e.g. `\trefs/heads/feature`) would still match `refs/heads/feature-v2`
+  // as a prefix, so we compare the full refname from each tab-separated line.
+  const remoteExists = remoteBranchResult.stdout
+    .split('\n')
+    .some((line) => line.split('\t')[1]?.trim() === `refs/heads/${branch}`);
+  return !remoteExists;
+}
+
+// Stack a new branch on the default branch if it has no parent yet.
+// Called after worktree creation for branches created via work/session.
+export async function recordStackOnDefaultBranch(
+  configPath: string,
+  config: ReposConfig,
+  repo: RepoEntry,
+  branch: string
+): Promise<void> {
+  if (getParentBranch(repo, branch)) return;
+
+  const defaultBranchResult = await getDefaultBranch(repo.path);
+  if (!defaultBranchResult.success) return;
+
+  const defaultBranch = defaultBranchResult.data;
+  const headResult = await resolveRef(repo.path, `origin/${defaultBranch}`);
+  if (!headResult.success) {
+    printError(
+      `Warning: Could not resolve origin/${defaultBranch} — stack entry not recorded. ` +
+        `Run "repos stack" manually, or fetch and retry.`
+    );
+    return;
+  }
+  await recordStack(
+    repo.path,
+    configPath,
+    config,
+    repo,
+    defaultBranch,
+    branch,
+    headResult.data
+  );
 }

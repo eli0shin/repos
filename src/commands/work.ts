@@ -1,5 +1,11 @@
 import type { CommandContext } from '../cli.ts';
-import { loadConfig, resolveRepo, getWorktreePath } from '../config.ts';
+import {
+  loadConfig,
+  resolveRepo,
+  getWorktreePath,
+  checkIsNewBranch,
+  recordStackOnDefaultBranch,
+} from '../config.ts';
 import {
   createWorktree,
   listWorktrees,
@@ -27,6 +33,10 @@ export async function workCommand(
     }
   }
 
+  // Check if branch is new (doesn't exist locally or on remote)
+  // so we know whether to record a stack relationship after creation
+  const isNewBranch = await checkIsNewBranch(repo.path, branch);
+
   // Ensure refspec is configured correctly (fixes bare repo issues)
   await ensureRefspecConfig(repo.path);
 
@@ -38,6 +48,11 @@ export async function workCommand(
   if (!result.success) {
     printError(`Error: ${result.error}`);
     process.exit(1);
+  }
+
+  // Stack new branches on the default branch so restack/unstack work
+  if (isNewBranch) {
+    await recordStackOnDefaultBranch(ctx.configPath, config, repo, branch);
   }
 
   printStatus(`Created worktree "${repo.name}-${branch.replace(/\//g, '-')}"`);

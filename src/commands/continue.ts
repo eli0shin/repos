@@ -17,6 +17,7 @@ import {
   deleteBaseRef,
   getHeadCommit,
   runGitCommand,
+  getDefaultBranch,
 } from '../git/index.ts';
 import { print, printError } from '../output.ts';
 
@@ -139,11 +140,17 @@ export async function continueCommand(ctx: CommandContext): Promise<void> {
     if (childrenWithWorktrees.length > 0) {
       print(`Restacking ${childrenWithWorktrees.length} child branch(es)...`);
 
+      const defaultBranchResult = await getDefaultBranch(repo.path);
+      const defaultBranch = defaultBranchResult.success
+        ? defaultBranchResult.data
+        : undefined;
+
       const rctx = {
         ctx,
         repo,
         config,
         worktrees: freshWorktreesResult.data,
+        defaultBranch,
       } satisfies RestackContext;
 
       for (const child of childrenWithWorktrees) {

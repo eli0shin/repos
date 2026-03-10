@@ -3,8 +3,7 @@ import {
   loadConfig,
   findRepoFromCwd,
   getWorktreePath,
-  addStackEntry,
-  saveStackUpdate,
+  recordStack,
 } from '../config.ts';
 import {
   createWorktreeFromBranch,
@@ -13,7 +12,6 @@ import {
   findWorktreeByDirectory,
   findWorktreeByBranch,
   getHeadCommit,
-  setBaseRef,
 } from '../git/index.ts';
 import { print, printError, printStatus } from '../output.ts';
 
@@ -88,22 +86,16 @@ export async function stackCommand(
     process.exit(1);
   }
 
-  // Create the base ref to track the fork point
-  // This ref prevents the fork point commit from being garbage collected
-  // and enables correct `rebase --onto` behavior after parent is rebased/squashed
-  const baseRefResult = await setBaseRef(
+  // Record stack relationship: base ref + config entry
+  await recordStack(
     repo.path,
+    ctx.configPath,
+    config,
+    repo,
+    parentBranch,
     newBranch,
     parentHeadResult.data
   );
-  if (!baseRefResult.success) {
-    printError(`Warning: Failed to create base ref: ${baseRefResult.error}`);
-    // Continue anyway - restack will compute fork point as fallback
-  }
-
-  // Record parent-child relationship in config
-  const updatedRepo = addStackEntry(repo, parentBranch, newBranch);
-  await saveStackUpdate(ctx.configPath, config, updatedRepo);
 
   printStatus(
     `Created stacked worktree "${repo.name}-${newBranch.replace(/\//g, '-')}"`

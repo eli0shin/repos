@@ -12,7 +12,7 @@ import { mockProcessExit, type MockExit } from './utils.ts';
 // Helper to create a test repo with commits
 async function createTestRepo(dir: string): Promise<void> {
   await mkdir(dir, { recursive: true });
-  await runGitCommand(['init'], dir);
+  await runGitCommand(['init', '-b', 'main'], dir);
   await Bun.write(join(dir, 'test.txt'), 'test');
   await runGitCommand(['add', '.'], dir);
   await runGitCommand(['commit', '-m', 'initial'], dir);
@@ -76,6 +76,7 @@ describe('repos collapse command', () => {
     await runGitCommand(['commit', '-m', 'child commit'], childWorktreePath);
 
     // Verify stack exists before collapse
+    // work command stacks parent-branch on main, stack command stacks child on parent
     const configBefore = await readConfig(configPath);
     expect(configBefore).toEqual({
       success: true,
@@ -86,7 +87,10 @@ describe('repos collapse command', () => {
             url: sourceDir,
             path: bareDir,
             bare: true,
-            stacks: [{ parent: 'parent-branch', child: 'child-branch' }],
+            stacks: [
+              { parent: 'main', child: 'parent-branch' },
+              { parent: 'parent-branch', child: 'child-branch' },
+            ],
           },
         ],
       },
@@ -110,7 +114,7 @@ describe('repos collapse command', () => {
     expect(logResult.stdout).toContain('parent commit');
     expect(logResult.stdout).toContain('child commit');
 
-    // Verify stack entry was removed (child is now independent)
+    // Verify child is now stacked directly on main (parent-branch was removed)
     const configAfter = await readConfig(configPath);
     expect(configAfter).toEqual({
       success: true,
@@ -121,6 +125,7 @@ describe('repos collapse command', () => {
             url: sourceDir,
             path: bareDir,
             bare: true,
+            stacks: [{ parent: 'main', child: 'child-branch' }],
           },
         ],
       },
@@ -165,7 +170,7 @@ describe('repos collapse command', () => {
     await runGitCommand(['add', '.'], pathC);
     await runGitCommand(['commit', '-m', 'commit C'], pathC);
 
-    // Verify 3-level stack exists
+    // Verify 4-level stack exists (main -> A -> B -> C)
     const configBefore = await readConfig(configPath);
     expect(configBefore).toEqual({
       success: true,
@@ -177,6 +182,7 @@ describe('repos collapse command', () => {
             path: bareDir,
             bare: true,
             stacks: [
+              { parent: 'main', child: 'branch-a' },
               { parent: 'branch-a', child: 'branch-b' },
               { parent: 'branch-b', child: 'branch-c' },
             ],
@@ -196,7 +202,7 @@ describe('repos collapse command', () => {
     expect(await isGitRepo(pathA)).toBe(true);
     expect(await isGitRepo(pathC)).toBe(true);
 
-    // Verify C now has A as parent
+    // Verify C now has A as parent (main -> A still present)
     const configAfter = await readConfig(configPath);
     expect(configAfter).toEqual({
       success: true,
@@ -207,7 +213,10 @@ describe('repos collapse command', () => {
             url: sourceDir,
             path: bareDir,
             bare: true,
-            stacks: [{ parent: 'branch-a', child: 'branch-c' }],
+            stacks: [
+              { parent: 'main', child: 'branch-a' },
+              { parent: 'branch-a', child: 'branch-c' },
+            ],
           },
         ],
       },
@@ -312,6 +321,7 @@ describe('repos collapse command', () => {
             path: bareDir,
             bare: true,
             stacks: [
+              { parent: 'main', child: 'parent-branch' },
               { parent: 'parent-branch', child: 'child-1' },
               { parent: 'parent-branch', child: 'child-2' },
             ],

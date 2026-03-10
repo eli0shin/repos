@@ -1,6 +1,11 @@
-import { basename } from 'node:path';
 import type { CommandContext } from '../cli.ts';
-import { loadConfig, resolveRepo, getWorktreePath } from '../config.ts';
+import {
+  loadConfig,
+  resolveRepo,
+  getWorktreePath,
+  checkIsNewBranch,
+  recordStackOnDefaultBranch,
+} from '../config.ts';
 import {
   createWorktree,
   listWorktrees,
@@ -16,6 +21,7 @@ import {
   tmuxNewSession,
   tmuxSwitchClient,
 } from '../tmux.ts';
+import type { RepoEntry, ReposConfig } from '../types.ts';
 
 export async function sessionCommand(
   ctx: CommandContext,
@@ -34,10 +40,10 @@ export async function sessionCommand(
       worktreePath = existing.path;
       printStatus(`Reusing existing worktree at ${worktreePath}`);
     } else {
-      worktreePath = await createWorktreeForSession(repo.path, branch);
+      worktreePath = await createWorktreeForSession(ctx, config, repo, branch);
     }
   } else {
-    worktreePath = await createWorktreeForSession(repo.path, branch);
+    worktreePath = await createWorktreeForSession(ctx, config, repo, branch);
   }
 
   const sessionName = getSessionName(repo.name, branch);
@@ -77,21 +83,31 @@ export async function sessionCommand(
 }
 
 async function createWorktreeForSession(
-  repoPath: string,
+  ctx: CommandContext,
+  config: ReposConfig,
+  repo: RepoEntry,
   branch: string
 ): Promise<string> {
-  await ensureRefspecConfig(repoPath);
+  // Check if branch is new before creating worktree
+  const isNewBranch = await checkIsNewBranch(repo.path, branch);
 
-  const worktreePath = getWorktreePath(repoPath, branch);
+  await ensureRefspecConfig(repo.path);
+
+  const worktreePath = getWorktreePath(repo.path, branch);
   printStatus(`Creating worktree for "${branch}"...`);
 
-  const result = await createWorktree(repoPath, worktreePath, branch);
+  const result = await createWorktree(repo.path, worktreePath, branch);
   if (!result.success) {
     printError(`Error: ${result.error}`);
     process.exit(1);
   }
 
-  const repoName = basename(repoPath).replace(/\.git$/, '');
+  // Stack new branches on the default branch so restack/unstack work
+  if (isNewBranch) {
+    await recordStackOnDefaultBranch(ctx.configPath, config, repo, branch);
+  }
+
+  const repoName = repo.name;
   printStatus(`Created worktree "${repoName}-${branch.replace(/\//g, '-')}"`);
   return worktreePath;
 }
