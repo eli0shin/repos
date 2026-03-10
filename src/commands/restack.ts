@@ -35,6 +35,8 @@ export type RestackContext = {
   repo: RepoEntry;
   config: ReposConfig;
   worktrees: WorktreeInfo[];
+  /** Resolved once at the start of the restack run; undefined if resolution failed. */
+  defaultBranch: string | undefined;
 };
 
 /**
@@ -66,11 +68,10 @@ async function restackBranch(
   const parentWorktree = findWorktreeByBranch(worktrees, parentBranch);
   const parentStillExists = parentWorktree !== undefined;
 
-  // Check if parent is the default branch (may not have a worktree in bare repos)
-  const defaultBranchResult = await getDefaultBranch(repo.path);
-  const defaultBranch = defaultBranchResult.success
-    ? defaultBranchResult.data
-    : undefined;
+  // Check if parent is the default branch (may not have a worktree in bare repos).
+  // defaultBranch is resolved once per restack run (in restackCommand) and passed
+  // via RestackContext to avoid redundant git calls for every branch in the chain.
+  const defaultBranch = rctx.defaultBranch;
   const parentIsDefaultBranch = parentBranch === defaultBranch;
 
   // Determine target branch for rebase
@@ -146,14 +147,21 @@ async function restackBranch(
     return false;
   }
 
-  // Update base ref to parent's current HEAD after successful rebase
+  // Update base ref to parent's current HEAD after successful rebase.
+  //
+  // Note on the two-condition structure: parentStillExists and parentIsDefaultBranch
+  // can both be true simultaneously when the default branch has an active worktree
+  // (non-bare repos). The first branch (parentWorktree) wins for base-ref updates,
+  // using the live worktree HEAD via getHeadCommit. The else-if (parentIsDefaultBranch)
+  // only fires when the default branch has NO worktree (bare repos or default branch
+  // not checked out), so there is no overlap between the two branches in practice.
   if (parentWorktree) {
     const parentHeadResult = await getHeadCommit(parentWorktree.path);
     if (parentHeadResult.success) {
       await setBaseRef(repo.path, branch, parentHeadResult.data);
     }
   } else if (parentIsDefaultBranch) {
-    // Parent is the default branch - update base ref to origin/{default} HEAD
+    // Parent is the default branch but has no worktree - update base ref to origin/{default} HEAD
     const revResult = await resolveRef(worktree.path, targetRef);
     if (revResult.success) {
       await setBaseRef(repo.path, branch, revResult.data);
@@ -270,11 +278,18 @@ export async function restackCommand(
     process.exit(1);
   }
 
+  // Resolve once here so restackBranch doesn't call getDefaultBranch per branch
+  const defaultBranchResult = await getDefaultBranch(repo.path);
+  const defaultBranch = defaultBranchResult.success
+    ? defaultBranchResult.data
+    : undefined;
+
   const rctx = {
     ctx,
     repo,
     config,
     worktrees: worktreesResult.data,
+    defaultBranch,
   } satisfies RestackContext;
 
   let success: boolean;

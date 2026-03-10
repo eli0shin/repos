@@ -347,9 +347,15 @@ export async function checkIsNewBranch(
   // false-positive stacking of branches that may already exist on the remote.
   if (remoteBranchResult.exitCode !== 0) return false;
 
-  const remoteExists = remoteBranchResult.stdout.includes(
-    `refs/heads/${branch}`
-  );
+  // Parse line-by-line to match exact ref names. Using a tab-anchored check
+  // (e.g. `\trefs/heads/feature`) would still match `refs/heads/feature-v2`
+  // as a prefix, so we compare the full refname from each tab-separated line.
+  const remoteExists = remoteBranchResult.stdout
+    .split('\n')
+    .some((line) => {
+      const ref = line.split('\t')[1]?.trim();
+      return ref === `refs/heads/${branch}`;
+    });
   return !remoteExists;
 }
 
@@ -368,15 +374,20 @@ export async function recordStackOnDefaultBranch(
 
   const defaultBranch = defaultBranchResult.data;
   const headResult = await resolveRef(repo.path, `origin/${defaultBranch}`);
-  if (headResult.success) {
-    await recordStack(
-      repo.path,
-      configPath,
-      config,
-      repo,
-      defaultBranch,
-      branch,
-      headResult.data
+  if (!headResult.success) {
+    printError(
+      `Warning: Could not resolve origin/${defaultBranch} — stack entry not recorded. ` +
+        `Run "repos stack" manually, or fetch and retry.`
     );
+    return;
   }
+  await recordStack(
+    repo.path,
+    configPath,
+    config,
+    repo,
+    defaultBranch,
+    branch,
+    headResult.data
+  );
 }
