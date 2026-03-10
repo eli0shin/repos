@@ -6,7 +6,7 @@ import {
   fetchOrigin,
   rebaseOnto,
   rebaseOnRef,
-  getBaseRef,
+  refreshBaseRef,
   setBaseRef,
   runGitCommand,
 } from '../git/index.ts';
@@ -47,7 +47,12 @@ export async function rebaseCommand(
   }
 
   // Use fork point for rebase if available (handles squash/rebase merges)
-  const baseRefResult = await getBaseRef(repo.path, worktree.branch);
+  // refreshBaseRef validates the stored ref and resyncs if stale
+  const baseRefResult = await refreshBaseRef(
+    repo.path,
+    worktree.branch,
+    targetRef
+  );
   if (baseRefResult.success) {
     const rebaseResult = await rebaseOnto(
       worktree.path,

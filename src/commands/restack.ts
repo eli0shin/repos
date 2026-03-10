@@ -21,6 +21,7 @@ import {
   deleteBaseRef,
   getHeadCommit,
   computeForkPoint,
+  refreshBaseRef,
   resolveRef,
   type WorktreeInfo,
 } from '../git/index.ts';
@@ -104,8 +105,10 @@ async function restackBranch(
     );
   }
 
-  // Get fork point from base ref, or compute it as fallback (migration)
-  const baseRefResult = await getBaseRef(repo.path, branch);
+  // Get fork point from base ref (refreshing if stale), or compute as fallback
+  const baseRefResult = parentStillExists
+    ? await refreshBaseRef(repo.path, branch, parentBranch)
+    : await getBaseRef(repo.path, branch);
   let useForkPoint = false;
   let forkPoint: string | undefined;
 
