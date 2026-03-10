@@ -2033,6 +2033,107 @@ describe('repos unstack command', () => {
     expect(existsSync(join(childWorktreePath, 'parent.txt'))).toBe(true);
   });
 
+  test('unstacks correctly when base ref is stale and parent was squash-merged', async () => {
+    // Scenario: child was manually rebased onto parent (stale base ref),
+    // then parent was squash-merged into main. Without fork point resync,
+    // the stale base ref would include parent commits in the replay range.
+    // Cherry detection can't skip them because squash merges produce
+    // different patch IDs than individual commits. refreshBaseRef detects
+    // the stale fork point and resyncs it so only child's commits are replayed.
+
+    // Clone as bare
+    const bareDir = join(testDir, 'bare.git');
+    await cloneBare(sourceDir, bareDir);
+
+    // Create config
+    const config = {
+      repos: [{ name: 'bare', url: sourceDir, path: bareDir, bare: true }],
+    } satisfies ReposConfig;
+    await writeConfig(configPath, config);
+
+    const ctx = { configPath };
+
+    // Step 1: Create parent worktree with initial commits
+    await workCommand(ctx, 'parent-branch', 'bare');
+    const parentWorktreePath = join(testDir, 'bare.git-parent-branch');
+    const childWorktreePath = join(testDir, 'bare.git-child-branch');
+
+    await Bun.write(
+      join(parentWorktreePath, 'parent1.txt'),
+      'parent content 1'
+    );
+    await runGitCommand(['add', '.'], parentWorktreePath);
+    await runGitCommand(
+      ['commit', '-m', 'parent commit 1'],
+      parentWorktreePath
+    );
+
+    await Bun.write(
+      join(parentWorktreePath, 'parent2.txt'),
+      'parent content 2'
+    );
+    await runGitCommand(['add', '.'], parentWorktreePath);
+    await runGitCommand(
+      ['commit', '-m', 'parent commit 2'],
+      parentWorktreePath
+    );
+
+    // Step 2: Stack child on parent, make a commit
+    process.chdir(parentWorktreePath);
+    await stackCommand(ctx, 'child-branch');
+    // base_ref(child) = parent's HEAD (after "parent commit 2")
+
+    await Bun.write(join(childWorktreePath, 'child.txt'), 'child content');
+    await runGitCommand(['add', '.'], childWorktreePath);
+    await runGitCommand(['commit', '-m', 'child commit'], childWorktreePath);
+
+    // Step 3: Add more commits to parent AFTER child was stacked
+    await Bun.write(
+      join(parentWorktreePath, 'parent3.txt'),
+      'parent content 3'
+    );
+    await runGitCommand(['add', '.'], parentWorktreePath);
+    await runGitCommand(
+      ['commit', '-m', 'parent commit 3'],
+      parentWorktreePath
+    );
+
+    // Step 4: Manually rebase child onto parent (outside repos tool)
+    // This makes child include parent commit 3, but base ref still points
+    // to parent's HEAD at stack time (after "parent commit 2")
+    await runGitCommand(['rebase', 'parent-branch'], childWorktreePath);
+
+    // Step 5: Squash-merge parent into main on origin
+    await runGitCommand(['fetch', bareDir, 'parent-branch'], sourceDir);
+    await runGitCommand(['merge', '--squash', 'FETCH_HEAD'], sourceDir);
+    await runGitCommand(
+      ['commit', '-m', 'squash merge parent-branch'],
+      sourceDir
+    );
+
+    // Step 6: Unstack child — refreshBaseRef should detect stale base ref
+    // and resync to parent's current HEAD (after "parent commit 3").
+    // Without resync, fork point would be too old, causing parent commit 3
+    // to be included in the replay range, conflicting with the squash commit.
+    process.chdir(childWorktreePath);
+    await unstackCommand(ctx);
+
+    // Verify child has only its own commit and the squash merge
+    const logResult = await runGitCommand(
+      ['log', '--format=%s'],
+      childWorktreePath
+    );
+    expect(logResult.stdout.trim()).toEqual(
+      'child commit\nsquash merge parent-branch\ninitial'
+    );
+
+    // Verify child has the correct files
+    expect(existsSync(join(childWorktreePath, 'child.txt'))).toBe(true);
+    expect(existsSync(join(childWorktreePath, 'parent1.txt'))).toBe(true);
+    expect(existsSync(join(childWorktreePath, 'parent2.txt'))).toBe(true);
+    expect(existsSync(join(childWorktreePath, 'parent3.txt'))).toBe(true);
+  });
+
   test('unstacks correctly when no base ref is present (fallback to plain rebase)', async () => {
     // Simulates a branch stacked before fork-point tracking was added.
     // unstack should fall back to plain rebase against origin/main.
