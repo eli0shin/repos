@@ -87,6 +87,9 @@ export async function unstackCommand(ctx: CommandContext): Promise<void> {
     currentBranch,
     parentBranch
   );
+  if (baseRefResult.success && baseRefResult.message) {
+    print(baseRefResult.message);
+  }
   if (baseRefResult.success) {
     const rebaseResult = await rebaseOnto(
       currentWorktree.path,

@@ -1033,6 +1033,80 @@ describe('repos rebase command', () => {
       data: 'feature',
     });
   });
+
+  test('rebase succeeds when base ref is stale from manual rebase (fork point resync)', async () => {
+    // Scenario: feature branch was manually rebased onto origin/main, making
+    // the stored base ref stale. Without fork point resync, rebase --onto
+    // would replay commits already on the branch (causing duplicates/conflicts).
+
+    const localDir = join(testDir, 'local');
+    await runGitCommand(['clone', remoteDir, localDir]);
+
+    // Step 1: Create first main commit and push
+    await Bun.write(join(localDir, 'main1.txt'), 'main content 1');
+    await runGitCommand(['add', '.'], localDir);
+    await runGitCommand(['commit', '-m', 'main commit 1'], localDir);
+    await runGitCommand(['push', '-u', 'origin', 'HEAD'], localDir);
+
+    // Step 2: Create feature worktree and make a commit
+    const worktreePath = join(testDir, 'local-feature');
+    await runGitCommand(
+      ['worktree', 'add', '-b', 'feature', worktreePath],
+      localDir
+    );
+    await Bun.write(join(worktreePath, 'feature.txt'), 'feature content');
+    await runGitCommand(['add', '.'], worktreePath);
+    await runGitCommand(['commit', '-m', 'feature commit'], worktreePath);
+
+    // Step 3: Record current origin/main as base ref for feature
+    // (simulates what repos stack/work would do at branch creation time)
+    const mainHead1Result = await runGitCommand(
+      ['rev-parse', 'origin/main'],
+      localDir
+    );
+    const mainHead1 = mainHead1Result.stdout.trim();
+    await runGitCommand(
+      ['update-ref', 'refs/bases/feature', mainHead1],
+      localDir
+    );
+
+    // Step 4: Push another commit to origin/main
+    await Bun.write(join(localDir, 'main2.txt'), 'main content 2');
+    await runGitCommand(['add', '.'], localDir);
+    await runGitCommand(['commit', '-m', 'main commit 2'], localDir);
+    await runGitCommand(['push', 'origin', 'HEAD'], localDir);
+
+    // Step 5: Manually rebase feature onto origin/main (outside repos tool).
+    // The stored base ref still points to "main commit 1" (stale).
+    await runGitCommand(['fetch', 'origin'], worktreePath);
+    await runGitCommand(['rebase', 'origin/main'], worktreePath);
+
+    // Step 6: Push yet another commit to origin/main
+    await Bun.write(join(localDir, 'main3.txt'), 'main content 3');
+    await runGitCommand(['add', '.'], localDir);
+    await runGitCommand(['commit', '-m', 'main commit 3'], localDir);
+    await runGitCommand(['push', 'origin', 'HEAD'], localDir);
+
+    // Step 7: Run repos rebase — base ref is stale (points to "main commit 1"),
+    // but the actual merge-base with origin/main is "main commit 2".
+    // refreshBaseRef detects this and resyncs so only "feature commit" is replayed.
+    const config = {
+      repos: [{ name: 'local', url: remoteDir, path: localDir }],
+    } satisfies ReposConfig;
+    await writeConfig(configPath, config);
+
+    const ctx = { configPath };
+    await rebaseCommand(ctx, 'feature', 'local');
+
+    // Verify feature has only its own commit on top of the updated main
+    const logResult = await runGitCommand(
+      ['log', '--format=%s'],
+      worktreePath
+    );
+    expect(logResult.stdout.trim()).toEqual(
+      'feature commit\nmain commit 3\nmain commit 2\nmain commit 1'
+    );
+  });
 });
 
 describe('worktree workflow integration', () => {
@@ -1588,8 +1662,10 @@ describe('repos restack command', () => {
     await runGitCommand(['rebase', 'branch-a'], branchBPath);
 
     // Verify branch-b now has the second commit from a
-    const logBefore = await runGitCommand(['log', '--oneline'], branchBPath);
-    expect(logBefore.stdout).toContain('second commit in a');
+    const logBefore = await runGitCommand(['log', '--format=%s'], branchBPath);
+    expect(logBefore.stdout.trim()).toEqual(
+      'commit in b\nsecond commit in a\ncommit in a\ninitial'
+    );
 
     // Step 6: Add another commit to branch-a
     await Bun.write(join(branchAPath, 'file-a3.txt'), 'third content from a');
@@ -1603,10 +1679,10 @@ describe('repos restack command', () => {
     await restackCommand(ctx);
 
     // Verify branch-b has all expected commits
-    const logResult = await runGitCommand(['log', '--oneline'], branchBPath);
-    expect(logResult.stdout).toContain('commit in b');
-    expect(logResult.stdout).toContain('third commit in a');
-    expect(logResult.stdout).toContain('second commit in a');
+    const logResult = await runGitCommand(['log', '--format=%s'], branchBPath);
+    expect(logResult.stdout.trim()).toEqual(
+      'commit in b\nthird commit in a\nsecond commit in a\ncommit in a\ninitial'
+    );
 
     // Verify branch-b has all files
     expect(existsSync(join(branchBPath, 'file-b.txt'))).toBe(true);
@@ -1666,9 +1742,8 @@ describe('repos restack command', () => {
     await restackCommand(ctx);
 
     // Verify branch-b still has the expected commits
-    const logResult = await runGitCommand(['log', '--oneline'], branchBPath);
-    expect(logResult.stdout).toContain('commit in b');
-    expect(logResult.stdout).toContain('commit in a');
+    const logResult = await runGitCommand(['log', '--format=%s'], branchBPath);
+    expect(logResult.stdout.trim()).toEqual('commit in b\ncommit in a\ninitial');
 
     // Verify files are intact
     expect(existsSync(join(branchBPath, 'file-b.txt'))).toBe(true);

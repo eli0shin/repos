@@ -1,7 +1,10 @@
 import type { OperationResult } from '../types.ts';
 import { runGitCommand } from './core.ts';
 import { getMergeBase } from './commit.ts';
-import { print } from '../output.ts';
+
+export type RefreshBaseRefResult =
+  | { success: true; data: string; message?: string }
+  | { success: false; error: string };
 
 // Base ref helpers for stacked branch fork point tracking
 // These refs store the commit hash of the parent branch at the time of stacking
@@ -144,7 +147,7 @@ export async function refreshBaseRef(
   repoDir: string,
   childBranch: string,
   parentBranch: string
-): Promise<OperationResult<string>> {
+): Promise<RefreshBaseRefResult> {
   const storedResult = await getBaseRef(repoDir, childBranch);
   if (!storedResult.success) {
     return storedResult;
@@ -160,14 +163,14 @@ export async function refreshBaseRef(
   );
   if (!mergeBaseResult.success) {
     // Can't compute merge-base, fall back to stored ref
-    return storedResult;
+    return { success: true, data: storedRef };
   }
 
   const mergeBase = mergeBaseResult.data;
 
   // If merge-base equals stored ref, nothing to do
   if (mergeBase === storedRef) {
-    return storedResult;
+    return { success: true, data: storedRef };
   }
 
   // Check if merge-base is a descendant of stored ref.
@@ -175,19 +178,31 @@ export async function refreshBaseRef(
   // the stored ref is now too far back.
   const mergeBaseIsNewer = await isAncestor(repoDir, storedRef, mergeBase);
   if (mergeBaseIsNewer) {
-    print(`Resynced fork point for "${childBranch}" (was stale)`);
-    await setBaseRef(repoDir, childBranch, mergeBase);
-    return { success: true, data: mergeBase };
+    const setResult = await setBaseRef(repoDir, childBranch, mergeBase);
+    const suffix = setResult.success
+      ? ''
+      : `; warning: failed to persist: ${setResult.error}`;
+    return {
+      success: true,
+      data: mergeBase,
+      message: `Resynced fork point for "${childBranch}" (was stale${suffix})`,
+    };
   }
 
   // Check if stored ref is not an ancestor of child at all (orphaned)
   const storedIsValid = await isAncestor(repoDir, storedRef, childBranch);
   if (!storedIsValid) {
-    print(`Resynced fork point for "${childBranch}" (was orphaned)`);
-    await setBaseRef(repoDir, childBranch, mergeBase);
-    return { success: true, data: mergeBase };
+    const setResult = await setBaseRef(repoDir, childBranch, mergeBase);
+    const suffix = setResult.success
+      ? ''
+      : `; warning: failed to persist: ${setResult.error}`;
+    return {
+      success: true,
+      data: mergeBase,
+      message: `Resynced fork point for "${childBranch}" (was orphaned${suffix})`,
+    };
   }
 
   // Stored ref is still valid and more precise, keep it
-  return storedResult;
+  return { success: true, data: storedRef };
 }

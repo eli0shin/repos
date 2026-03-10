@@ -53,6 +53,9 @@ export async function rebaseCommand(
     worktree.branch,
     targetRef
   );
+  if (baseRefResult.success && baseRefResult.message) {
+    print(baseRefResult.message);
+  }
   if (baseRefResult.success) {
     const rebaseResult = await rebaseOnto(
       worktree.path,
