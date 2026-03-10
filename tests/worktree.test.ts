@@ -2404,7 +2404,8 @@ describe('repos unstack command', () => {
       'child commit\nparent commit\ninitial'
     );
 
-    // Verify stack entry was removed
+    // Verify child-branch stack entry was removed (parent-branch's auto-stack
+    // on main from workCommand remains)
     const configAfter = await readConfig(configPath);
     expect(configAfter).toEqual({
       success: true,
@@ -2415,6 +2416,7 @@ describe('repos unstack command', () => {
             url: sourceDir,
             path: bareDir,
             bare: true,
+            stacks: [{ parent: 'main', child: 'parent-branch' }],
           },
         ],
       },

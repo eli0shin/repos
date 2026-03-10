@@ -2,6 +2,10 @@ import type { OperationResult } from '../types.ts';
 import { runGitCommand } from './core.ts';
 import { getMergeBase } from './commit.ts';
 
+export type RefreshBaseRefResult =
+  | { success: true; data: string; message?: string; warning?: string }
+  | { success: false; error: string };
+
 // Base ref helpers for stacked branch fork point tracking
 // These refs store the commit hash of the parent branch at the time of stacking
 // to enable correct rebase --onto behavior after parent is rebased/squashed
@@ -147,7 +151,7 @@ export async function refreshBaseRef(
   repoDir: string,
   childBranch: string,
   parentBranch: string
-): Promise<OperationResult<string>> {
+): Promise<RefreshBaseRefResult> {
   const storedResult = await getBaseRef(repoDir, childBranch);
   if (!storedResult.success) {
     return storedResult;
