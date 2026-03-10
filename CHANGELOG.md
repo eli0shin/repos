@@ -1,5 +1,15 @@
 # repos
 
+## 0.12.0
+
+### Minor Changes
+
+- [#55](https://github.com/eli0shin/repos/pull/55) [`9af22d6`](https://github.com/eli0shin/repos/commit/9af22d64425546a0d2296bb228c7d13506a49ea0) Thanks [@eli0shin](https://github.com/eli0shin)! - The `work` and `session` commands now automatically record a stack relationship with the default branch when creating new branches, enabling `restack`, `unstack`, `collapse`, and other stack operations on branches created via `work`/`session` (not just via `stack`). Fixes `restack` to correctly handle the parent-is-default-branch case in bare repos.
+
+### Patch Changes
+
+- [#56](https://github.com/eli0shin/repos/pull/56) [`eebd75e`](https://github.com/eli0shin/repos/commit/eebd75e081b16c7b59cdfa877bfb96d86ad84b0a) Thanks [@eli0shin](https://github.com/eli0shin)! - Fix stale fork point detection in restack, rebase, and unstack operations. When a child branch is manually rebased outside the repos tool, the stored base ref becomes stale, causing rebase --onto to select the wrong commit range. refreshBaseRef now validates the stored ref against git merge-base and resyncs when needed, preventing conflicts especially in squash-merge scenarios where cherry detection cannot match individual commits against squashed ones.
+
 ## 0.11.1
 
 ### Patch Changes
