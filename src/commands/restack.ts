@@ -21,7 +21,7 @@ import {
   deleteBaseRef,
   getHeadCommit,
   computeForkPoint,
-  runGitCommand,
+  resolveRef,
   type WorktreeInfo,
 } from '../git/index.ts';
 import { print, printError } from '../output.ts';
@@ -154,12 +154,9 @@ async function restackBranch(
     }
   } else if (parentIsDefaultBranch) {
     // Parent is the default branch - update base ref to origin/{default} HEAD
-    const revResult = await runGitCommand(
-      ['rev-parse', targetRef],
-      worktree.path
-    );
-    if (revResult.exitCode === 0) {
-      await setBaseRef(repo.path, branch, revResult.stdout.trim());
+    const revResult = await resolveRef(worktree.path, targetRef);
+    if (revResult.success) {
+      await setBaseRef(repo.path, branch, revResult.data);
     }
   } else {
     // Parent is gone, delete the base ref since we're no longer stacked

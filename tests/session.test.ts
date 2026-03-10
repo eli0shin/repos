@@ -4,6 +4,11 @@ import { sessionCommand } from '../src/commands/session.ts';
 import { writeConfig } from '../src/config.ts';
 import { mockProcessExit, type MockExit } from './utils.ts';
 
+// Note: The session command auto-stacks new branches on the default branch
+// (same behavior as work command). This stacking behavior is not covered by
+// integration tests here because sessionCommand requires a live tmux environment.
+// The underlying stacking logic is tested via the work command in worktree.test.ts
+// (checkIsNewBranch and recordStackOnDefaultBranch helpers are shared).
 describe('sessionCommand', () => {
   const configPath = '/tmp/repos-test-session-cmd/config.json';
   let mockExit: MockExit;

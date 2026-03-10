@@ -3,17 +3,14 @@ import {
   loadConfig,
   resolveRepo,
   getWorktreePath,
-  getParentBranch,
-  recordStack,
+  checkIsNewBranch,
+  recordStackOnDefaultBranch,
 } from '../config.ts';
 import {
   createWorktree,
   listWorktrees,
   ensureRefspecConfig,
   findWorktreeByBranch,
-  localBranchExists,
-  getDefaultBranch,
-  runGitCommand,
 } from '../git/index.ts';
 import { print, printError, printStatus } from '../output.ts';
 
@@ -38,18 +35,7 @@ export async function workCommand(
 
   // Check if branch is new (doesn't exist locally or on remote)
   // so we know whether to record a stack relationship after creation
-  const localExists = await localBranchExists(repo.path, branch);
-  let remoteExists = false;
-  if (!localExists) {
-    const remoteBranchResult = await runGitCommand(
-      ['ls-remote', '--heads', 'origin', branch],
-      repo.path
-    );
-    remoteExists =
-      remoteBranchResult.exitCode === 0 &&
-      remoteBranchResult.stdout.includes(`refs/heads/${branch}`);
-  }
-  const isNewBranch = !localExists && !remoteExists;
+  const isNewBranch = await checkIsNewBranch(repo.path, branch);
 
   // Ensure refspec is configured correctly (fixes bare repo issues)
   await ensureRefspecConfig(repo.path);
@@ -65,27 +51,8 @@ export async function workCommand(
   }
 
   // Stack new branches on the default branch so restack/unstack work
-  // Skip if branch already has a stack relationship in config
-  if (isNewBranch && !getParentBranch(repo, branch)) {
-    const defaultBranchResult = await getDefaultBranch(repo.path);
-    if (defaultBranchResult.success) {
-      const defaultBranch = defaultBranchResult.data;
-      const headResult = await runGitCommand(
-        ['rev-parse', `origin/${defaultBranch}`],
-        repo.path
-      );
-      if (headResult.exitCode === 0) {
-        await recordStack(
-          repo.path,
-          ctx.configPath,
-          config,
-          repo,
-          defaultBranch,
-          branch,
-          headResult.stdout.trim()
-        );
-      }
-    }
+  if (isNewBranch) {
+    await recordStackOnDefaultBranch(ctx.configPath, config, repo, branch);
   }
 
   printStatus(`Created worktree "${repo.name}-${branch.replace(/\//g, '-')}"`);

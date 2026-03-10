@@ -5,6 +5,10 @@ import {
   listWorktrees,
   findWorktreeByDirectory,
   setBaseRef,
+  localBranchExists,
+  getDefaultBranch,
+  resolveRef,
+  runGitCommand,
 } from './git/index.ts';
 import { printError } from './output.ts';
 import type {
@@ -323,4 +327,56 @@ export async function recordStack(
 
   const updatedRepo = addStackEntry(repo, parentBranch, childBranch);
   await saveStackUpdate(configPath, config, updatedRepo);
+}
+
+// Check if a branch is new (doesn't exist locally or remotely).
+// If ls-remote fails (e.g., network unavailable), returns false so we don't
+// accidentally create stale stack entries for branches that may already exist.
+export async function checkIsNewBranch(
+  repoPath: string,
+  branch: string
+): Promise<boolean> {
+  const localExists = await localBranchExists(repoPath, branch);
+  if (localExists) return false;
+
+  const remoteBranchResult = await runGitCommand(
+    ['ls-remote', '--heads', 'origin', branch],
+    repoPath
+  );
+  // If ls-remote fails (network unavailable), treat as existing to avoid
+  // false-positive stacking of branches that may already exist on the remote.
+  if (remoteBranchResult.exitCode !== 0) return false;
+
+  const remoteExists = remoteBranchResult.stdout.includes(
+    `refs/heads/${branch}`
+  );
+  return !remoteExists;
+}
+
+// Stack a new branch on the default branch if it has no parent yet.
+// Called after worktree creation for branches created via work/session.
+export async function recordStackOnDefaultBranch(
+  configPath: string,
+  config: ReposConfig,
+  repo: RepoEntry,
+  branch: string
+): Promise<void> {
+  if (getParentBranch(repo, branch)) return;
+
+  const defaultBranchResult = await getDefaultBranch(repo.path);
+  if (!defaultBranchResult.success) return;
+
+  const defaultBranch = defaultBranchResult.data;
+  const headResult = await resolveRef(repo.path, `origin/${defaultBranch}`);
+  if (headResult.success) {
+    await recordStack(
+      repo.path,
+      configPath,
+      config,
+      repo,
+      defaultBranch,
+      branch,
+      headResult.data
+    );
+  }
 }
