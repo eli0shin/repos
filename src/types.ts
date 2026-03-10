@@ -24,7 +24,7 @@ export type ReposConfig = {
 };
 
 export type OperationResult<T = void> =
-  | { success: true; data: T }
+  | { success: true; data: T; message?: string; warning?: string }
   | { success: false; error: string };
 
 export type Platform = 'darwin' | 'linux';

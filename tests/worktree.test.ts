@@ -1099,12 +1099,66 @@ describe('repos rebase command', () => {
     await rebaseCommand(ctx, 'feature', 'local');
 
     // Verify feature has only its own commit on top of the updated main
-    const logResult = await runGitCommand(
-      ['log', '--format=%s'],
-      worktreePath
-    );
+    const logResult = await runGitCommand(['log', '--format=%s'], worktreePath);
     expect(logResult.stdout.trim()).toEqual(
       'feature commit\nmain commit 3\nmain commit 2\nmain commit 1'
+    );
+  });
+
+  test('rebase succeeds when base ref is orphaned', async () => {
+    // Scenario: base ref points to a commit not in the branch's ancestry
+    // (e.g., after a force-push rewrote history). refreshBaseRef should detect
+    // the orphaned ref and resync to the current merge-base.
+
+    const localDir = join(testDir, 'local');
+    await runGitCommand(['clone', remoteDir, localDir]);
+
+    // Step 1: Create initial commit on main and push
+    await Bun.write(join(localDir, 'main1.txt'), 'main content 1');
+    await runGitCommand(['add', '.'], localDir);
+    await runGitCommand(['commit', '-m', 'main commit 1'], localDir);
+    await runGitCommand(['push', '-u', 'origin', 'HEAD'], localDir);
+
+    // Step 2: Create feature worktree and make a commit
+    const worktreePath = join(testDir, 'local-feature');
+    await runGitCommand(
+      ['worktree', 'add', '-b', 'feature', worktreePath],
+      localDir
+    );
+    await Bun.write(join(worktreePath, 'feature.txt'), 'feature content');
+    await runGitCommand(['add', '.'], worktreePath);
+    await runGitCommand(['commit', '-m', 'feature commit'], worktreePath);
+
+    // Step 3: Create an orphan commit and set it as the base ref
+    const orphanResult = await runGitCommand(
+      ['commit-tree', '-m', 'orphan', 'HEAD^{tree}'],
+      localDir
+    );
+    const orphanCommit = orphanResult.stdout.trim();
+    await runGitCommand(
+      ['update-ref', 'refs/bases/feature', orphanCommit],
+      localDir
+    );
+
+    // Step 4: Push another commit to origin/main
+    await Bun.write(join(localDir, 'main2.txt'), 'main content 2');
+    await runGitCommand(['add', '.'], localDir);
+    await runGitCommand(['commit', '-m', 'main commit 2'], localDir);
+    await runGitCommand(['push', 'origin', 'HEAD'], localDir);
+
+    // Step 5: Run repos rebase — should detect orphaned base ref and resync
+    const config = {
+      repos: [{ name: 'local', url: remoteDir, path: localDir }],
+    } satisfies ReposConfig;
+    await writeConfig(configPath, config);
+
+    const ctx = { configPath };
+    await rebaseCommand(ctx, 'feature', 'local');
+
+    // Verify feature has its commit on top of updated main
+    const logAfter = await runGitCommand(['log', '--format=%s'], worktreePath);
+    expect(logAfter.stdout.trim()).toEqual(
+      'feature commit\nmain commit 2\nmain commit 1'
     );
   });
 });
@@ -1743,7 +1797,9 @@ describe('repos restack command', () => {
 
     // Verify branch-b still has the expected commits
     const logResult = await runGitCommand(['log', '--format=%s'], branchBPath);
-    expect(logResult.stdout.trim()).toEqual('commit in b\ncommit in a\ninitial');
+    expect(logResult.stdout.trim()).toEqual(
+      'commit in b\ncommit in a\ninitial'
+    );
 
     // Verify files are intact
     expect(existsSync(join(branchBPath, 'file-b.txt'))).toBe(true);
@@ -2279,6 +2335,86 @@ describe('repos unstack command', () => {
             path: bareDir,
             bare: true,
             stacks: [{ parent: 'main', child: 'parent-branch' }],
+          },
+        ],
+      },
+    });
+  });
+
+  test('unstack succeeds when base ref is orphaned', async () => {
+    // Scenario: base ref points to a commit not in the child's ancestry
+    // (e.g., after force-push). refreshBaseRef should detect the orphaned
+    // ref and resync to the current merge-base so only child commits replay.
+
+    // Clone as bare
+    const bareDir = join(testDir, 'bare.git');
+    await cloneBare(sourceDir, bareDir);
+
+    // Create config
+    const config = {
+      repos: [{ name: 'bare', url: sourceDir, path: bareDir, bare: true }],
+    } satisfies ReposConfig;
+    await writeConfig(configPath, config);
+
+    const ctx = { configPath };
+
+    // Step 1: Create parent worktree with a commit
+    await workCommand(ctx, 'parent-branch', 'bare');
+    const parentWorktreePath = join(testDir, 'bare.git-parent-branch');
+    const childWorktreePath = join(testDir, 'bare.git-child-branch');
+
+    await Bun.write(join(parentWorktreePath, 'parent.txt'), 'parent content');
+    await runGitCommand(['add', '.'], parentWorktreePath);
+    await runGitCommand(['commit', '-m', 'parent commit'], parentWorktreePath);
+
+    // Step 2: Stack child branch on parent
+    process.chdir(parentWorktreePath);
+    await stackCommand(ctx, 'child-branch');
+
+    // Step 3: Make a commit on child branch
+    await Bun.write(join(childWorktreePath, 'child.txt'), 'child content');
+    await runGitCommand(['add', '.'], childWorktreePath);
+    await runGitCommand(['commit', '-m', 'child commit'], childWorktreePath);
+
+    // Step 4: Create an orphan commit and set it as the base ref
+    const orphanResult = await runGitCommand(
+      ['commit-tree', '-m', 'orphan', 'HEAD^{tree}'],
+      parentWorktreePath
+    );
+    const orphanCommit = orphanResult.stdout.trim();
+    await runGitCommand(
+      ['update-ref', 'refs/bases/child-branch', orphanCommit],
+      bareDir
+    );
+
+    // Step 5: Merge parent into origin main so unstack target exists
+    await runGitCommand(['fetch', bareDir, 'parent-branch'], sourceDir);
+    await runGitCommand(['merge', '--ff-only', 'FETCH_HEAD'], sourceDir);
+
+    // Step 6: Unstack child — should detect orphaned base ref and resync
+    process.chdir(childWorktreePath);
+    await unstackCommand(ctx);
+
+    // Verify child has its commit on top of main
+    const logResult = await runGitCommand(
+      ['log', '--format=%s'],
+      childWorktreePath
+    );
+    expect(logResult.stdout.trim()).toEqual(
+      'child commit\nparent commit\ninitial'
+    );
+
+    // Verify stack entry was removed
+    const configAfter = await readConfig(configPath);
+    expect(configAfter).toEqual({
+      success: true,
+      data: {
+        repos: [
+          {
+            name: 'bare',
+            url: sourceDir,
+            path: bareDir,
+            bare: true,
           },
         ],
       },

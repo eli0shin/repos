@@ -111,6 +111,9 @@ async function restackBranch(
   if (baseRefResult.success && baseRefResult.message) {
     print(baseRefResult.message);
   }
+  if (baseRefResult.success && baseRefResult.warning) {
+    printError(baseRefResult.warning);
+  }
   let useForkPoint = false;
   let forkPoint: string | undefined;
 

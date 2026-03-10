@@ -2,10 +2,6 @@ import type { OperationResult } from '../types.ts';
 import { runGitCommand } from './core.ts';
 import { getMergeBase } from './commit.ts';
 
-export type RefreshBaseRefResult =
-  | { success: true; data: string; message?: string }
-  | { success: false; error: string };
-
 // Base ref helpers for stacked branch fork point tracking
 // These refs store the commit hash of the parent branch at the time of stacking
 // to enable correct rebase --onto behavior after parent is rebased/squashed
@@ -118,8 +114,9 @@ export async function computeForkPoint(
 
 /**
  * Check if a commit is an ancestor of another commit.
+ * Returns false both when the answer is "no" and when git errors (e.g. invalid ref).
  */
-export async function isAncestor(
+async function isAncestor(
   repoDir: string,
   maybeAncestor: string,
   descendant: string
@@ -142,12 +139,15 @@ export async function isAncestor(
  * with the stored base ref. If the merge-base is more recent (a descendant
  * of the stored ref), the child has been rebased forward and we use the
  * merge-base instead. This prevents replaying commits already on the parent.
+ *
+ * Spawns up to 3 git child processes: getMergeBase + up to 2 isAncestor calls.
+ * In the common case (no staleness) the cost is getMergeBase + 1 isAncestor.
  */
 export async function refreshBaseRef(
   repoDir: string,
   childBranch: string,
   parentBranch: string
-): Promise<RefreshBaseRefResult> {
+): Promise<OperationResult<string>> {
   const storedResult = await getBaseRef(repoDir, childBranch);
   if (!storedResult.success) {
     return storedResult;
@@ -179,13 +179,13 @@ export async function refreshBaseRef(
   const mergeBaseIsNewer = await isAncestor(repoDir, storedRef, mergeBase);
   if (mergeBaseIsNewer) {
     const setResult = await setBaseRef(repoDir, childBranch, mergeBase);
-    const suffix = setResult.success
-      ? ''
-      : `; warning: failed to persist: ${setResult.error}`;
     return {
       success: true,
       data: mergeBase,
-      message: `Resynced fork point for "${childBranch}" (was stale${suffix})`,
+      message: `Resynced fork point for "${childBranch}" (was stale)`,
+      warning: setResult.success
+        ? undefined
+        : `Failed to persist resynced fork point: ${setResult.error}`,
     };
   }
 
@@ -193,13 +193,13 @@ export async function refreshBaseRef(
   const storedIsValid = await isAncestor(repoDir, storedRef, childBranch);
   if (!storedIsValid) {
     const setResult = await setBaseRef(repoDir, childBranch, mergeBase);
-    const suffix = setResult.success
-      ? ''
-      : `; warning: failed to persist: ${setResult.error}`;
     return {
       success: true,
       data: mergeBase,
-      message: `Resynced fork point for "${childBranch}" (was orphaned${suffix})`,
+      message: `Resynced fork point for "${childBranch}" (was orphaned)`,
+      warning: setResult.success
+        ? undefined
+        : `Failed to persist resynced fork point: ${setResult.error}`,
     };
   }
 
