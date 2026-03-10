@@ -352,10 +352,7 @@ export async function checkIsNewBranch(
   // as a prefix, so we compare the full refname from each tab-separated line.
   const remoteExists = remoteBranchResult.stdout
     .split('\n')
-    .some((line) => {
-      const ref = line.split('\t')[1]?.trim();
-      return ref === `refs/heads/${branch}`;
-    });
+    .some((line) => line.split('\t')[1]?.trim() === `refs/heads/${branch}`);
   return !remoteExists;
 }
 
