@@ -1033,6 +1033,134 @@ describe('repos rebase command', () => {
       data: 'feature',
     });
   });
+
+  test('rebase succeeds when base ref is stale from manual rebase (fork point resync)', async () => {
+    // Scenario: feature branch was manually rebased onto origin/main, making
+    // the stored base ref stale. Without fork point resync, rebase --onto
+    // would replay commits already on the branch (causing duplicates/conflicts).
+
+    const localDir = join(testDir, 'local');
+    await runGitCommand(['clone', remoteDir, localDir]);
+
+    // Step 1: Create first main commit and push
+    await Bun.write(join(localDir, 'main1.txt'), 'main content 1');
+    await runGitCommand(['add', '.'], localDir);
+    await runGitCommand(['commit', '-m', 'main commit 1'], localDir);
+    await runGitCommand(['push', '-u', 'origin', 'HEAD'], localDir);
+
+    // Step 2: Create feature worktree and make a commit
+    const worktreePath = join(testDir, 'local-feature');
+    await runGitCommand(
+      ['worktree', 'add', '-b', 'feature', worktreePath],
+      localDir
+    );
+    await Bun.write(join(worktreePath, 'feature.txt'), 'feature content');
+    await runGitCommand(['add', '.'], worktreePath);
+    await runGitCommand(['commit', '-m', 'feature commit'], worktreePath);
+
+    // Step 3: Record current origin/main as base ref for feature
+    // (simulates what repos stack/work would do at branch creation time)
+    const mainHead1Result = await runGitCommand(
+      ['rev-parse', 'origin/main'],
+      localDir
+    );
+    const mainHead1 = mainHead1Result.stdout.trim();
+    await runGitCommand(
+      ['update-ref', 'refs/bases/feature', mainHead1],
+      localDir
+    );
+
+    // Step 4: Push another commit to origin/main
+    await Bun.write(join(localDir, 'main2.txt'), 'main content 2');
+    await runGitCommand(['add', '.'], localDir);
+    await runGitCommand(['commit', '-m', 'main commit 2'], localDir);
+    await runGitCommand(['push', 'origin', 'HEAD'], localDir);
+
+    // Step 5: Manually rebase feature onto origin/main (outside repos tool).
+    // The stored base ref still points to "main commit 1" (stale).
+    await runGitCommand(['fetch', 'origin'], worktreePath);
+    await runGitCommand(['rebase', 'origin/main'], worktreePath);
+
+    // Step 6: Push yet another commit to origin/main
+    await Bun.write(join(localDir, 'main3.txt'), 'main content 3');
+    await runGitCommand(['add', '.'], localDir);
+    await runGitCommand(['commit', '-m', 'main commit 3'], localDir);
+    await runGitCommand(['push', 'origin', 'HEAD'], localDir);
+
+    // Step 7: Run repos rebase — base ref is stale (points to "main commit 1"),
+    // but the actual merge-base with origin/main is "main commit 2".
+    // refreshBaseRef detects this and resyncs so only "feature commit" is replayed.
+    const config = {
+      repos: [{ name: 'local', url: remoteDir, path: localDir }],
+    } satisfies ReposConfig;
+    await writeConfig(configPath, config);
+
+    const ctx = { configPath };
+    await rebaseCommand(ctx, 'feature', 'local');
+
+    // Verify feature has only its own commit on top of the updated main
+    const logResult = await runGitCommand(['log', '--format=%s'], worktreePath);
+    expect(logResult.stdout.trim()).toEqual(
+      'feature commit\nmain commit 3\nmain commit 2\nmain commit 1'
+    );
+  });
+
+  test('rebase succeeds when base ref is orphaned', async () => {
+    // Scenario: base ref points to a commit not in the branch's ancestry
+    // (e.g., after a force-push rewrote history). refreshBaseRef should detect
+    // the orphaned ref and resync to the current merge-base.
+
+    const localDir = join(testDir, 'local');
+    await runGitCommand(['clone', remoteDir, localDir]);
+
+    // Step 1: Create initial commit on main and push
+    await Bun.write(join(localDir, 'main1.txt'), 'main content 1');
+    await runGitCommand(['add', '.'], localDir);
+    await runGitCommand(['commit', '-m', 'main commit 1'], localDir);
+    await runGitCommand(['push', '-u', 'origin', 'HEAD'], localDir);
+
+    // Step 2: Create feature worktree and make a commit
+    const worktreePath = join(testDir, 'local-feature');
+    await runGitCommand(
+      ['worktree', 'add', '-b', 'feature', worktreePath],
+      localDir
+    );
+    await Bun.write(join(worktreePath, 'feature.txt'), 'feature content');
+    await runGitCommand(['add', '.'], worktreePath);
+    await runGitCommand(['commit', '-m', 'feature commit'], worktreePath);
+
+    // Step 3: Create an orphan commit and set it as the base ref
+    const orphanResult = await runGitCommand(
+      ['commit-tree', '-m', 'orphan', 'HEAD^{tree}'],
+      localDir
+    );
+    const orphanCommit = orphanResult.stdout.trim();
+    await runGitCommand(
+      ['update-ref', 'refs/bases/feature', orphanCommit],
+      localDir
+    );
+
+    // Step 4: Push another commit to origin/main
+    await Bun.write(join(localDir, 'main2.txt'), 'main content 2');
+    await runGitCommand(['add', '.'], localDir);
+    await runGitCommand(['commit', '-m', 'main commit 2'], localDir);
+    await runGitCommand(['push', 'origin', 'HEAD'], localDir);
+
+    // Step 5: Run repos rebase — should detect orphaned base ref and resync
+    const config = {
+      repos: [{ name: 'local', url: remoteDir, path: localDir }],
+    } satisfies ReposConfig;
+    await writeConfig(configPath, config);
+
+    const ctx = { configPath };
+    await rebaseCommand(ctx, 'feature', 'local');
+
+    // Verify feature has its commit on top of updated main
+    const logAfter = await runGitCommand(['log', '--format=%s'], worktreePath);
+    expect(logAfter.stdout.trim()).toEqual(
+      'feature commit\nmain commit 2\nmain commit 1'
+    );
+  });
 });
 
 describe('worktree workflow integration', () => {
@@ -1543,6 +1671,141 @@ describe('repos restack command', () => {
     expect(existsSync(join(branchBPath, 'file-b.txt'))).toBe(true);
   });
 
+  test('restack succeeds when base ref is stale from manual rebase (fork point resync)', async () => {
+    // This test verifies that restack resyncs the fork point when the child
+    // branch was manually rebased, making the stored base ref too old.
+    // Without resync: --onto would replay parent commits already on the branch.
+
+    // Clone as bare
+    const bareDir = join(testDir, 'bare.git');
+    await cloneBare(sourceDir, bareDir);
+
+    // Create config
+    const config = {
+      repos: [{ name: 'bare', url: sourceDir, path: bareDir, bare: true }],
+    } satisfies ReposConfig;
+    await writeConfig(configPath, config);
+
+    const ctx = { configPath };
+
+    // Step 1: Create branch-a worktree with a commit
+    await workCommand(ctx, 'branch-a', 'bare');
+    const branchAPath = join(testDir, 'bare.git-branch-a');
+
+    await Bun.write(join(branchAPath, 'file-a.txt'), 'content from a');
+    await runGitCommand(['add', '.'], branchAPath);
+    await runGitCommand(['commit', '-m', 'commit in a'], branchAPath);
+
+    // Step 2: Stack branch-b on branch-a
+    process.chdir(branchAPath);
+    await stackCommand(ctx, 'branch-b');
+    const branchBPath = join(testDir, 'bare.git-branch-b');
+
+    // Step 3: Make a commit on branch-b
+    await Bun.write(join(branchBPath, 'file-b.txt'), 'content from b');
+    await runGitCommand(['add', '.'], branchBPath);
+    await runGitCommand(['commit', '-m', 'commit in b'], branchBPath);
+
+    // Step 4: Add more commits to branch-a
+    await Bun.write(join(branchAPath, 'file-a2.txt'), 'more content from a');
+    await runGitCommand(['add', '.'], branchAPath);
+    await runGitCommand(['commit', '-m', 'second commit in a'], branchAPath);
+
+    // Step 5: Manually rebase branch-b onto branch-a (outside repos tool)
+    // This moves branch-b forward but does NOT update the stored base ref
+    await runGitCommand(['rebase', 'branch-a'], branchBPath);
+
+    // Verify branch-b now has the second commit from a
+    const logBefore = await runGitCommand(['log', '--format=%s'], branchBPath);
+    expect(logBefore.stdout.trim()).toEqual(
+      'commit in b\nsecond commit in a\ncommit in a\ninitial'
+    );
+
+    // Step 6: Add another commit to branch-a
+    await Bun.write(join(branchAPath, 'file-a3.txt'), 'third content from a');
+    await runGitCommand(['add', '.'], branchAPath);
+    await runGitCommand(['commit', '-m', 'third commit in a'], branchAPath);
+
+    // Step 7: Restack branch-b - base ref is stale (points to original fork)
+    // Without resync, --onto would try to replay "second commit in a"
+    // which is already on branch-b, potentially causing conflicts
+    process.chdir(branchBPath);
+    await restackCommand(ctx);
+
+    // Verify branch-b has all expected commits
+    const logResult = await runGitCommand(['log', '--format=%s'], branchBPath);
+    expect(logResult.stdout.trim()).toEqual(
+      'commit in b\nthird commit in a\nsecond commit in a\ncommit in a\ninitial'
+    );
+
+    // Verify branch-b has all files
+    expect(existsSync(join(branchBPath, 'file-b.txt'))).toBe(true);
+    expect(existsSync(join(branchBPath, 'file-a2.txt'))).toBe(true);
+    expect(existsSync(join(branchBPath, 'file-a3.txt'))).toBe(true);
+  });
+
+  test('restack succeeds when base ref is orphaned', async () => {
+    // This test verifies restack handles a base ref pointing to
+    // a commit not in the child's ancestry (e.g., after force-push)
+
+    // Clone as bare
+    const bareDir = join(testDir, 'bare.git');
+    await cloneBare(sourceDir, bareDir);
+
+    // Create config
+    const config = {
+      repos: [{ name: 'bare', url: sourceDir, path: bareDir, bare: true }],
+    } satisfies ReposConfig;
+    await writeConfig(configPath, config);
+
+    const ctx = { configPath };
+
+    // Step 1: Create branch-a worktree with a commit
+    await workCommand(ctx, 'branch-a', 'bare');
+    const branchAPath = join(testDir, 'bare.git-branch-a');
+
+    await Bun.write(join(branchAPath, 'file-a.txt'), 'content from a');
+    await runGitCommand(['add', '.'], branchAPath);
+    await runGitCommand(['commit', '-m', 'commit in a'], branchAPath);
+
+    // Step 2: Stack branch-b on branch-a
+    process.chdir(branchAPath);
+    await stackCommand(ctx, 'branch-b');
+    const branchBPath = join(testDir, 'bare.git-branch-b');
+
+    // Step 3: Make a commit on branch-b
+    await Bun.write(join(branchBPath, 'file-b.txt'), 'content from b');
+    await runGitCommand(['add', '.'], branchBPath);
+    await runGitCommand(['commit', '-m', 'commit in b'], branchBPath);
+
+    // Step 4: Create an orphan commit to use as a bad base ref
+    const orphanResult = await runGitCommand(
+      ['commit-tree', '-m', 'orphan', 'HEAD^{tree}'],
+      branchAPath
+    );
+    const orphanCommit = orphanResult.stdout.trim();
+
+    // Step 5: Manually set the base ref to the orphan commit
+    await runGitCommand(
+      ['update-ref', 'refs/bases/branch-b', orphanCommit],
+      bareDir
+    );
+
+    // Step 6: Restack branch-b - should detect orphaned base ref and resync
+    process.chdir(branchBPath);
+    await restackCommand(ctx);
+
+    // Verify branch-b still has the expected commits
+    const logResult = await runGitCommand(['log', '--format=%s'], branchBPath);
+    expect(logResult.stdout.trim()).toEqual(
+      'commit in b\ncommit in a\ninitial'
+    );
+
+    // Verify files are intact
+    expect(existsSync(join(branchBPath, 'file-b.txt'))).toBe(true);
+    expect(existsSync(join(branchBPath, 'file-a.txt'))).toBe(true);
+  });
+
   test('restack with --only flag does not restack children', async () => {
     // Clone as bare
     const bareDir = join(testDir, 'bare.git');
@@ -1901,6 +2164,107 @@ describe('repos unstack command', () => {
     expect(existsSync(join(childWorktreePath, 'parent.txt'))).toBe(true);
   });
 
+  test('unstacks correctly when base ref is stale and parent was squash-merged', async () => {
+    // Scenario: child was manually rebased onto parent (stale base ref),
+    // then parent was squash-merged into main. Without fork point resync,
+    // the stale base ref would include parent commits in the replay range.
+    // Cherry detection can't skip them because squash merges produce
+    // different patch IDs than individual commits. refreshBaseRef detects
+    // the stale fork point and resyncs it so only child's commits are replayed.
+
+    // Clone as bare
+    const bareDir = join(testDir, 'bare.git');
+    await cloneBare(sourceDir, bareDir);
+
+    // Create config
+    const config = {
+      repos: [{ name: 'bare', url: sourceDir, path: bareDir, bare: true }],
+    } satisfies ReposConfig;
+    await writeConfig(configPath, config);
+
+    const ctx = { configPath };
+
+    // Step 1: Create parent worktree with initial commits
+    await workCommand(ctx, 'parent-branch', 'bare');
+    const parentWorktreePath = join(testDir, 'bare.git-parent-branch');
+    const childWorktreePath = join(testDir, 'bare.git-child-branch');
+
+    await Bun.write(
+      join(parentWorktreePath, 'parent1.txt'),
+      'parent content 1'
+    );
+    await runGitCommand(['add', '.'], parentWorktreePath);
+    await runGitCommand(
+      ['commit', '-m', 'parent commit 1'],
+      parentWorktreePath
+    );
+
+    await Bun.write(
+      join(parentWorktreePath, 'parent2.txt'),
+      'parent content 2'
+    );
+    await runGitCommand(['add', '.'], parentWorktreePath);
+    await runGitCommand(
+      ['commit', '-m', 'parent commit 2'],
+      parentWorktreePath
+    );
+
+    // Step 2: Stack child on parent, make a commit
+    process.chdir(parentWorktreePath);
+    await stackCommand(ctx, 'child-branch');
+    // base_ref(child) = parent's HEAD (after "parent commit 2")
+
+    await Bun.write(join(childWorktreePath, 'child.txt'), 'child content');
+    await runGitCommand(['add', '.'], childWorktreePath);
+    await runGitCommand(['commit', '-m', 'child commit'], childWorktreePath);
+
+    // Step 3: Add more commits to parent AFTER child was stacked
+    await Bun.write(
+      join(parentWorktreePath, 'parent3.txt'),
+      'parent content 3'
+    );
+    await runGitCommand(['add', '.'], parentWorktreePath);
+    await runGitCommand(
+      ['commit', '-m', 'parent commit 3'],
+      parentWorktreePath
+    );
+
+    // Step 4: Manually rebase child onto parent (outside repos tool)
+    // This makes child include parent commit 3, but base ref still points
+    // to parent's HEAD at stack time (after "parent commit 2")
+    await runGitCommand(['rebase', 'parent-branch'], childWorktreePath);
+
+    // Step 5: Squash-merge parent into main on origin
+    await runGitCommand(['fetch', bareDir, 'parent-branch'], sourceDir);
+    await runGitCommand(['merge', '--squash', 'FETCH_HEAD'], sourceDir);
+    await runGitCommand(
+      ['commit', '-m', 'squash merge parent-branch'],
+      sourceDir
+    );
+
+    // Step 6: Unstack child — refreshBaseRef should detect stale base ref
+    // and resync to parent's current HEAD (after "parent commit 3").
+    // Without resync, fork point would be too old, causing parent commit 3
+    // to be included in the replay range, conflicting with the squash commit.
+    process.chdir(childWorktreePath);
+    await unstackCommand(ctx);
+
+    // Verify child has only its own commit and the squash merge
+    const logResult = await runGitCommand(
+      ['log', '--format=%s'],
+      childWorktreePath
+    );
+    expect(logResult.stdout.trim()).toEqual(
+      'child commit\nsquash merge parent-branch\ninitial'
+    );
+
+    // Verify child has the correct files
+    expect(existsSync(join(childWorktreePath, 'child.txt'))).toBe(true);
+    expect(existsSync(join(childWorktreePath, 'parent1.txt'))).toBe(true);
+    expect(existsSync(join(childWorktreePath, 'parent2.txt'))).toBe(true);
+    expect(existsSync(join(childWorktreePath, 'parent3.txt'))).toBe(true);
+  });
+
   test('unstacks correctly when no base ref is present (fallback to plain rebase)', async () => {
     // Simulates a branch stacked before fork-point tracking was added.
     // unstack should fall back to plain rebase against origin/main.
@@ -1960,6 +2324,88 @@ describe('repos unstack command', () => {
     );
 
     // Verify child stack entry was removed (parent-branch still stacked on main)
+    const configAfter = await readConfig(configPath);
+    expect(configAfter).toEqual({
+      success: true,
+      data: {
+        repos: [
+          {
+            name: 'bare',
+            url: sourceDir,
+            path: bareDir,
+            bare: true,
+            stacks: [{ parent: 'main', child: 'parent-branch' }],
+          },
+        ],
+      },
+    });
+  });
+
+  test('unstack succeeds when base ref is orphaned', async () => {
+    // Scenario: base ref points to a commit not in the child's ancestry
+    // (e.g., after force-push). refreshBaseRef should detect the orphaned
+    // ref and resync to the current merge-base so only child commits replay.
+
+    // Clone as bare
+    const bareDir = join(testDir, 'bare.git');
+    await cloneBare(sourceDir, bareDir);
+
+    // Create config
+    const config = {
+      repos: [{ name: 'bare', url: sourceDir, path: bareDir, bare: true }],
+    } satisfies ReposConfig;
+    await writeConfig(configPath, config);
+
+    const ctx = { configPath };
+
+    // Step 1: Create parent worktree with a commit
+    await workCommand(ctx, 'parent-branch', 'bare');
+    const parentWorktreePath = join(testDir, 'bare.git-parent-branch');
+    const childWorktreePath = join(testDir, 'bare.git-child-branch');
+
+    await Bun.write(join(parentWorktreePath, 'parent.txt'), 'parent content');
+    await runGitCommand(['add', '.'], parentWorktreePath);
+    await runGitCommand(['commit', '-m', 'parent commit'], parentWorktreePath);
+
+    // Step 2: Stack child branch on parent
+    process.chdir(parentWorktreePath);
+    await stackCommand(ctx, 'child-branch');
+
+    // Step 3: Make a commit on child branch
+    await Bun.write(join(childWorktreePath, 'child.txt'), 'child content');
+    await runGitCommand(['add', '.'], childWorktreePath);
+    await runGitCommand(['commit', '-m', 'child commit'], childWorktreePath);
+
+    // Step 4: Create an orphan commit and set it as the base ref
+    const orphanResult = await runGitCommand(
+      ['commit-tree', '-m', 'orphan', 'HEAD^{tree}'],
+      parentWorktreePath
+    );
+    const orphanCommit = orphanResult.stdout.trim();
+    await runGitCommand(
+      ['update-ref', 'refs/bases/child-branch', orphanCommit],
+      bareDir
+    );
+
+    // Step 5: Merge parent into origin main so unstack target exists
+    await runGitCommand(['fetch', bareDir, 'parent-branch'], sourceDir);
+    await runGitCommand(['merge', '--ff-only', 'FETCH_HEAD'], sourceDir);
+
+    // Step 6: Unstack child — should detect orphaned base ref and resync
+    process.chdir(childWorktreePath);
+    await unstackCommand(ctx);
+
+    // Verify child has its commit on top of main
+    const logResult = await runGitCommand(
+      ['log', '--format=%s'],
+      childWorktreePath
+    );
+    expect(logResult.stdout.trim()).toEqual(
+      'child commit\nparent commit\ninitial'
+    );
+
+    // Verify child-branch stack entry was removed (parent-branch's auto-stack
+    // on main from workCommand remains)
     const configAfter = await readConfig(configPath);
     expect(configAfter).toEqual({
       success: true,

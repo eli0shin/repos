@@ -13,7 +13,7 @@ import {
   fetchOrigin,
   rebaseOnto,
   rebaseOnRef,
-  getBaseRef,
+  refreshBaseRef,
   deleteBaseRef,
   setBaseRef,
   runGitCommand,
@@ -81,7 +81,18 @@ export async function unstackCommand(ctx: CommandContext): Promise<void> {
   }
 
   // Use fork point for rebase to handle squash/rebase merges correctly
-  const baseRefResult = await getBaseRef(repo.path, currentBranch);
+  // refreshBaseRef validates the stored ref and resyncs if stale
+  const baseRefResult = await refreshBaseRef(
+    repo.path,
+    currentBranch,
+    parentBranch
+  );
+  if (baseRefResult.success && baseRefResult.message) {
+    print(baseRefResult.message);
+  }
+  if (baseRefResult.success && baseRefResult.warning) {
+    printError(baseRefResult.warning);
+  }
   if (baseRefResult.success) {
     const rebaseResult = await rebaseOnto(
       currentWorktree.path,

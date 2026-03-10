@@ -16,11 +16,11 @@ import {
   fetchOrigin,
   rebaseOnto,
   rebaseOnRef,
-  getBaseRef,
   setBaseRef,
   deleteBaseRef,
   getHeadCommit,
   computeForkPoint,
+  refreshBaseRef,
   resolveRef,
   type WorktreeInfo,
 } from '../git/index.ts';
@@ -104,8 +104,16 @@ async function restackBranch(
     );
   }
 
-  // Get fork point from base ref, or compute it as fallback (migration)
-  const baseRefResult = await getBaseRef(repo.path, branch);
+  // Get fork point from base ref (refreshing if stale), or compute as fallback.
+  // refreshBaseRef falls back to the stored ref when getMergeBase fails (e.g.,
+  // parent branch is gone), so we can call it unconditionally.
+  const baseRefResult = await refreshBaseRef(repo.path, branch, parentBranch);
+  if (baseRefResult.success && baseRefResult.message) {
+    print(baseRefResult.message);
+  }
+  if (baseRefResult.success && baseRefResult.warning) {
+    printError(baseRefResult.warning);
+  }
   let useForkPoint = false;
   let forkPoint: string | undefined;
 
