@@ -31,6 +31,7 @@ export async function runGitCommandInteractive(
   if (process.stdin.isTTY) {
     const proc = Bun.spawn(['git', ...args], {
       cwd,
+      env: process.env,
       stdin: 'inherit',
       stdout: 'inherit',
       stderr: 'inherit',
@@ -47,11 +48,15 @@ export async function runGitCommandInteractive(
     stdout: 'pipe',
     stderr: 'pipe',
   });
-  await Promise.all([
+  const [, stderr] = await Promise.all([
     new Response(proc.stdout).text(),
     new Response(proc.stderr).text(),
   ]);
-  return proc.exited;
+  const exitCode = await proc.exited;
+  if (exitCode !== 0 && stderr.trim()) {
+    process.stderr.write(stderr);
+  }
+  return exitCode;
 }
 
 export async function directoryHasContent(dir: string): Promise<boolean> {

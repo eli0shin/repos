@@ -136,6 +136,12 @@ export PATH="/usr/bin:$PATH"
     expect(await runInitWithShell('/bin/zsh', ['--print'])).toEqual({
       stdout: `
 work() {
+  for arg in "$@"; do
+    if [ "$arg" = "--tmux" ] || [ "$arg" = "-t" ]; then
+      repos work "$@"
+      return $?
+    fi
+  done
   local path
   path=$(repos work "$@")
   local exit_code=$?
@@ -178,6 +184,12 @@ work-main() {
     expect(await runInitWithShell('/usr/bin/fish', ['--print'])).toEqual({
       stdout: `
 function work
+  for arg in $argv
+    if test "$arg" = "--tmux" -o "$arg" = "-t"
+      repos work $argv
+      return $status
+    end
+  end
   set -l path (repos work $argv)
   set -l exit_code $status
   if test $exit_code -eq 0; and test -d "$path"

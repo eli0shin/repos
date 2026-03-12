@@ -147,7 +147,7 @@ program
   .option('-t, --tmux', 'Open a tmux session in the worktree')
   .action(async (branch, repoName, options) => {
     await workCommand(getCommandContext(), branch, repoName, {
-      tmux: options.tmux ?? false,
+      tmux: options.tmux,
     });
   });
 
@@ -158,7 +158,7 @@ program
   .option('-t, --tmux', 'Open a tmux session in the worktree')
   .action(async (branch, options) => {
     await stackCommand(getCommandContext(), branch, {
-      tmux: options.tmux ?? false,
+      tmux: options.tmux,
     });
   });
 
