@@ -14,10 +14,12 @@ import {
   getHeadCommit,
 } from '../git/index.ts';
 import { print, printError, printStatus } from '../output.ts';
+import { openTmuxSession } from '../tmux.ts';
 
 export async function stackCommand(
   ctx: CommandContext,
-  newBranch: string
+  newBranch: string,
+  options?: { tmux?: boolean }
 ): Promise<void> {
   const config = await loadConfig(ctx.configPath);
 
@@ -100,6 +102,11 @@ export async function stackCommand(
   printStatus(
     `Created stacked worktree "${repo.name}-${newBranch.replace(/\//g, '-')}"`
   );
-  // Output path to stdout for shell wrapper to cd into
-  print(worktreePath);
+
+  if (options?.tmux) {
+    await openTmuxSession(repo.name, newBranch, worktreePath);
+  } else {
+    // Output path to stdout for shell wrapper to cd into
+    print(worktreePath);
+  }
 }

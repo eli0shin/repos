@@ -11,6 +11,12 @@ import { print, printError } from '../output.ts';
 
 const BASH_ZSH_FUNCTION = `
 work() {
+  for arg in "$@"; do
+    if [ "$arg" = "--tmux" ] || [ "$arg" = "-t" ]; then
+      repos work "$@"
+      return $?
+    fi
+  done
   local path
   path=$(repos work "$@")
   local exit_code=$?
@@ -32,10 +38,6 @@ work-clean() {
   fi
 }
 
-repos-session() {
-  repos session "$@"
-}
-
 work-main() {
   local path
   path=$(repos main "$@")
@@ -50,6 +52,12 @@ work-main() {
 
 const FISH_FUNCTION = `
 function work
+  for arg in $argv
+    if test "$arg" = "--tmux" -o "$arg" = "-t"
+      repos work $argv
+      return $status
+    end
+  end
   set -l path (repos work $argv)
   set -l exit_code $status
   if test $exit_code -eq 0; and test -d "$path"
@@ -67,10 +75,6 @@ function work-clean
   else
     return $exit_code
   end
-end
-
-function repos-session
-  repos session $argv
 end
 
 function work-main

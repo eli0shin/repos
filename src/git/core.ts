@@ -8,6 +8,7 @@ export async function runGitCommand(
 ): Promise<GitCommandResult> {
   const proc = Bun.spawn(['git', ...args], {
     cwd,
+    env: process.env,
     stdin: 'ignore',
     stdout: 'pipe',
     stderr: 'pipe',
@@ -27,14 +28,40 @@ export async function runGitCommandInteractive(
   args: string[],
   cwd?: string
 ): Promise<number> {
+  if (process.stdin.isTTY) {
+    const proc = Bun.spawn(['git', ...args], {
+      cwd,
+      env: process.env,
+      stdin: 'inherit',
+      stdout: 'inherit',
+      stderr: 'inherit',
+    });
+    return proc.exited;
+  }
+
+  // Non-TTY (test/CI): fall back to piped I/O with a no-op editor
+  // to avoid hangs from interactive editors like nvim
   const proc = Bun.spawn(['git', ...args], {
     cwd,
-    stdin: 'inherit',
-    stdout: 'inherit',
-    stderr: 'inherit',
+    env: { ...process.env, GIT_EDITOR: 'true' },
+    stdin: 'ignore',
+    stdout: 'pipe',
+    stderr: 'pipe',
   });
-
-  return proc.exited;
+  const [stdout, stderr] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+  ]);
+  const exitCode = await proc.exited;
+  if (exitCode !== 0) {
+    if (stdout.trim()) {
+      process.stderr.write(stdout);
+    }
+    if (stderr.trim()) {
+      process.stderr.write(stderr);
+    }
+  }
+  return exitCode;
 }
 
 export async function directoryHasContent(dir: string): Promise<boolean> {

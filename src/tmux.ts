@@ -1,3 +1,4 @@
+import { printError, printStatus } from './output.ts';
 import type { OperationResult } from './types.ts';
 
 type CommandResult = {
@@ -100,4 +101,43 @@ export function isInsideTmux(): boolean {
 // in -t target strings, causing switch-client and has-session to fail.
 export function getSessionName(repoName: string, branch: string): string {
   return `${repoName}@${branch.replace(/\//g, '-')}`;
+}
+
+export async function openTmuxSession(
+  repoName: string,
+  branch: string,
+  worktreePath: string
+): Promise<void> {
+  const sessionName = getSessionName(repoName, branch);
+
+  const hasSessionResult = await tmuxHasSession(sessionName);
+  if (!hasSessionResult.success) {
+    printError(`Error: ${hasSessionResult.error}`);
+    process.exit(1);
+  }
+
+  if (!hasSessionResult.data) {
+    const createResult = await tmuxNewSession(sessionName, worktreePath);
+    if (!createResult.success) {
+      printError(`Error: ${createResult.error}`);
+      process.exit(1);
+    }
+    printStatus(`Created tmux session "${sessionName}"`);
+  } else {
+    printStatus(`Attaching to existing session "${sessionName}"`);
+  }
+
+  if (isInsideTmux()) {
+    const switchResult = await tmuxSwitchClient(sessionName);
+    if (!switchResult.success) {
+      printError(`Error: ${switchResult.error}`);
+      process.exit(1);
+    }
+  } else {
+    const attachResult = await tmuxAttachSession(sessionName);
+    if (!attachResult.success) {
+      printError(`Error: ${attachResult.error}`);
+      process.exit(1);
+    }
+  }
 }
