@@ -56,8 +56,8 @@ Commands:
   adopt                                 Add existing repos to config
   sync                                  Adopt existing + clone missing repos
   update                                Update repos CLI to latest version
-  work <branch> [repo-name]             Create a worktree for a branch
-  stack <branch>                        Create a stacked worktree from current
+  work [options] <branch> [repo-name]   Create a worktree for a branch
+  stack [options] <branch>              Create a stacked worktree from current
                                         branch
   restack [options]                     Rebase current branch and children on
                                         parent branch
@@ -76,8 +76,6 @@ Commands:
                                         branch
   cleanup [options]                     Remove worktrees for merged or deleted
                                         branches
-  session <branch> [repo-name]          Create a worktree and open a tmux
-                                        session
   init [options]                        Configure shell for work command
   help [command]                        display help for command
 `;
