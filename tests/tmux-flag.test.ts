@@ -68,8 +68,10 @@ describe('--tmux flag', () => {
   function captureStdout(): { output: string[]; restore: () => void } {
     const output: string[] = [];
     const originalWrite = process.stdout.write.bind(process.stdout);
-    process.stdout.write = (chunk: string) => {
-      output.push(chunk);
+    process.stdout.write = (chunk: string | Uint8Array) => {
+      output.push(
+        typeof chunk === 'string' ? chunk : new TextDecoder().decode(chunk)
+      );
       return true;
     };
     return { output, restore: () => (process.stdout.write = originalWrite) };
@@ -90,8 +92,7 @@ describe('--tmux flag', () => {
       worktreePath
     );
     // No path printed to stdout when --tmux is used
-    const stdoutText = output.join('');
-    expect(stdoutText).not.toContain(worktreePath);
+    expect(output).toEqual([]);
   });
 
   test('work --tmux on existing worktree calls openTmuxSession with existing path', async () => {
@@ -115,8 +116,7 @@ describe('--tmux flag', () => {
       'feature',
       realpathSync(worktreePath)
     );
-    const stdoutText = output.join('');
-    expect(stdoutText).not.toContain(worktreePath);
+    expect(output).toEqual([]);
   });
 
   test('work without --tmux does not call openTmuxSession', async () => {
@@ -154,8 +154,7 @@ describe('--tmux flag', () => {
     const childPath = join(testDir, 'bare.git-child');
     expect(openTmuxSessionSpy).toHaveBeenCalledTimes(1);
     expect(openTmuxSessionSpy).toHaveBeenCalledWith('bare', 'child', childPath);
-    const stdoutText = output.join('');
-    expect(stdoutText).not.toContain(childPath);
+    expect(output).toEqual([]);
   });
 
   test('stack without --tmux does not call openTmuxSession', async () => {

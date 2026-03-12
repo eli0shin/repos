@@ -48,13 +48,18 @@ export async function runGitCommandInteractive(
     stdout: 'pipe',
     stderr: 'pipe',
   });
-  const [, stderr] = await Promise.all([
+  const [stdout, stderr] = await Promise.all([
     new Response(proc.stdout).text(),
     new Response(proc.stderr).text(),
   ]);
   const exitCode = await proc.exited;
-  if (exitCode !== 0 && stderr.trim()) {
-    process.stderr.write(stderr);
+  if (exitCode !== 0) {
+    if (stdout.trim()) {
+      process.stderr.write(stdout);
+    }
+    if (stderr.trim()) {
+      process.stderr.write(stderr);
+    }
   }
   return exitCode;
 }
