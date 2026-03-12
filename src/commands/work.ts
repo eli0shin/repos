@@ -13,11 +13,13 @@ import {
   findWorktreeByBranch,
 } from '../git/index.ts';
 import { print, printError, printStatus } from '../output.ts';
+import { openTmuxSession } from '../tmux.ts';
 
 export async function workCommand(
   ctx: CommandContext,
   branch: string,
-  repoName?: string
+  repoName?: string,
+  options?: { tmux?: boolean }
 ): Promise<void> {
   const config = await loadConfig(ctx.configPath);
   const repo = await resolveRepo(config, repoName);
@@ -27,8 +29,12 @@ export async function workCommand(
   if (worktreesResult.success) {
     const existing = findWorktreeByBranch(worktreesResult.data, branch);
     if (existing) {
-      // Output path to stdout for shell wrapper to cd into
-      print(existing.path);
+      if (options?.tmux) {
+        await openTmuxSession(repo.name, branch, existing.path);
+      } else {
+        // Output path to stdout for shell wrapper to cd into
+        print(existing.path);
+      }
       return;
     }
   }
@@ -56,6 +62,11 @@ export async function workCommand(
   }
 
   printStatus(`Created worktree "${repo.name}-${branch.replace(/\//g, '-')}"`);
-  // Output path to stdout for shell wrapper to cd into
-  print(worktreePath);
+
+  if (options?.tmux) {
+    await openTmuxSession(repo.name, branch, worktreePath);
+  } else {
+    // Output path to stdout for shell wrapper to cd into
+    print(worktreePath);
+  }
 }

@@ -32,10 +32,6 @@ work-clean() {
   fi
 }
 
-repos-session() {
-  repos session "$@"
-}
-
 work-main() {
   local path
   path=$(repos main "$@")
@@ -67,10 +63,6 @@ function work-clean
   else
     return $exit_code
   end
-end
-
-function repos-session
-  repos session $argv
 end
 
 function work-main

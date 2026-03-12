@@ -26,7 +26,6 @@ import { cleanCommand } from './commands/clean.ts';
 import { mainCommand } from './commands/main.ts';
 import { cleanupCommand } from './commands/cleanup.ts';
 import { rebaseCommand } from './commands/rebase.ts';
-import { sessionCommand } from './commands/session.ts';
 import { initCommand, initPrintCommand } from './commands/init.ts';
 import { runUpdaterWorker } from './updater-worker.ts';
 import { handleAutoUpdate, printUpdateMessage } from './auto-update.ts';
@@ -145,16 +144,22 @@ program
   .description('Create a worktree for a branch')
   .argument('<branch>', 'Branch name for the worktree')
   .argument('[repo-name]', 'Repo name (optional if inside a tracked repo)')
-  .action(async (branch, repoName) => {
-    await workCommand(getCommandContext(), branch, repoName);
+  .option('-t, --tmux', 'Open a tmux session in the worktree')
+  .action(async (branch, repoName, options) => {
+    await workCommand(getCommandContext(), branch, repoName, {
+      tmux: options.tmux ?? false,
+    });
   });
 
 program
   .command('stack')
   .description('Create a stacked worktree from current branch')
   .argument('<branch>', 'New branch name')
-  .action(async (branch) => {
-    await stackCommand(getCommandContext(), branch);
+  .option('-t, --tmux', 'Open a tmux session in the worktree')
+  .action(async (branch, options) => {
+    await stackCommand(getCommandContext(), branch, {
+      tmux: options.tmux ?? false,
+    });
   });
 
 program
@@ -249,15 +254,6 @@ program
     await cleanupCommand(getCommandContext(), {
       dryRun: options.dryRun ?? false,
     });
-  });
-
-program
-  .command('session')
-  .description('Create a worktree and open a tmux session')
-  .argument('<branch>', 'Branch name for the worktree')
-  .argument('[repo-name]', 'Repo name (optional if inside a tracked repo)')
-  .action(async (branch, repoName) => {
-    await sessionCommand(getCommandContext(), branch, repoName);
   });
 
 program
