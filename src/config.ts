@@ -21,9 +21,7 @@ import type {
 
 export function getConfigPath(): string {
   const xdgConfigHome = process.env.XDG_CONFIG_HOME;
-  const configDir = xdgConfigHome
-    ? join(xdgConfigHome, 'repos')
-    : join(homedir(), '.config', 'repos');
+  const configDir = xdgConfigHome ? join(xdgConfigHome, 'repos') : join(homedir(), '.config', 'repos');
   return join(configDir, 'config.json');
 }
 
