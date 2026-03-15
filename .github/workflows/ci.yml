@@ -9,13 +9,17 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref }}
 
       - name: Configure Git
         run: |
-          git config --global user.email "test@test.com"
-          git config --global user.name "Test"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
 
       - uses: oven-sh/setup-bun@v2
 
@@ -23,7 +27,17 @@ jobs:
         run: bun install
 
       - name: Check formatting
+        id: format-check
         run: bun run format
+        continue-on-error: ${{ github.event_name == 'pull_request' }}
+
+      - name: Fix formatting and push
+        if: steps.format-check.outcome == 'failure' && github.event_name == 'pull_request'
+        run: |
+          bun run format:fix
+          git add --update
+          git commit -m "style: fix formatting"
+          git push origin HEAD:${{ github.head_ref }}
 
       - name: Run linting
         run: bun run lint
