@@ -6,12 +6,11 @@ on:
   pull_request:
     branches: [main]
 
-permissions:
-  contents: write
-
 jobs:
   test:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -33,12 +32,12 @@ jobs:
         continue-on-error: ${{ github.event_name == 'pull_request' }}
 
       - name: Fix formatting and push
-        if: steps.format-check.outcome == 'failure'
+        if: steps.format-check.outcome == 'failure' && github.event_name == 'pull_request'
         run: |
           bun run format:fix
-          git add -A
+          git add --update
           git commit -m "style: fix formatting"
-          git push
+          git push origin HEAD:${{ github.head_ref }}
 
       - name: Run linting
         run: bun run lint
