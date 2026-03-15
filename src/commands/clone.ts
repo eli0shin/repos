@@ -4,14 +4,14 @@ import { cloneRepo, cloneBare, isGitRepo, isBareRepo } from '../git/index.ts';
 import { print, printError } from '../output.ts';
 import type { RepoEntry } from '../types.ts';
 
-async function repoExists(repo: RepoEntry): Promise<boolean> {
+export async function repoExists(repo: RepoEntry): Promise<boolean> {
   if (repo.bare) {
     return isBareRepo(repo.path);
   }
   return isGitRepo(repo.path);
 }
 
-async function cloneOne(
+export async function cloneOne(
   repo: RepoEntry
 ): Promise<{ success: boolean; error?: string }> {
   if (repo.bare) {

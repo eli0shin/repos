@@ -2,11 +2,15 @@ import { rm } from 'node:fs/promises';
 import type { CommandContext } from '../cli.ts';
 import {
   loadConfig,
-  writeConfig,
+  saveConfig,
   removeRepoFromConfig,
   findRepo,
 } from '../config.ts';
-import { isGitRepo } from '../git/index.ts';
+import {
+  isGitRepoOrBare,
+  listWorktrees,
+  removeWorktree,
+} from '../git/index.ts';
 import { print, printError } from '../output.ts';
 
 export async function removeCommand(
@@ -23,16 +27,27 @@ export async function removeCommand(
   }
 
   const newConfig = removeRepoFromConfig(config, name);
-  const writeResult = await writeConfig(ctx.configPath, newConfig);
-  if (!writeResult.success) {
-    printError(`Error saving config: ${writeResult.error}`);
-    process.exit(1);
-  }
+  await saveConfig(ctx.configPath, newConfig);
 
   print(`Removed "${name}" from config`);
 
   if (deleteDir) {
-    if (await isGitRepo(repo.path)) {
+    if (await isGitRepoOrBare(repo.path)) {
+      // Clean up worktrees before deleting the repo directory
+      const worktreesResult = await listWorktrees(repo.path);
+      if (worktreesResult.success) {
+        for (const wt of worktreesResult.data) {
+          if (!wt.isMain) {
+            const result = await removeWorktree(repo.path, wt.path);
+            if (!result.success) {
+              printError(
+                `Warning: failed to remove worktree ${wt.path}: ${result.error}`
+              );
+            }
+          }
+        }
+      }
+
       await rm(repo.path, { recursive: true, force: true });
       print(`Deleted directory: ${repo.path}`);
     } else {

@@ -1,0 +1,99 @@
+import { describe, expect, test, beforeEach, afterEach } from 'bun:test';
+import { mkdir, rm } from 'node:fs/promises';
+import { realpathSync } from 'node:fs';
+import { join } from 'node:path';
+import { isGitRepo, isBareRepo } from '../src/git/index.ts';
+import { addCommand } from '../src/commands/add.ts';
+import { readConfig, writeConfig } from '../src/config.ts';
+import { createTestRepo } from './helpers.ts';
+import { mockProcessExit, type MockExit } from './utils.ts';
+
+describe('repos add command', () => {
+  const testDir = '/tmp/repos-test-add-cmd';
+  const sourceDir = '/tmp/repos-test-add-cmd-source';
+  const configPath = '/tmp/repos-test-add-cmd-config/config.json';
+  let mockExit: MockExit;
+  let originalCwd: string;
+
+  beforeEach(async () => {
+    mockExit = mockProcessExit();
+    originalCwd = process.cwd();
+    await mkdir(testDir, { recursive: true });
+    await createTestRepo(sourceDir);
+    await writeConfig(configPath, { repos: [] });
+    process.chdir(testDir);
+  });
+
+  afterEach(async () => {
+    mockExit.mockRestore();
+    process.chdir(originalCwd);
+    await rm(testDir, { recursive: true, force: true });
+    await rm(sourceDir, { recursive: true, force: true });
+    await rm('/tmp/repos-test-add-cmd-config', {
+      recursive: true,
+      force: true,
+    });
+  });
+
+  test('clones and tracks a regular repo', async () => {
+    await addCommand({ configPath }, sourceDir);
+
+    // process.cwd() resolves /tmp to /private/tmp on macOS
+    const realTestDir = realpathSync(testDir);
+    const repoDir = join(realTestDir, 'repos-test-add-cmd-source');
+    expect(await isGitRepo(repoDir)).toBe(true);
+
+    const configResult = await readConfig(configPath);
+    expect(configResult).toEqual({
+      success: true,
+      data: {
+        repos: [
+          {
+            name: 'repos-test-add-cmd-source',
+            url: sourceDir,
+            path: repoDir,
+          },
+        ],
+      },
+    });
+  });
+
+  test('clones and tracks a bare repo', async () => {
+    await addCommand({ configPath }, sourceDir, { bare: true });
+
+    const realTestDir = realpathSync(testDir);
+    const repoDir = join(realTestDir, 'repos-test-add-cmd-source');
+    expect(await isBareRepo(repoDir)).toBe(true);
+
+    const configResult = await readConfig(configPath);
+    expect(configResult).toEqual({
+      success: true,
+      data: {
+        repos: [
+          {
+            name: 'repos-test-add-cmd-source',
+            url: sourceDir,
+            path: repoDir,
+            bare: true,
+          },
+        ],
+      },
+    });
+  });
+
+  test('fails when repo is already tracked', async () => {
+    // Add it first
+    await addCommand({ configPath }, sourceDir);
+
+    // Delete directory so clone doesn't conflict, but config entry still exists
+    const realTestDir = realpathSync(testDir);
+    const repoDir = join(realTestDir, 'repos-test-add-cmd-source');
+    await rm(repoDir, { recursive: true, force: true });
+
+    // Try adding the same URL again — should fail because name is already tracked
+    await expect(addCommand({ configPath }, sourceDir)).rejects.toThrow(
+      'process.exit(1)'
+    );
+    expect(mockExit).toHaveBeenCalledWith(1);
+  });
+});

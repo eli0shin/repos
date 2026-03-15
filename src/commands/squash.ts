@@ -1,5 +1,5 @@
 import type { CommandContext } from '../cli.ts';
-import { readConfig, findRepoFromCwd, getParentBranch } from '../config.ts';
+import { loadConfig, findRepoFromCwd, getParentBranch } from '../config.ts';
 import {
   hasUncommittedChanges,
   getDefaultBranch,
@@ -95,13 +95,9 @@ export async function squashCommand(
   }
 
   // Step 1: Read config and find repo
-  const configResult = await readConfig(ctx.configPath);
-  if (!configResult.success) {
-    printError(`Error reading config: ${configResult.error}`);
-    process.exit(1);
-  }
+  const config = await loadConfig(ctx.configPath);
 
-  const repo = await findRepoFromCwd(configResult.data, process.cwd());
+  const repo = await findRepoFromCwd(config, process.cwd());
   if (!repo) {
     printError('Error: Not inside a tracked repo.');
     process.exit(1);

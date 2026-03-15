@@ -3,7 +3,7 @@ import type { CommandContext } from '../cli.ts';
 import {
   extractRepoName,
   loadConfig,
-  writeConfig,
+  saveConfig,
   addRepoToConfig,
   findRepo,
 } from '../config.ts';
@@ -34,51 +34,28 @@ export async function addCommand(
   }
 
   const targetDir = join(process.cwd(), name);
+  const bare = options.bare ?? false;
+  const bareLabel = bare ? ' (bare)' : '';
 
-  if (options.bare) {
-    print(`Cloning ${url} (bare) to ${targetDir}...`);
+  print(`Cloning ${url}${bareLabel} to ${targetDir}...`);
 
-    const cloneResult = await cloneBare(url, targetDir);
-    if (!cloneResult.success) {
-      printError(`Error cloning: ${cloneResult.error}`);
-      process.exit(1);
-    }
+  const cloneResult = bare
+    ? await cloneBare(url, targetDir)
+    : await cloneRepo(url, targetDir);
 
-    const newConfig = addRepoToConfig(config, {
-      name,
-      url,
-      path: targetDir,
-      bare: true,
-    });
-
-    const writeResult = await writeConfig(ctx.configPath, newConfig);
-    if (!writeResult.success) {
-      printError(`Error saving config: ${writeResult.error}`);
-      process.exit(1);
-    }
-
-    print(`Added "${name}" as bare clone`);
-  } else {
-    print(`Cloning ${url} to ${targetDir}...`);
-
-    const cloneResult = await cloneRepo(url, targetDir);
-    if (!cloneResult.success) {
-      printError(`Error cloning: ${cloneResult.error}`);
-      process.exit(1);
-    }
-
-    const newConfig = addRepoToConfig(config, {
-      name,
-      url,
-      path: targetDir,
-    });
-
-    const writeResult = await writeConfig(ctx.configPath, newConfig);
-    if (!writeResult.success) {
-      printError(`Error saving config: ${writeResult.error}`);
-      process.exit(1);
-    }
-
-    print(`Added "${name}"`);
+  if (!cloneResult.success) {
+    printError(`Error cloning: ${cloneResult.error}`);
+    process.exit(1);
   }
+
+  const newConfig = addRepoToConfig(config, {
+    name,
+    url,
+    path: targetDir,
+    ...(bare ? { bare: true } : {}),
+  });
+
+  await saveConfig(ctx.configPath, newConfig);
+
+  print(`Added "${name}"${bare ? ' as bare clone' : ''}`);
 }
