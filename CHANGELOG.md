@@ -1,5 +1,15 @@
 # repos
 
+## 1.0.0
+
+### Major Changes
+
+- [#58](https://github.com/eli0shin/repos/pull/58) [`7e0410a`](https://github.com/eli0shin/repos/commit/7e0410a3e78c5a68a39f07a85a4f6b9b75e6dd85) Thanks [@eli0shin](https://github.com/eli0shin)! - Replace `session` command with `--tmux`/`-t` flag on `work` and `stack` commands. Instead of a separate command for tmux integration, use `repos work -t <branch>` or `repos stack -t <branch>` to create a worktree and open it in a tmux session. The `repos-session` shell helper is also removed.
+
+### Patch Changes
+
+- [#62](https://github.com/eli0shin/repos/pull/62) [`70d00a4`](https://github.com/eli0shin/repos/commit/70d00a4c7127dab9f6bfb2a9cf18f0bdbf8aa5c2) Thanks [@eli0shin](https://github.com/eli0shin)! - Fix bare repo handling in `latest`, `remove`, and `sync` commands. `latest` now fetches bare repos instead of skipping them. `remove --delete` cleans up worktrees before deleting bare repos. `sync` reuses adopt logic so bare repos and worktrees are handled correctly.
+
 ## 0.12.0
 
 ### Minor Changes
