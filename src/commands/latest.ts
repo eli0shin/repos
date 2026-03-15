@@ -8,13 +8,13 @@ import {
 } from '../git/index.ts';
 import { print } from '../output.ts';
 
-type UpdateResult = {
-  name: string;
-  success: boolean;
-  error?: string;
-  updated?: boolean;
-  fetched?: boolean;
-};
+type UpdateResult =
+  | {
+      name: string;
+      success: true;
+      status: 'updated' | 'up-to-date' | 'fetched';
+    }
+  | { name: string; success: false; error: string };
 
 export async function latestCommand(ctx: CommandContext): Promise<void> {
   const config = await loadConfig(ctx.configPath);
@@ -39,7 +39,7 @@ export async function latestCommand(ctx: CommandContext): Promise<void> {
         return { name: repo.name, success: false, error: fetchResult.error };
       }
 
-      return { name: repo.name, success: true, fetched: true };
+      return { name: repo.name, success: true, status: 'fetched' };
     }
 
     // Regular repos: pull
@@ -55,7 +55,7 @@ export async function latestCommand(ctx: CommandContext): Promise<void> {
     return {
       name: repo.name,
       success: true,
-      updated: pullResult.data.updated,
+      status: pullResult.data.updated ? 'updated' : 'up-to-date',
     };
   });
 
@@ -63,12 +63,9 @@ export async function latestCommand(ctx: CommandContext): Promise<void> {
 
   for (const result of results) {
     if (result.success) {
-      if (result.fetched) {
-        print(`  ✓ ${result.name}: fetched`);
-      } else {
-        const status = result.updated ? 'updated' : 'up to date';
-        print(`  ✓ ${result.name}: ${status}`);
-      }
+      const label =
+        result.status === 'up-to-date' ? 'up to date' : result.status;
+      print(`  ✓ ${result.name}: ${label}`);
     } else {
       print(`  ✗ ${result.name}: ${result.error}`);
     }

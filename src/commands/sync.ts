@@ -10,7 +10,7 @@ export async function syncCommand(ctx: CommandContext): Promise<void> {
 
   // Phase 1: Adopt untracked repos (uses adopt's full implementation with bare repo + worktree filtering)
   print('Scanning for untracked repos...\n');
-  const { config } = await adoptMultipleRepos(
+  const { config, adopted } = await adoptMultipleRepos(
     ctx.configPath,
     initialConfig,
     cwd
@@ -42,5 +42,5 @@ export async function syncCommand(ctx: CommandContext): Promise<void> {
     cloned++;
   }
 
-  print(`\nSync complete: cloned ${cloned}`);
+  print(`\nSync complete: adopted ${adopted}, cloned ${cloned}`);
 }

@@ -2,21 +2,11 @@ import { describe, expect, test, beforeEach, afterEach } from 'bun:test';
 import { mkdir, rm } from 'node:fs/promises';
 import { realpathSync } from 'node:fs';
 import { join } from 'node:path';
-import { runGitCommand, isGitRepo, isBareRepo } from '../src/git/index.ts';
+import { isGitRepo, isBareRepo } from '../src/git/index.ts';
 import { addCommand } from '../src/commands/add.ts';
 import { readConfig, writeConfig } from '../src/config.ts';
+import { createTestRepo } from './helpers.ts';
 import { mockProcessExit, type MockExit } from './utils.ts';
-
-// Helper to create a test repo with commits
-async function createTestRepo(dir: string): Promise<void> {
-  await mkdir(dir, { recursive: true });
-  await runGitCommand(['init'], dir);
-  await runGitCommand(['config', 'user.email', 'test@test.com'], dir);
-  await runGitCommand(['config', 'user.name', 'Test'], dir);
-  await Bun.write(join(dir, 'test.txt'), 'test');
-  await runGitCommand(['add', '.'], dir);
-  await runGitCommand(['commit', '-m', 'initial'], dir);
-}
 
 describe('repos add command', () => {
   const testDir = '/tmp/repos-test-add-cmd';

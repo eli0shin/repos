@@ -38,7 +38,12 @@ export async function removeCommand(
       if (worktreesResult.success) {
         for (const wt of worktreesResult.data) {
           if (!wt.isMain) {
-            await removeWorktree(repo.path, wt.path);
+            const result = await removeWorktree(repo.path, wt.path);
+            if (!result.success) {
+              printError(
+                `Warning: failed to remove worktree ${wt.path}: ${result.error}`
+              );
+            }
           }
         }
       }

@@ -6,18 +6,8 @@ import { runGitCommand, isGitRepo, cloneBare } from '../src/git/index.ts';
 import { removeCommand } from '../src/commands/remove.ts';
 import { readConfig, writeConfig } from '../src/config.ts';
 import type { ReposConfig } from '../src/types.ts';
+import { createTestRepo } from './helpers.ts';
 import { mockProcessExit, type MockExit } from './utils.ts';
-
-// Helper to create a test repo with commits
-async function createTestRepo(dir: string): Promise<void> {
-  await mkdir(dir, { recursive: true });
-  await runGitCommand(['init'], dir);
-  await runGitCommand(['config', 'user.email', 'test@test.com'], dir);
-  await runGitCommand(['config', 'user.name', 'Test'], dir);
-  await Bun.write(join(dir, 'test.txt'), 'test');
-  await runGitCommand(['add', '.'], dir);
-  await runGitCommand(['commit', '-m', 'initial'], dir);
-}
 
 async function directoryExists(path: string): Promise<boolean> {
   try {
