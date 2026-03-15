@@ -224,6 +224,17 @@ export function getWorktreePath(repoPath: string, branch: string): string {
   return join(parentDir, `${repoName}-${safeBranch}`);
 }
 
+export async function saveConfig(
+  configPath: string,
+  config: ReposConfig
+): Promise<void> {
+  const result = await writeConfig(configPath, config);
+  if (!result.success) {
+    printError(`Error saving config: ${result.error}`);
+    process.exit(1);
+  }
+}
+
 export function getUpdateBehavior(config: ReposConfig): UpdateBehavior {
   return config.config?.updateBehavior ?? 'auto';
 }

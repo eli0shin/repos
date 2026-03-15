@@ -16,11 +16,15 @@ export async function isGitRepo(dir: string): Promise<boolean> {
 }
 
 export async function isBareRepo(repoDir: string): Promise<boolean> {
-  const result = await runGitCommand(
-    ['rev-parse', '--is-bare-repository'],
-    repoDir
-  );
-  return result.exitCode === 0 && result.stdout === 'true';
+  try {
+    const result = await runGitCommand(
+      ['rev-parse', '--is-bare-repository'],
+      repoDir
+    );
+    return result.exitCode === 0 && result.stdout === 'true';
+  } catch {
+    return false;
+  }
 }
 
 export async function isGitRepoOrBare(dir: string): Promise<boolean> {
