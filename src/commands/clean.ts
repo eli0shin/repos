@@ -1,5 +1,5 @@
 import type { CommandContext } from '../cli.ts';
-import { readConfig, findRepo, findRepoFromCwd } from '../config.ts';
+import { readConfigOrExit, resolveRepo } from '../config.ts';
 import {
   removeWorktree,
   hasUncommittedChanges,
@@ -12,26 +12,8 @@ export async function cleanCommand(
   branch: string,
   repoName?: string
 ): Promise<void> {
-  const configResult = await readConfig(ctx.configPath);
-  if (!configResult.success) {
-    printError(`Error reading config: ${configResult.error}`);
-    process.exit(1);
-  }
-
-  let repo;
-  if (repoName) {
-    repo = findRepo(configResult.data, repoName);
-    if (!repo) {
-      printError(`Error: "${repoName}" not found in config`);
-      process.exit(1);
-    }
-  } else {
-    repo = await findRepoFromCwd(configResult.data, process.cwd());
-    if (!repo) {
-      printError('Error: Not inside a tracked repo. Specify repo name.');
-      process.exit(1);
-    }
-  }
+  const config = await readConfigOrExit(ctx.configPath);
+  const repo = await resolveRepo(config, repoName);
 
   // Find the worktree
   const worktreesResult = await listWorktrees(repo.path);

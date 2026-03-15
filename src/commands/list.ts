@@ -1,17 +1,11 @@
 import type { CommandContext } from '../cli.ts';
-import { readConfig } from '../config.ts';
-import { isGitRepo, listWorktrees } from '../git.ts';
-import { print, printError } from '../output.ts';
+import { readConfigOrExit } from '../config.ts';
+import { isGitRepoOrBare, listWorktrees } from '../git.ts';
+import { print } from '../output.ts';
 
 export async function listCommand(ctx: CommandContext): Promise<void> {
-  const result = await readConfig(ctx.configPath);
-
-  if (!result.success) {
-    printError(`Error reading config: ${result.error}`);
-    process.exit(1);
-  }
-
-  const { repos } = result.data;
+  const config = await readConfigOrExit(ctx.configPath);
+  const { repos } = config;
 
   if (repos.length === 0) {
     print('No repos tracked. Use "repos add <url>" to add one.');
@@ -21,7 +15,7 @@ export async function listCommand(ctx: CommandContext): Promise<void> {
   print('Tracked repositories:\n');
 
   for (const repo of repos) {
-    const exists = await isGitRepo(repo.path);
+    const exists = await isGitRepoOrBare(repo.path);
     const bareLabel = repo.bare ? ' (bare)' : '';
     const status = exists ? '✓' : '✗ not cloned';
 

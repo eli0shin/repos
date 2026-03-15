@@ -1,32 +1,46 @@
 import type { CommandContext } from '../cli.ts';
-import { readConfig } from '../config.ts';
-import { isGitRepo, pullCurrentBranch } from '../git.ts';
-import { print, printError } from '../output.ts';
+import { readConfigOrExit } from '../config.ts';
+import {
+  isGitRepo,
+  isBareRepo,
+  pullCurrentBranch,
+  fetchOrigin,
+} from '../git.ts';
+import { print } from '../output.ts';
 
-type PullResult = {
+type UpdateResult = {
   name: string;
   success: boolean;
   error?: string;
   updated?: boolean;
+  fetched?: boolean;
 };
 
 export async function latestCommand(ctx: CommandContext): Promise<void> {
-  const configResult = await readConfig(ctx.configPath);
-  if (!configResult.success) {
-    printError(`Error reading config: ${configResult.error}`);
-    process.exit(1);
-  }
-
-  const { repos } = configResult.data;
+  const config = await readConfigOrExit(ctx.configPath);
+  const { repos } = config;
 
   if (repos.length === 0) {
     print('No repos in config. Use "repos add <url>" to add one.');
     return;
   }
 
-  print(`Pulling ${repos.length} repo(s) in parallel...\n`);
+  print(`Updating ${repos.length} repo(s) in parallel...\n`);
 
-  const pullPromises = repos.map(async (repo): Promise<PullResult> => {
+  const promises = repos.map(async (repo): Promise<UpdateResult> => {
+    if (repo.bare) {
+      if (!(await isBareRepo(repo.path))) {
+        return { name: repo.name, success: false, error: 'not cloned' };
+      }
+
+      const fetchResult = await fetchOrigin(repo.path);
+      if (!fetchResult.success) {
+        return { name: repo.name, success: false, error: fetchResult.error };
+      }
+
+      return { name: repo.name, success: true, fetched: true };
+    }
+
     if (!(await isGitRepo(repo.path))) {
       return { name: repo.name, success: false, error: 'not cloned' };
     }
@@ -43,12 +57,16 @@ export async function latestCommand(ctx: CommandContext): Promise<void> {
     };
   });
 
-  const results = await Promise.all(pullPromises);
+  const results = await Promise.all(promises);
 
   for (const result of results) {
     if (result.success) {
-      const status = result.updated ? 'updated' : 'up to date';
-      print(`  ✓ ${result.name}: ${status}`);
+      if (result.fetched) {
+        print(`  ✓ ${result.name}: fetched`);
+      } else {
+        const status = result.updated ? 'updated' : 'up to date';
+        print(`  ✓ ${result.name}: ${status}`);
+      }
     } else {
       print(`  ✗ ${result.name}: ${result.error}`);
     }
@@ -56,5 +74,5 @@ export async function latestCommand(ctx: CommandContext): Promise<void> {
 
   const succeeded = results.filter((r) => r.success).length;
   const failed = results.filter((r) => !r.success).length;
-  print(`\nPulled ${succeeded} repo(s), ${failed} failed`);
+  print(`\nUpdated ${succeeded} repo(s), ${failed} failed`);
 }

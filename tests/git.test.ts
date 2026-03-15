@@ -649,4 +649,60 @@ describe('rebaseOnBranch', () => {
     const result = await rebaseOnBranch(localDir, defaultBranchResult.data);
     expect(result).toEqual({ success: true, data: undefined });
   });
+
+  test('aborts rebase and returns error on conflict', async () => {
+    const localDir = join(testDir, 'local');
+    await runGitCommand(['clone', remoteDir, localDir]);
+    await runGitCommand(['config', 'user.email', 'test@test.com'], localDir);
+    await runGitCommand(['config', 'user.name', 'Test'], localDir);
+
+    // Create initial commit on main and push
+    await Bun.write(join(localDir, 'test.txt'), 'initial');
+    await runGitCommand(['add', '.'], localDir);
+    await runGitCommand(['commit', '-m', 'initial'], localDir);
+    await runGitCommand(['push', '-u', 'origin', 'HEAD'], localDir);
+
+    // Get the default branch name
+    const defaultBranchResult = await getDefaultBranch(localDir);
+    if (!defaultBranchResult.success) {
+      throw new Error('Could not get default branch');
+    }
+    const defaultBranch = defaultBranchResult.data;
+
+    // Create feature branch that modifies test.txt
+    await runGitCommand(['checkout', '-b', 'feature'], localDir);
+    await Bun.write(join(localDir, 'test.txt'), 'feature version');
+    await runGitCommand(['add', '.'], localDir);
+    await runGitCommand(['commit', '-m', 'feature change'], localDir);
+
+    // Go back to main and create conflicting change, push it
+    await runGitCommand(['checkout', defaultBranch], localDir);
+    await Bun.write(join(localDir, 'test.txt'), 'main version');
+    await runGitCommand(['add', '.'], localDir);
+    await runGitCommand(['commit', '-m', 'main change'], localDir);
+    await runGitCommand(['push', 'origin', defaultBranch], localDir);
+
+    // Switch to feature and try to rebase
+    await runGitCommand(['checkout', 'feature'], localDir);
+    await fetchOrigin(localDir);
+
+    const result = await rebaseOnBranch(localDir, defaultBranch);
+    expect(result).toEqual({
+      success: false,
+      error: 'Rebase failed due to conflicts. Rebase aborted.',
+    });
+
+    // Verify we're NOT in a rebase-in-progress state (abort was clean)
+    const statusResult = await runGitCommand(
+      ['status', '--porcelain'],
+      localDir
+    );
+    expect(statusResult.exitCode).toBe(0);
+
+    // Verify we're still on the feature branch
+    expect(await getCurrentBranch(localDir)).toEqual({
+      success: true,
+      data: 'feature',
+    });
+  });
 });

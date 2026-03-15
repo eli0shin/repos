@@ -1,8 +1,8 @@
 import { basename, join } from 'node:path';
 import type { CommandContext } from '../cli.ts';
 import {
-  readConfig,
-  writeConfig,
+  readConfigOrExit,
+  writeConfigOrExit,
   addRepoToConfig,
   findRepo,
 } from '../config.ts';
@@ -17,28 +17,23 @@ import { print, printError } from '../output.ts';
 import type { ReposConfig } from '../types.ts';
 
 export async function adoptCommand(ctx: CommandContext): Promise<void> {
-  const configResult = await readConfig(ctx.configPath);
-  if (!configResult.success) {
-    printError(`Error reading config: ${configResult.error}`);
-    process.exit(1);
-  }
-
+  const config = await readConfigOrExit(ctx.configPath);
   const cwd = process.cwd();
 
   // If current directory is a bare repo, adopt it
   if (await isBareRepo(cwd)) {
-    await adoptSingleRepo(ctx.configPath, configResult.data, cwd, true);
+    await adoptSingleRepo(ctx.configPath, config, cwd, true);
     return;
   }
 
   // If current directory is a regular git repo, adopt just that repo
   if (await isGitRepo(cwd)) {
-    await adoptSingleRepo(ctx.configPath, configResult.data, cwd, false);
+    await adoptSingleRepo(ctx.configPath, config, cwd, false);
     return;
   }
 
   // Otherwise, scan current directory for git repos
-  await adoptMultipleRepos(ctx.configPath, configResult.data, cwd);
+  await adoptMultipleRepos(ctx.configPath, config, cwd);
 }
 
 async function adoptSingleRepo(
@@ -67,25 +62,21 @@ async function adoptSingleRepo(
     ...(bare ? { bare: true } : {}),
   });
 
-  const writeResult = await writeConfig(configPath, newConfig);
-  if (!writeResult.success) {
-    printError(`Error saving config: ${writeResult.error}`);
-    process.exit(1);
-  }
+  await writeConfigOrExit(configPath, newConfig);
 
   print(`Adopted "${name}"`);
 }
 
-async function adoptMultipleRepos(
+export async function adoptMultipleRepos(
   configPath: string,
   initialConfig: ReposConfig,
   directory: string
-): Promise<void> {
+): Promise<{ config: ReposConfig; adopted: number }> {
   const repoNames = await findGitRepos(directory);
 
   if (repoNames.length === 0) {
     print('No git repos found in directory');
-    return;
+    return { config: initialConfig, adopted: 0 };
   }
 
   // First pass: identify bare repos and collect their worktree paths (excluding the bare repo itself)
@@ -120,7 +111,7 @@ async function adoptMultipleRepos(
 
   if (newRepos.length === 0) {
     print('All repos are already tracked');
-    return;
+    return { config: initialConfig, adopted: 0 };
   }
 
   print(`Found ${newRepos.length} untracked repo(s)\n`);
@@ -150,12 +141,9 @@ async function adoptMultipleRepos(
   }
 
   if (adopted > 0) {
-    const writeResult = await writeConfig(configPath, config);
-    if (!writeResult.success) {
-      printError(`\nError saving config: ${writeResult.error}`);
-      process.exit(1);
-    }
+    await writeConfigOrExit(configPath, config);
   }
 
   print(`\nAdopted ${adopted} repo(s)`);
+  return { config, adopted };
 }

@@ -2,6 +2,7 @@ import { mkdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { listWorktrees } from './git.ts';
+import { printError } from './output.ts';
 import type {
   RepoEntry,
   ReposConfig,
@@ -177,6 +178,49 @@ export function getWorktreePath(repoPath: string, branch: string): string {
   const repoName = basename(repoPath);
   const safeBranch = branch.replace(/\//g, '-');
   return join(parentDir, `${repoName}-${safeBranch}`);
+}
+
+export async function readConfigOrExit(
+  configPath: string
+): Promise<ReposConfig> {
+  const result = await readConfig(configPath);
+  if (!result.success) {
+    printError(`Error reading config: ${result.error}`);
+    process.exit(1);
+  }
+  return result.data;
+}
+
+export async function writeConfigOrExit(
+  configPath: string,
+  config: ReposConfig
+): Promise<void> {
+  const result = await writeConfig(configPath, config);
+  if (!result.success) {
+    printError(`Error saving config: ${result.error}`);
+    process.exit(1);
+  }
+}
+
+export async function resolveRepo(
+  config: ReposConfig,
+  repoName?: string
+): Promise<RepoEntry> {
+  if (repoName) {
+    const repo = findRepo(config, repoName);
+    if (!repo) {
+      printError(`Error: "${repoName}" not found in config`);
+      process.exit(1);
+    }
+    return repo;
+  }
+
+  const repo = await findRepoFromCwd(config, process.cwd());
+  if (!repo) {
+    printError('Error: Not inside a tracked repo. Specify repo name.');
+    process.exit(1);
+  }
+  return repo;
 }
 
 export function getUpdateBehavior(config: ReposConfig): UpdateBehavior {
