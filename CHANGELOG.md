@@ -1,5 +1,11 @@
 # repos
 
+## 1.1.0
+
+### Minor Changes
+
+- [#65](https://github.com/eli0shin/repos/pull/65) [`5cdf553`](https://github.com/eli0shin/repos/commit/5cdf553c9bf627b7ca6d7eb6e7c97b9c6629cd0f) Thanks [@eli0shin](https://github.com/eli0shin)! - Add repo-local worktree setup via `.repos/worktree.json` so `repos work` and `repos stack` can copy files into new worktrees and run a setup command automatically.
+
 ## 1.0.0
 
 ### Major Changes
