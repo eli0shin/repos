@@ -1,6 +1,12 @@
 import { join } from 'node:path';
 import { listWorktrees } from './git/index.ts';
+import type { WorktreeInfo } from './git/types.ts';
 import type { OperationResult, RepoWorktreeConfig } from './types.ts';
+
+type MainWorktreeResolution = {
+  mainWorktreePath: string;
+  usedFallback: boolean;
+};
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -54,14 +60,27 @@ export async function readWorktreeConfig(
 
 export async function resolveMainWorktreePath(
   repoPath: string
-): Promise<OperationResult<string>> {
+): Promise<OperationResult<MainWorktreeResolution>> {
   const worktreesResult = await listWorktrees(repoPath);
   if (!worktreesResult.success) {
     return { success: false, error: worktreesResult.error };
   }
 
-  const mainWorktree = worktreesResult.data.find((worktree) => worktree.isMain);
-  return { success: true, data: mainWorktree?.path ?? repoPath };
+  return {
+    success: true,
+    data: getMainWorktreeResolution(worktreesResult.data, repoPath),
+  };
+}
+
+export function getMainWorktreeResolution(
+  worktrees: WorktreeInfo[],
+  repoPath: string
+): MainWorktreeResolution {
+  const mainWorktree = worktrees.find((worktree) => worktree.isMain);
+  return {
+    mainWorktreePath: mainWorktree?.path ?? repoPath,
+    usedFallback: !mainWorktree,
+  };
 }
 
 export async function loadRepoWorktreeConfig(
@@ -75,7 +94,7 @@ export async function loadRepoWorktreeConfig(
   }
 
   const configResult = await readWorktreeConfig(
-    getWorktreeConfigPath(mainWorktreeResult.data)
+    getWorktreeConfigPath(mainWorktreeResult.data.mainWorktreePath)
   );
   if (!configResult.success) {
     return configResult;
@@ -84,7 +103,7 @@ export async function loadRepoWorktreeConfig(
   return {
     success: true,
     data: {
-      mainWorktreePath: mainWorktreeResult.data,
+      mainWorktreePath: mainWorktreeResult.data.mainWorktreePath,
       config: configResult.data,
     },
   };

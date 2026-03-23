@@ -1,16 +1,10 @@
 import { copyFile, mkdir, stat } from 'node:fs/promises';
-import { isAbsolute, dirname, join, normalize } from 'node:path';
+import { dirname, join, normalize } from 'node:path';
 import { printError, printStatus } from './output.ts';
 import type { OperationResult, WorktreeSetupConfig } from './types.ts';
 
 function resolveRelativePath(rootPath: string, relativePath: string): string {
   return join(rootPath, normalize(relativePath));
-}
-
-function isSafeRelativePath(relativePath: string): boolean {
-  if (isAbsolute(relativePath)) return false;
-  const normalized = normalize(relativePath);
-  return normalized !== '..' && !normalized.startsWith('../');
 }
 
 async function copySetupFiles(
@@ -19,13 +13,6 @@ async function copySetupFiles(
   copyPaths: string[]
 ): Promise<OperationResult> {
   for (const relativePath of copyPaths) {
-    if (!isSafeRelativePath(relativePath)) {
-      return {
-        success: false,
-        error: `Invalid setup copy path "${relativePath}"`,
-      };
-    }
-
     const sourcePath = resolveRelativePath(mainWorktreePath, relativePath);
     const destinationPath = resolveRelativePath(worktreePath, relativePath);
 
@@ -148,4 +135,7 @@ export async function runWorktreeSetup(
 
 export function printSetupError(error: string, worktreePath: string): void {
   printError(`Error: Setup failed for worktree at ${worktreePath}: ${error}`);
+  printError(
+    'Hint: The worktree was created and left in place for manual recovery.'
+  );
 }

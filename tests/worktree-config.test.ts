@@ -1,7 +1,10 @@
 import { describe, expect, test, beforeEach, afterEach } from 'bun:test';
 import { mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { readWorktreeConfig } from '../src/worktree-config.ts';
+import {
+  readWorktreeConfig,
+  getMainWorktreeResolution,
+} from '../src/worktree-config.ts';
 
 describe('readWorktreeConfig', () => {
   const testDir = '/tmp/repos-test-worktree-config';
@@ -67,6 +70,35 @@ describe('readWorktreeConfig', () => {
     expect(await readWorktreeConfig(configPath)).toEqual({
       success: false,
       error: 'Invalid worktree config file format',
+    });
+  });
+});
+
+describe('getMainWorktreeResolution', () => {
+  test('uses the main worktree when present', () => {
+    expect(
+      getMainWorktreeResolution(
+        [
+          { path: '/tmp/repo', branch: 'main', isMain: true },
+          { path: '/tmp/repo-feature', branch: 'feature', isMain: false },
+        ],
+        '/tmp/repo'
+      )
+    ).toEqual({
+      mainWorktreePath: '/tmp/repo',
+      usedFallback: false,
+    });
+  });
+
+  test('falls back to repo path when no main worktree is present', () => {
+    expect(
+      getMainWorktreeResolution(
+        [{ path: '/tmp/repo-feature', branch: 'feature', isMain: false }],
+        '/tmp/repo'
+      )
+    ).toEqual({
+      mainWorktreePath: '/tmp/repo',
+      usedFallback: true,
     });
   });
 });

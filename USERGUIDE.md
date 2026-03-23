@@ -473,7 +473,7 @@ Slashes in branch names are converted to dashes:
 Prints the worktree path to stdout. Use with the `work` shell function to automatically `cd` into it.
 
 **Repo-local setup:**
-If `.repos/worktree.json` is present for the repo, `repos work` copies any configured files and runs the setup command before printing the path. Setup only runs when creating a new worktree, not when reusing an existing one.
+If `.repos/worktree.json` is present for the repo, `repos work` copies any configured files and runs the setup command before printing the path. Setup only runs when creating a new worktree, not when reusing an existing one. If setup fails, the worktree is left in place for manual recovery and no stdout path is printed.
 
 ---
 
@@ -537,6 +537,8 @@ repos stack feature-part-2    # Inside a worktree
 2. Creates a new worktree with a new branch based on the current branch
 3. Records the parent-child relationship in your config file
 4. Applies repo-local worktree setup from `.repos/worktree.json`, if configured
+
+If setup fails, the new worktree is left in place for manual recovery and no stdout path is printed.
 
 **Use case:**
 When working on a feature that depends on another in-progress feature, stack branches to maintain the dependency chain.
@@ -1134,10 +1136,10 @@ In addition to the global config file, repos can load per-repository worktree se
 
 **Fields:**
 
-| Field           | Type       | Description                                                                                              |
-| --------------- | ---------- | -------------------------------------------------------------------------------------------------------- |
-| `setup.copy`    | `string[]` | Repo-root-relative files to copy from the main repo path into the same relative path in the new worktree |
-| `setup.command` | `string`   | Shell command to run after copying, with the new worktree as the current working directory               |
+| Field           | Type       | Description                                                                                                              |
+| --------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `setup.copy`    | `string[]` | Paths to copy; each entry is joined onto the main repo path for the source and the new worktree path for the destination |
+| `setup.command` | `string`   | Shell command to run after copying, with the new worktree as the current working directory                               |
 
 **Behavior:**
 
@@ -1145,6 +1147,7 @@ In addition to the global config file, repos can load per-repository worktree se
 - `repos work` skips setup when the target worktree already exists
 - Files are copied before the setup command runs
 - Setup command output is written to stderr so stdout still only contains the final worktree path
+- If setup fails, the created worktree is left in place for manual recovery
 
 **Command context:**
 

@@ -226,6 +226,9 @@ describe('worktree setup integration', () => {
     expect(stdout.output).toEqual([]);
     expect(stderr.output.join('')).toContain('boom');
     expect(stderr.output.join('')).toContain('Setup failed');
+    expect(stderr.output.join('')).toContain(
+      'Hint: The worktree was created and left in place for manual recovery.'
+    );
     expect(existsSync(join(testDir, 'repo-feature'))).toBe(true);
   });
 
@@ -263,6 +266,62 @@ describe('worktree setup integration', () => {
       `${realpathSync(repoDir)}\n${childPath}\n${realpathSync(childPath)}\n`
     );
 
+    expect(await readConfig(configPath)).toEqual({
+      success: true,
+      data: {
+        repos: [
+          {
+            name: 'repo',
+            url: sourceDir,
+            path: repoDir,
+            stacks: [{ parent: 'parent', child: 'child' }],
+          },
+        ],
+      },
+    });
+  });
+
+  test('stack exits with recovery hint when setup fails', async () => {
+    const { repoDir } = await setupRegularRepo();
+    await mkdir(join(repoDir, '.repos'), { recursive: true });
+    await Bun.write(
+      join(repoDir, '.repos', 'worktree.json'),
+      JSON.stringify(
+        {
+          setup: {
+            command: 'echo boom && exit 2',
+          },
+        },
+        null,
+        2
+      )
+    );
+
+    const parentPath = join(testDir, 'repo-parent');
+    await runGitCommand(
+      ['worktree', 'add', '-b', 'parent', parentPath],
+      repoDir
+    );
+    process.chdir(parentPath);
+
+    const stdout = captureOutput('stdout');
+    const stderr = captureOutput('stderr');
+
+    await expect(stackCommand({ configPath }, 'child')).rejects.toThrow(
+      'process.exit(1)'
+    );
+
+    stdout.restore();
+    stderr.restore();
+
+    const childPath = join(testDir, 'repo-child');
+    expect(stdout.output).toEqual([]);
+    expect(stderr.output.join('')).toContain('boom');
+    expect(stderr.output.join('')).toContain('Setup failed');
+    expect(stderr.output.join('')).toContain(
+      'Hint: The worktree was created and left in place for manual recovery.'
+    );
+    expect(existsSync(childPath)).toBe(true);
     expect(await readConfig(configPath)).toEqual({
       success: true,
       data: {
