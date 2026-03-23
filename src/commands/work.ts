@@ -14,6 +14,8 @@ import {
 } from '../git/index.ts';
 import { print, printError, printStatus } from '../output.ts';
 import { openTmuxSession } from '../tmux.ts';
+import { loadRepoWorktreeConfig } from '../worktree-config.ts';
+import { printSetupError, runWorktreeSetup } from '../worktree-setup.ts';
 
 export async function workCommand(
   ctx: CommandContext,
@@ -23,6 +25,11 @@ export async function workCommand(
 ): Promise<void> {
   const config = await loadConfig(ctx.configPath);
   const repo = await resolveRepo(config, repoName);
+  const worktreeConfigResult = await loadRepoWorktreeConfig(repo.path);
+  if (!worktreeConfigResult.success) {
+    printError(`Error reading worktree config: ${worktreeConfigResult.error}`);
+    process.exit(1);
+  }
 
   // Check if worktree already exists
   const worktreesResult = await listWorktrees(repo.path);
@@ -55,6 +62,16 @@ export async function workCommand(
     // Stack new branches on the default branch so restack/unstack work
     if (isNewBranch) {
       await recordStackOnDefaultBranch(ctx.configPath, config, repo, branch);
+    }
+
+    const setupResult = await runWorktreeSetup(
+      worktreeConfigResult.data.mainWorktreePath,
+      worktreePath,
+      worktreeConfigResult.data.config.setup
+    );
+    if (!setupResult.success) {
+      printSetupError(setupResult.error, worktreePath);
+      process.exit(1);
     }
 
     printStatus(

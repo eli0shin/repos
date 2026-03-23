@@ -472,6 +472,9 @@ Slashes in branch names are converted to dashes:
 **Output:**
 Prints the worktree path to stdout. Use with the `work` shell function to automatically `cd` into it.
 
+**Repo-local setup:**
+If `.repos/worktree.json` is present for the repo, `repos work` copies any configured files and runs the setup command before printing the path. Setup only runs when creating a new worktree, not when reusing an existing one.
+
 ---
 
 #### `work <branch>` (Shell Function)
@@ -533,6 +536,7 @@ repos stack feature-part-2    # Inside a worktree
 1. Detects the current branch from your working directory
 2. Creates a new worktree with a new branch based on the current branch
 3. Records the parent-child relationship in your config file
+4. Applies repo-local worktree setup from `.repos/worktree.json`, if configured
 
 **Use case:**
 When working on a feature that depends on another in-progress feature, stack branches to maintain the dependency chain.
@@ -1107,6 +1111,60 @@ git log -1 refs/bases/feature-profile
 ### Editing Config Manually
 
 You can edit the config file directly. repos will pick up changes on next command. Make sure to use absolute paths and valid JSON.
+
+### Repo-local Worktree Setup
+
+In addition to the global config file, repos can load per-repository worktree setup from `.repos/worktree.json`.
+
+**Location:**
+
+- Regular repo: `<main-checkout>/.repos/worktree.json`
+- Bare repo: `<tracked-bare-repo>/.repos/worktree.json`
+
+**Format:**
+
+```json
+{
+  "setup": {
+    "copy": [".env", ".env.local"],
+    "command": "npm install"
+  }
+}
+```
+
+**Fields:**
+
+| Field           | Type       | Description                                                                                              |
+| --------------- | ---------- | -------------------------------------------------------------------------------------------------------- |
+| `setup.copy`    | `string[]` | Repo-root-relative files to copy from the main repo path into the same relative path in the new worktree |
+| `setup.command` | `string`   | Shell command to run after copying, with the new worktree as the current working directory               |
+
+**Behavior:**
+
+- Applied by `repos work` and `repos stack` when they create a new worktree
+- `repos work` skips setup when the target worktree already exists
+- Files are copied before the setup command runs
+- Setup command output is written to stderr so stdout still only contains the final worktree path
+
+**Command context:**
+
+- `$1` = main repo path
+- `$2` = new worktree path
+- `REPOS_MAIN_WORKTREE` = main repo path
+- `REPOS_WORKTREE` = new worktree path
+
+**Example:**
+
+```json
+{
+  "setup": {
+    "copy": [".env.local", ".npmrc"],
+    "command": "npm install"
+  }
+}
+```
+
+This is useful for copying local env files into new worktrees and installing dependencies automatically.
 
 ## Workflows
 

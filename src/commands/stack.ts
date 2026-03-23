@@ -15,6 +15,8 @@ import {
 } from '../git/index.ts';
 import { print, printError, printStatus } from '../output.ts';
 import { openTmuxSession } from '../tmux.ts';
+import { loadRepoWorktreeConfig } from '../worktree-config.ts';
+import { printSetupError, runWorktreeSetup } from '../worktree-setup.ts';
 
 export async function stackCommand(
   ctx: CommandContext,
@@ -27,6 +29,12 @@ export async function stackCommand(
   const repo = await findRepoFromCwd(config, process.cwd());
   if (!repo) {
     printError('Error: Not inside a tracked repo.');
+    process.exit(1);
+  }
+
+  const worktreeConfigResult = await loadRepoWorktreeConfig(repo.path);
+  if (!worktreeConfigResult.success) {
+    printError(`Error reading worktree config: ${worktreeConfigResult.error}`);
     process.exit(1);
   }
 
@@ -98,6 +106,16 @@ export async function stackCommand(
     newBranch,
     parentHeadResult.data
   );
+
+  const setupResult = await runWorktreeSetup(
+    worktreeConfigResult.data.mainWorktreePath,
+    worktreePath,
+    worktreeConfigResult.data.config.setup
+  );
+  if (!setupResult.success) {
+    printSetupError(setupResult.error, worktreePath);
+    process.exit(1);
+  }
 
   printStatus(
     `Created stacked worktree "${repo.name}-${newBranch.replace(/\//g, '-')}"`

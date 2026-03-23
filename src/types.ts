@@ -23,6 +23,15 @@ export type ReposConfig = {
   config?: ReposConfigSettings;
 };
 
+export type WorktreeSetupConfig = {
+  copy?: string[];
+  command?: string;
+};
+
+export type RepoWorktreeConfig = {
+  setup?: WorktreeSetupConfig;
+};
+
 export type OperationResult<T = void> =
   | { success: true; data: T }
   | { success: false; error: string };
