@@ -160,6 +160,38 @@ describe('repos work command', () => {
     expect(output.join('')).toEqual(realpathSync(worktreePath) + '\n');
   });
 
+  test('reuses existing worktree without reading repo worktree config', async () => {
+    const bareDir = join(testDir, 'bare.git');
+    await cloneBare(sourceDir, bareDir);
+
+    const config = {
+      repos: [{ name: 'bare', url: sourceDir, path: bareDir, bare: true }],
+    } satisfies ReposConfig;
+    await writeConfig(configPath, config);
+
+    const worktreePath = join(testDir, 'bare.git-feature');
+    await runGitCommand(
+      ['worktree', 'add', '-b', 'feature', worktreePath],
+      bareDir
+    );
+
+    await mkdir(join(bareDir, '.repos'), { recursive: true });
+    await Bun.write(join(bareDir, '.repos', 'worktree.json'), 'not valid json');
+
+    const output: string[] = [];
+    const originalWrite = process.stdout.write.bind(process.stdout);
+    process.stdout.write = (chunk: string) => {
+      output.push(chunk);
+      return true;
+    };
+
+    const ctx = { configPath };
+    await workCommand(ctx, 'feature', 'bare');
+    process.stdout.write = originalWrite;
+
+    expect(output.join('')).toEqual(realpathSync(worktreePath) + '\n');
+  });
+
   test('stacks new branch on default branch', async () => {
     // Clone as bare
     const bareDir = join(testDir, 'bare.git');

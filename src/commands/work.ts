@@ -25,11 +25,6 @@ export async function workCommand(
 ): Promise<void> {
   const config = await loadConfig(ctx.configPath);
   const repo = await resolveRepo(config, repoName);
-  const worktreeConfigResult = await loadRepoWorktreeConfig(repo.path);
-  if (!worktreeConfigResult.success) {
-    printError(`Error reading worktree config: ${worktreeConfigResult.error}`);
-    process.exit(1);
-  }
 
   // Check if worktree already exists
   const worktreesResult = await listWorktrees(repo.path);
@@ -42,6 +37,14 @@ export async function workCommand(
   if (existing) {
     worktreePath = existing.path;
   } else {
+    const worktreeConfigResult = await loadRepoWorktreeConfig(repo.path);
+    if (!worktreeConfigResult.success) {
+      printError(
+        `Error reading worktree config: ${worktreeConfigResult.error}`
+      );
+      process.exit(1);
+    }
+
     // Check if branch is new (doesn't exist locally or on remote)
     // so we know whether to record a stack relationship after creation
     const isNewBranch = await checkIsNewBranch(repo.path, branch);
