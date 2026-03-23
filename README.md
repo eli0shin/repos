@@ -8,7 +8,7 @@ A portable git repository manager.
 - **Parallel feature work** - Use git worktrees to work on multiple branches simultaneously
 - **Batch operations** - Pull all repos at once, clean up stale worktrees across projects
 
-It simplifies worktree workflows by automatically setting up branch tracking and providing easy rebasing against the default branch.
+It simplifies worktree workflows by automatically setting up branch tracking, providing easy rebasing against the default branch, and supporting repo-local worktree setup via `.repos/worktree.json`.
 
 ## Install
 
@@ -42,4 +42,4 @@ curl -fsSL https://raw.githubusercontent.com/eli0shin/repos/main/install.sh | ba
 | `work <branch>`                      | Create worktree and cd into it (shell function)      |
 | `work-clean [args...]`               | Remove worktree and cd to logical parent destination |
 
-See [USERGUIDE.md](./USERGUIDE.md) for complete documentation.
+See [USERGUIDE.md](./USERGUIDE.md) for complete documentation, including repo-local worktree setup examples.
