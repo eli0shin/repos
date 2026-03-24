@@ -1,52 +1,69 @@
-import { copyFile, mkdir, stat } from 'node:fs/promises';
+import { copyFile, mkdir, readdir, stat } from 'node:fs/promises';
 import { dirname, join, normalize } from 'node:path';
 import { printError, printStatus } from './output.ts';
-import type { OperationResult, WorktreeSetupConfig } from './types.ts';
+import type { WorktreeSetupConfig, WorktreeSetupReport } from './types.ts';
 
 function resolveRelativePath(rootPath: string, relativePath: string): string {
   return join(rootPath, normalize(relativePath));
+}
+
+async function copySetupPath(
+  sourcePath: string,
+  destinationPath: string
+): Promise<void> {
+  const sourceStat = await stat(sourcePath);
+
+  if (sourceStat.isDirectory()) {
+    await mkdir(destinationPath, { recursive: true });
+    const entries = await readdir(sourcePath, { withFileTypes: true });
+
+    for (const entry of entries) {
+      await copySetupPath(
+        join(sourcePath, entry.name),
+        join(destinationPath, entry.name)
+      );
+    }
+
+    return;
+  }
+
+  await mkdir(dirname(destinationPath), { recursive: true });
+  await copyFile(sourcePath, destinationPath);
 }
 
 async function copySetupFiles(
   mainWorktreePath: string,
   worktreePath: string,
   copyPaths: string[]
-): Promise<OperationResult> {
+): Promise<string[]> {
+  const warnings: string[] = [];
+
   for (const relativePath of copyPaths) {
     const sourcePath = resolveRelativePath(mainWorktreePath, relativePath);
     const destinationPath = resolveRelativePath(worktreePath, relativePath);
 
-    let sourceStat: Awaited<ReturnType<typeof stat>>;
     try {
-      sourceStat = await stat(sourcePath);
-    } catch {
-      return {
-        success: false,
-        error: `Setup copy source not found: ${relativePath}`,
-      };
+      await copySetupPath(sourcePath, destinationPath);
+      printStatus(`Copied setup path "${relativePath}"`);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Unknown setup copy error';
+      warnings.push(
+        `Warning: Failed to copy setup path "${relativePath}": ${message}`
+      );
     }
-
-    if (!sourceStat.isFile()) {
-      return {
-        success: false,
-        error: `Setup copy source must be a file: ${relativePath}`,
-      };
-    }
-
-    await mkdir(dirname(destinationPath), { recursive: true });
-    await copyFile(sourcePath, destinationPath);
-    printStatus(`Copied setup file "${relativePath}"`);
   }
 
-  return { success: true, data: undefined };
+  return warnings;
 }
 
 async function runSetupCommand(
   mainWorktreePath: string,
   worktreePath: string,
   command: string
-): Promise<OperationResult> {
+): Promise<string[]> {
   printStatus('Running worktree setup command...');
+  const warnings: string[] = [];
 
   const proc = Bun.spawn(
     [
@@ -90,52 +107,54 @@ async function runSetupCommand(
   }
 
   if (exitCode !== 0) {
-    return {
-      success: false,
-      error: `Setup command failed with exit code ${exitCode}`,
-    };
+    warnings.push(`Warning: Setup command failed with exit code ${exitCode}`);
   }
 
-  return { success: true, data: undefined };
+  return warnings;
 }
 
 export async function runWorktreeSetup(
   mainWorktreePath: string,
   worktreePath: string,
   setup?: WorktreeSetupConfig
-): Promise<OperationResult> {
+): Promise<WorktreeSetupReport> {
+  const warnings: string[] = [];
+
   if (!setup) {
-    return { success: true, data: undefined };
+    return { warnings };
   }
 
-  if (setup.copy && setup.copy.length > 0) {
-    const copyResult = await copySetupFiles(
-      mainWorktreePath,
-      worktreePath,
-      setup.copy
-    );
-    if (!copyResult.success) {
-      return copyResult;
+  try {
+    if (setup.copy && setup.copy.length > 0) {
+      warnings.push(
+        ...(await copySetupFiles(mainWorktreePath, worktreePath, setup.copy))
+      );
     }
-  }
 
-  if (setup.command) {
-    const commandResult = await runSetupCommand(
-      mainWorktreePath,
-      worktreePath,
-      setup.command
-    );
-    if (!commandResult.success) {
-      return commandResult;
+    if (setup.command) {
+      warnings.push(
+        ...(await runSetupCommand(
+          mainWorktreePath,
+          worktreePath,
+          setup.command
+        ))
+      );
     }
-  }
 
-  return { success: true, data: undefined };
+    return { warnings };
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : 'Unknown setup error';
+    warnings.push(
+      `Warning: Worktree setup encountered an unexpected error: ${message}`
+    );
+
+    return { warnings };
+  }
 }
 
-export function printSetupError(error: string, worktreePath: string): void {
-  printError(`Error: Setup failed for worktree at ${worktreePath}: ${error}`);
-  printError(
-    'Hint: The worktree was created and left in place for manual recovery.'
-  );
+export function printSetupWarnings(warnings: string[]): void {
+  for (const warning of warnings) {
+    printError(warning);
+  }
 }

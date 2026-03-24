@@ -197,7 +197,7 @@ describe('worktree setup integration', () => {
     );
   });
 
-  test('work exits without stdout path when setup fails', async () => {
+  test('work warns and still prints stdout path when setup command fails', async () => {
     const { repoDir } = await setupRegularRepo();
     await mkdir(join(repoDir, '.repos'), { recursive: true });
     await Bun.write(
@@ -216,20 +216,94 @@ describe('worktree setup integration', () => {
     const stdout = captureOutput('stdout');
     const stderr = captureOutput('stderr');
 
-    await expect(
-      workCommand({ configPath }, 'feature', 'repo')
-    ).rejects.toThrow('process.exit(1)');
+    await workCommand({ configPath }, 'feature', 'repo');
 
     stdout.restore();
     stderr.restore();
 
-    expect(stdout.output).toEqual([]);
+    expect(stdout.output.join('')).toBe(join(testDir, 'repo-feature') + '\n');
     expect(stderr.output.join('')).toContain('boom');
-    expect(stderr.output.join('')).toContain('Setup failed');
     expect(stderr.output.join('')).toContain(
-      'Hint: The worktree was created and left in place for manual recovery.'
+      'Warning: Setup command failed with exit code 2'
     );
     expect(existsSync(join(testDir, 'repo-feature'))).toBe(true);
+    expect(mockExit).not.toHaveBeenCalled();
+  });
+
+  test('work warns for missing setup copy paths and continues setup', async () => {
+    const { repoDir } = await setupRegularRepo();
+    await Bun.write(join(repoDir, '.env'), 'SECRET=1\n');
+    await mkdir(join(repoDir, '.repos'), { recursive: true });
+    await Bun.write(
+      join(repoDir, '.repos', 'worktree.json'),
+      JSON.stringify(
+        {
+          setup: {
+            copy: ['.missing', '.env'],
+            command: 'echo ran > setup-ran.txt',
+          },
+        },
+        null,
+        2
+      )
+    );
+
+    const stdout = captureOutput('stdout');
+    const stderr = captureOutput('stderr');
+
+    await workCommand({ configPath }, 'feature', 'repo');
+
+    stdout.restore();
+    stderr.restore();
+
+    const worktreePath = join(testDir, 'repo-feature');
+    expect(stdout.output.join('')).toBe(worktreePath + '\n');
+    expect(stderr.output.join('')).toContain(
+      'Warning: Failed to copy setup path ".missing":'
+    );
+    expect(await Bun.file(join(worktreePath, '.env')).text()).toBe(
+      'SECRET=1\n'
+    );
+    expect(await Bun.file(join(worktreePath, 'setup-ran.txt')).text()).toBe(
+      'ran\n'
+    );
+    expect(mockExit).not.toHaveBeenCalled();
+  });
+
+  test('work copies setup directories recursively', async () => {
+    const { repoDir } = await setupRegularRepo();
+    await mkdir(join(repoDir, 'config', 'nested'), { recursive: true });
+    await Bun.write(join(repoDir, 'config', 'app.env'), 'A=1\n');
+    await Bun.write(
+      join(repoDir, 'config', 'nested', 'flags.json'),
+      '{"x":1}\n'
+    );
+    await mkdir(join(repoDir, '.repos'), { recursive: true });
+    await Bun.write(
+      join(repoDir, '.repos', 'worktree.json'),
+      JSON.stringify(
+        {
+          setup: {
+            copy: ['config'],
+          },
+        },
+        null,
+        2
+      )
+    );
+
+    await workCommand({ configPath }, 'feature', 'repo');
+
+    const worktreePath = join(testDir, 'repo-feature');
+    expect(await Bun.file(join(worktreePath, 'config', 'app.env')).text()).toBe(
+      'A=1\n'
+    );
+    expect(
+      await Bun.file(
+        join(worktreePath, 'config', 'nested', 'flags.json')
+      ).text()
+    ).toBe('{"x":1}\n');
+    expect(mockExit).not.toHaveBeenCalled();
   });
 
   test('stack runs setup for the new stacked worktree', async () => {
@@ -281,7 +355,7 @@ describe('worktree setup integration', () => {
     });
   });
 
-  test('stack exits with recovery hint when setup fails', async () => {
+  test('stack warns and succeeds when setup command fails', async () => {
     const { repoDir } = await setupRegularRepo();
     await mkdir(join(repoDir, '.repos'), { recursive: true });
     await Bun.write(
@@ -307,19 +381,16 @@ describe('worktree setup integration', () => {
     const stdout = captureOutput('stdout');
     const stderr = captureOutput('stderr');
 
-    await expect(stackCommand({ configPath }, 'child')).rejects.toThrow(
-      'process.exit(1)'
-    );
+    await stackCommand({ configPath }, 'child');
 
     stdout.restore();
     stderr.restore();
 
     const childPath = join(testDir, 'repo-child');
-    expect(stdout.output).toEqual([]);
+    expect(stdout.output.join('')).toBe(childPath + '\n');
     expect(stderr.output.join('')).toContain('boom');
-    expect(stderr.output.join('')).toContain('Setup failed');
     expect(stderr.output.join('')).toContain(
-      'Hint: The worktree was created and left in place for manual recovery.'
+      'Warning: Setup command failed with exit code 2'
     );
     expect(existsSync(childPath)).toBe(true);
     expect(await readConfig(configPath)).toEqual({
@@ -335,5 +406,47 @@ describe('worktree setup integration', () => {
         ],
       },
     });
+    expect(mockExit).not.toHaveBeenCalled();
+  });
+
+  test('stack copies setup directories recursively', async () => {
+    const { repoDir } = await setupRegularRepo();
+    await mkdir(join(repoDir, 'config', 'nested'), { recursive: true });
+    await Bun.write(join(repoDir, 'config', 'app.env'), 'A=1\n');
+    await Bun.write(
+      join(repoDir, 'config', 'nested', 'flags.json'),
+      '{"x":1}\n'
+    );
+    await mkdir(join(repoDir, '.repos'), { recursive: true });
+    await Bun.write(
+      join(repoDir, '.repos', 'worktree.json'),
+      JSON.stringify(
+        {
+          setup: {
+            copy: ['config'],
+          },
+        },
+        null,
+        2
+      )
+    );
+
+    const parentPath = join(testDir, 'repo-parent');
+    await runGitCommand(
+      ['worktree', 'add', '-b', 'parent', parentPath],
+      repoDir
+    );
+    process.chdir(parentPath);
+
+    await stackCommand({ configPath }, 'child');
+
+    const childPath = join(testDir, 'repo-child');
+    expect(await Bun.file(join(childPath, 'config', 'app.env')).text()).toBe(
+      'A=1\n'
+    );
+    expect(
+      await Bun.file(join(childPath, 'config', 'nested', 'flags.json')).text()
+    ).toBe('{"x":1}\n');
+    expect(mockExit).not.toHaveBeenCalled();
   });
 });
