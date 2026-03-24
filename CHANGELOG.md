@@ -1,5 +1,11 @@
 # repos
 
+## 1.1.1
+
+### Patch Changes
+
+- [#67](https://github.com/eli0shin/repos/pull/67) [`ef8dbf9`](https://github.com/eli0shin/repos/commit/ef8dbf9f562206aef175898aaf05953d7a995dc0) Thanks [@eli0shin](https://github.com/eli0shin)! - Warn instead of failing when worktree setup copy or command steps fail, so `work` and `stack` still create usable worktrees. Also allow setup copy entries to recursively copy directories into new worktrees.
+
 ## 1.1.0
 
 ### Minor Changes
