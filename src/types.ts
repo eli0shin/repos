@@ -32,6 +32,10 @@ export type RepoWorktreeConfig = {
   setup?: WorktreeSetupConfig;
 };
 
+export type WorktreeSetupReport = {
+  warnings: string[];
+};
+
 export type OperationResult<T = void> =
   | { success: true; data: T }
   | { success: false; error: string };

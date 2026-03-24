@@ -15,7 +15,7 @@ import {
 import { print, printError, printStatus } from '../output.ts';
 import { openTmuxSession } from '../tmux.ts';
 import { loadRepoWorktreeConfig } from '../worktree-config.ts';
-import { printSetupError, runWorktreeSetup } from '../worktree-setup.ts';
+import { printSetupWarnings, runWorktreeSetup } from '../worktree-setup.ts';
 
 export async function workCommand(
   ctx: CommandContext,
@@ -72,9 +72,8 @@ export async function workCommand(
       worktreePath,
       worktreeConfigResult.data.config.setup
     );
-    if (!setupResult.success) {
-      printSetupError(setupResult.error, worktreePath);
-      process.exit(1);
+    if (setupResult.warnings.length > 0) {
+      printSetupWarnings(setupResult.warnings);
     }
 
     printStatus(
