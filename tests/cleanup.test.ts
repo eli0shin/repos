@@ -1,5 +1,5 @@
 import { describe, expect, test, beforeEach, afterEach } from 'bun:test';
-import { mkdir, rm } from 'node:fs/promises';
+import { mkdir, rm, access } from 'node:fs/promises';
 import { join } from 'node:path';
 import { runGitCommand, cloneBare, isGitRepo } from '../src/git/index.ts';
 import { cleanupCommand } from '../src/commands/cleanup.ts';
@@ -580,6 +580,46 @@ describe('repos cleanup command', () => {
 
     // Cleanup second source
     await rm(sourceDir2, { recursive: true, force: true });
+  });
+
+  test('prunes stale worktree reference when directory was manually deleted', async () => {
+    // Clone as bare
+    const bareDir = join(testDir, 'bare.git');
+    await cloneBare(sourceDir, bareDir);
+
+    // Create worktree with tracking branch
+    const worktreePath = join(testDir, 'bare.git-feature');
+    await runGitCommand(
+      ['worktree', 'add', '-b', 'feature', worktreePath],
+      bareDir
+    );
+
+    // Push the branch to origin so it has an upstream
+    await Bun.write(join(worktreePath, 'feature.txt'), 'feature');
+    await runGitCommand(['add', '.'], worktreePath);
+    await runGitCommand(['commit', '-m', 'feature work'], worktreePath);
+    await runGitCommand(['push', '-u', 'origin', 'feature'], worktreePath);
+
+    // Manually delete the worktree directory (simulates accidental rm -rf)
+    await rm(worktreePath, { recursive: true, force: true });
+
+    // Verify the git worktree reference still exists (it's stale)
+    const listBefore = await runGitCommand(['worktree', 'list', '--porcelain'], bareDir);
+    expect(listBefore.stdout).toContain(worktreePath);
+
+    // Create config
+    const config = {
+      repos: [{ name: 'bare', url: sourceDir, path: bareDir, bare: true }],
+    } satisfies ReposConfig;
+    await writeConfig(configPath, config);
+
+    // Run cleanup - should not crash and should prune the stale reference
+    const ctx = { configPath };
+    await cleanupCommand(ctx, { dryRun: false });
+
+    // Verify the stale worktree reference was pruned
+    const listAfter = await runGitCommand(['worktree', 'list', '--porcelain'], bareDir);
+    expect(listAfter.stdout).not.toContain(worktreePath);
   });
 
   test('cleans up all repos when run outside any tracked repo', async () => {

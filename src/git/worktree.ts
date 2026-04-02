@@ -1,3 +1,4 @@
+import { stat } from 'fs/promises';
 import { printError } from '../output.ts';
 import type { OperationResult } from '../types.ts';
 import { runGitCommand } from './core.ts';
@@ -228,6 +229,21 @@ export async function createWorktreeFromBranch(
   return { success: true, data: undefined };
 }
 
+export async function pruneWorktrees(
+  repoDir: string
+): Promise<OperationResult> {
+  const result = await runGitCommand(['worktree', 'prune'], repoDir);
+
+  if (result.exitCode !== 0) {
+    return {
+      success: false,
+      error: result.stderr || 'Failed to prune worktrees',
+    };
+  }
+
+  return { success: true, data: undefined };
+}
+
 export async function removeWorktree(
   repoDir: string,
   worktreePath: string
@@ -238,6 +254,14 @@ export async function removeWorktree(
   );
 
   if (result.exitCode !== 0) {
+    // If the directory no longer exists on disk, the worktree reference is stale.
+    // git worktree remove requires the path to exist, so fall back to prune.
+    const dirExists = await stat(worktreePath)
+      .then((s) => s.isDirectory())
+      .catch(() => false);
+    if (!dirExists) {
+      return pruneWorktrees(repoDir);
+    }
     return {
       success: false,
       error: result.stderr || 'Failed to remove worktree',

@@ -4,6 +4,7 @@ import type { RepoEntry } from '../types.ts';
 import type { WorktreeInfo } from '../git/index.ts';
 import {
   listWorktrees,
+  pruneWorktrees,
   fetchWithPrune,
   getDefaultBranch,
   getBranchUpstreamStatus,
@@ -49,6 +50,10 @@ async function prepareRepo(repo: RepoEntry): Promise<RepoContext | null> {
     printError(`Warning: Could not determine default branch for ${repo.name}`);
     return null;
   }
+
+  // Prune stale worktree references (directories that were manually deleted)
+  // This prevents hasUncommittedChanges from failing when cwd no longer exists
+  await pruneWorktrees(repo.path);
 
   // List worktrees
   const worktreesResult = await listWorktrees(repo.path);
