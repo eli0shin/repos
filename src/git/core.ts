@@ -6,13 +6,18 @@ export async function runGitCommand(
   args: string[],
   cwd?: string
 ): Promise<GitCommandResult> {
-  const proc = Bun.spawn(['git', ...args], {
-    cwd,
-    env: process.env,
-    stdin: 'ignore',
-    stdout: 'pipe',
-    stderr: 'pipe',
-  });
+  let proc: ReturnType<typeof Bun.spawn>;
+  try {
+    proc = Bun.spawn(['git', ...args], {
+      cwd,
+      env: process.env,
+      stdin: 'ignore',
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+  } catch (err) {
+    return { stdout: '', stderr: String(err), exitCode: 1 };
+  }
 
   const [stdout, stderr] = await Promise.all([
     new Response(proc.stdout).text(),

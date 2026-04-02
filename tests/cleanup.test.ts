@@ -582,6 +582,43 @@ describe('repos cleanup command', () => {
     await rm(sourceDir2, { recursive: true, force: true });
   });
 
+  test('does not crash when worktree directory has been manually deleted', async () => {
+    // Clone as bare
+    const bareDir = join(testDir, 'bare.git');
+    await cloneBare(sourceDir, bareDir);
+
+    // Create worktree with tracking
+    const worktreePath = join(testDir, 'bare.git-feature');
+    await runGitCommand(
+      ['worktree', 'add', '-b', 'feature', worktreePath],
+      bareDir
+    );
+
+    // Push the branch
+    await Bun.write(join(worktreePath, 'feature.txt'), 'feature');
+    await runGitCommand(['add', '.'], worktreePath);
+    await runGitCommand(['commit', '-m', 'feature work'], worktreePath);
+    await runGitCommand(['push', '-u', 'origin', 'feature'], worktreePath);
+
+    // Delete the remote branch to make upstream gone
+    await runGitCommand(['branch', '-D', 'feature'], sourceDir);
+
+    // Manually delete the worktree directory (without running git worktree remove)
+    // This simulates the scenario from issue #69 where posix_spawn fails with
+    // "ENOENT: posix_spawn 'git'" because the cwd doesn't exist
+    await rm(worktreePath, { recursive: true, force: true });
+
+    // Create config
+    const config = {
+      repos: [{ name: 'bare', url: sourceDir, path: bareDir, bare: true }],
+    } satisfies ReposConfig;
+    await writeConfig(configPath, config);
+
+    // Run cleanup command - should not throw even though worktree directory is gone
+    const ctx = { configPath };
+    await cleanupCommand(ctx, { dryRun: false });
+  });
+
   test('cleans up all repos when run outside any tracked repo', async () => {
     // Create second source repo
     const sourceDir2 = '/tmp/repos-test-cleanup-cmd-source2';
