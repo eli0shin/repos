@@ -1,8 +1,9 @@
 import { describe, expect, test, beforeEach, afterEach } from 'bun:test';
-import { mkdir, rm } from 'node:fs/promises';
+import { mkdir, rm, realpath } from 'node:fs/promises';
 import { join } from 'node:path';
 import { runGitCommand, cloneBare, isGitRepo } from '../src/git/index.ts';
 import { cleanupCommand } from '../src/commands/cleanup.ts';
+import { listCommand } from '../src/commands/list.ts';
 import { writeConfig } from '../src/config.ts';
 import type { ReposConfig } from '../src/types.ts';
 
@@ -580,6 +581,94 @@ describe('repos cleanup command', () => {
 
     // Cleanup second source
     await rm(sourceDir2, { recursive: true, force: true });
+  });
+
+  test('repos list shows only active worktree after cleanup removes stale and merged', async () => {
+    // Clone as bare
+    const bareDir = join(testDir, 'bare.git');
+    await cloneBare(sourceDir, bareDir);
+
+    // Create 3 worktrees: a, b, c
+    const wtAPath = join(testDir, 'bare.git-branch-a');
+    const wtBPath = join(testDir, 'bare.git-branch-b');
+    const wtCPath = join(testDir, 'bare.git-branch-c');
+    await runGitCommand(['worktree', 'add', '-b', 'branch-a', wtAPath], bareDir);
+    await runGitCommand(['worktree', 'add', '-b', 'branch-b', wtBPath], bareDir);
+    await runGitCommand(['worktree', 'add', '-b', 'branch-c', wtCPath], bareDir);
+
+    // Push all 3 with upstream tracking
+    await Bun.write(join(wtAPath, 'a.txt'), 'a');
+    await runGitCommand(['add', '.'], wtAPath);
+    await runGitCommand(['commit', '-m', 'branch a work'], wtAPath);
+    await runGitCommand(['push', '-u', 'origin', 'branch-a'], wtAPath);
+
+    await Bun.write(join(wtBPath, 'b.txt'), 'b');
+    await runGitCommand(['add', '.'], wtBPath);
+    await runGitCommand(['commit', '-m', 'branch b work'], wtBPath);
+    await runGitCommand(['push', '-u', 'origin', 'branch-b'], wtBPath);
+
+    await Bun.write(join(wtCPath, 'c.txt'), 'c');
+    await runGitCommand(['add', '.'], wtCPath);
+    await runGitCommand(['commit', '-m', 'branch c work'], wtCPath);
+    await runGitCommand(['push', '-u', 'origin', 'branch-c'], wtCPath);
+
+    // Capture real paths before any deletion (git worktree list resolves symlinks)
+    const wtARealPath = await realpath(wtAPath);
+    const wtBRealPath = await realpath(wtBPath);
+    const wtCRealPath = await realpath(wtCPath);
+
+    // Delete worktree-a directory manually (stale reference remains in git)
+    await rm(wtAPath, { recursive: true, force: true });
+
+    // Merge branch-c into main on sourceDir (simulating PR merge), then fetch
+    await runGitCommand(['merge', 'branch-c', '-m', 'merge branch-c'], sourceDir);
+    await runGitCommand(['fetch', 'origin'], bareDir);
+
+    // Create config
+    const config = {
+      repos: [{ name: 'bare', url: sourceDir, path: bareDir, bare: true }],
+    } satisfies ReposConfig;
+    await writeConfig(configPath, config);
+
+    // Run repos list from outside any repo - all 3 should be listed
+    process.chdir('/tmp');
+    const captureBefore = captureStdout();
+    await listCommand({ configPath });
+    captureBefore.restore();
+
+    expect(captureBefore.output.join('')).toEqual(
+      [
+        'Tracked repositories:',
+        '',
+        '  bare (bare) ✓',
+        `    ${bareDir}`,
+        `      ├─ branch-a: ${wtARealPath}`,
+        `      ├─ branch-b: ${wtBRealPath}`,
+        `      └─ branch-c: ${wtCRealPath}`,
+        '',
+      ].join('\n')
+    );
+
+    // Run repos cleanup
+    const ctx = { configPath };
+    await cleanupCommand(ctx, { dryRun: false });
+
+    // Run repos list again - only branch-b should remain
+    process.chdir('/tmp');
+    const captureAfter = captureStdout();
+    await listCommand({ configPath });
+    captureAfter.restore();
+
+    expect(captureAfter.output.join('')).toEqual(
+      [
+        'Tracked repositories:',
+        '',
+        '  bare (bare) ✓',
+        `    ${bareDir}`,
+        `      └─ branch-b: ${wtBRealPath}`,
+        '',
+      ].join('\n')
+    );
   });
 
   test('cleans up all repos when run outside any tracked repo', async () => {
