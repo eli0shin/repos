@@ -592,9 +592,18 @@ describe('repos cleanup command', () => {
     const wtAPath = join(testDir, 'bare.git-branch-a');
     const wtBPath = join(testDir, 'bare.git-branch-b');
     const wtCPath = join(testDir, 'bare.git-branch-c');
-    await runGitCommand(['worktree', 'add', '-b', 'branch-a', wtAPath], bareDir);
-    await runGitCommand(['worktree', 'add', '-b', 'branch-b', wtBPath], bareDir);
-    await runGitCommand(['worktree', 'add', '-b', 'branch-c', wtCPath], bareDir);
+    await runGitCommand(
+      ['worktree', 'add', '-b', 'branch-a', wtAPath],
+      bareDir
+    );
+    await runGitCommand(
+      ['worktree', 'add', '-b', 'branch-b', wtBPath],
+      bareDir
+    );
+    await runGitCommand(
+      ['worktree', 'add', '-b', 'branch-c', wtCPath],
+      bareDir
+    );
 
     // Push all 3 with upstream tracking
     await Bun.write(join(wtAPath, 'a.txt'), 'a');
@@ -621,7 +630,10 @@ describe('repos cleanup command', () => {
     await rm(wtAPath, { recursive: true, force: true });
 
     // Merge branch-c into main on sourceDir (simulating PR merge), then fetch
-    await runGitCommand(['merge', 'branch-c', '-m', 'merge branch-c'], sourceDir);
+    await runGitCommand(
+      ['merge', 'branch-c', '-m', 'merge branch-c'],
+      sourceDir
+    );
     await runGitCommand(['fetch', 'origin'], bareDir);
 
     // Create config
