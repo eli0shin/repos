@@ -6,68 +6,71 @@ export async function runGitCommand(
   args: string[],
   cwd?: string
 ): Promise<GitCommandResult> {
-  let proc: ReturnType<typeof Bun.spawn>;
   try {
-    proc = Bun.spawn(['git', ...args], {
+    const proc = Bun.spawn(['git', ...args], {
       cwd,
       env: process.env,
       stdin: 'ignore',
       stdout: 'pipe',
       stderr: 'pipe',
     });
+
+    const [stdout, stderr] = await Promise.all([
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+    ]);
+
+    const exitCode = await proc.exited;
+
+    return { stdout: stdout.trim(), stderr: stderr.trim(), exitCode };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return { stdout: '', stderr: message, exitCode: 1 };
   }
-
-  const [stdout, stderr] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-  ]);
-
-  const exitCode = await proc.exited;
-
-  return { stdout: stdout.trim(), stderr: stderr.trim(), exitCode };
 }
 
 export async function runGitCommandInteractive(
   args: string[],
   cwd?: string
 ): Promise<number> {
-  if (process.stdin.isTTY) {
+  try {
+    if (process.stdin.isTTY) {
+      const proc = Bun.spawn(['git', ...args], {
+        cwd,
+        env: process.env,
+        stdin: 'inherit',
+        stdout: 'inherit',
+        stderr: 'inherit',
+      });
+      return await proc.exited;
+    }
+
+    // Non-TTY (test/CI): fall back to piped I/O with a no-op editor
+    // to avoid hangs from interactive editors like nvim
     const proc = Bun.spawn(['git', ...args], {
       cwd,
-      env: process.env,
-      stdin: 'inherit',
-      stdout: 'inherit',
-      stderr: 'inherit',
+      env: { ...process.env, GIT_EDITOR: 'true' },
+      stdin: 'ignore',
+      stdout: 'pipe',
+      stderr: 'pipe',
     });
-    return proc.exited;
-  }
-
-  // Non-TTY (test/CI): fall back to piped I/O with a no-op editor
-  // to avoid hangs from interactive editors like nvim
-  const proc = Bun.spawn(['git', ...args], {
-    cwd,
-    env: { ...process.env, GIT_EDITOR: 'true' },
-    stdin: 'ignore',
-    stdout: 'pipe',
-    stderr: 'pipe',
-  });
-  const [stdout, stderr] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-  ]);
-  const exitCode = await proc.exited;
-  if (exitCode !== 0) {
-    if (stdout.trim()) {
-      process.stderr.write(stdout);
+    const [stdout, stderr] = await Promise.all([
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+    ]);
+    const exitCode = await proc.exited;
+    if (exitCode !== 0) {
+      if (stdout.trim()) {
+        process.stderr.write(stdout);
+      }
+      if (stderr.trim()) {
+        process.stderr.write(stderr);
+      }
     }
-    if (stderr.trim()) {
-      process.stderr.write(stderr);
-    }
+    return exitCode;
+  } catch {
+    return 1;
   }
-  return exitCode;
 }
 
 export async function directoryHasContent(dir: string): Promise<boolean> {

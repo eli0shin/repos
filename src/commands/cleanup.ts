@@ -45,7 +45,12 @@ async function prepareRepo(repo: RepoEntry): Promise<RepoContext | null> {
   }
 
   // Prune stale worktree references (handles manually-deleted directories)
-  await pruneWorktrees(repo.path);
+  const pruneResult = await pruneWorktrees(repo.path);
+  if (!pruneResult.success) {
+    printError(
+      `Warning: Failed to prune worktrees for ${repo.name}: ${pruneResult.error}`
+    );
+  }
 
   // Get default branch for merge check
   const defaultBranchResult = await getDefaultBranch(repo.path);
