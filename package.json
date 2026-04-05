@@ -1,20 +1,26 @@
 {
   "name": "repos",
   "version": "1.1.1",
-  "description": "CLI tool for managing git repositories",
-  "type": "module",
   "private": true,
+  "description": "CLI tool for managing git repositories",
+  "license": "MIT",
+  "author": "@eli0shin",
+  "type": "module",
   "scripts": {
     "build": "bun build src/cli.ts --compile --outfile repos",
     "dev": "bun run src/cli.ts",
     "typecheck": "bun tsc --noEmit",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "format": "prettier --check .",
-    "format:fix": "prettier --write .",
+    "format": "oxfmt --check",
+    "format:fix": "oxfmt",
     "test": "GIT_EDITOR=true bun test",
     "test:watch": "GIT_EDITOR=true bun test tests/ --watch",
     "prepare": "husky"
+  },
+  "dependencies": {
+    "@commander-js/extra-typings": "^14.0.0",
+    "commander": "^14.0.2"
   },
   "devDependencies": {
     "@changesets/changelog-github": "^0.5.2",
@@ -27,22 +33,16 @@
     "eslint-import-resolver-typescript": "^4.4.4",
     "husky": "^9.1.7",
     "lint-staged": "^16.2.7",
-    "prettier": "^3.7.4",
+    "oxfmt": "^0.43.0",
     "typescript": "^6.0.2"
-  },
-  "author": "@eli0shin",
-  "license": "MIT",
-  "dependencies": {
-    "@commander-js/extra-typings": "^14.0.0",
-    "commander": "^14.0.2"
   },
   "lint-staged": {
     "*.{ts,js,mjs}": [
       "eslint --fix",
-      "prettier --write"
+      "oxfmt --no-error-on-unmatched-pattern"
     ],
     "*.{json,md}": [
-      "prettier --write"
+      "oxfmt --no-error-on-unmatched-pattern"
     ]
   }
 }
