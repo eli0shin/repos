@@ -10,6 +10,7 @@ import {
   isBranchContentMerged,
   hasUncommittedChanges,
   removeWorktree,
+  pruneWorktrees,
   ensureRefspecConfig,
 } from '../git/index.ts';
 import { print, printError } from '../output.ts';
@@ -41,6 +42,14 @@ async function prepareRepo(repo: RepoEntry): Promise<RepoContext | null> {
   if (!fetchResult.success) {
     printError(`Warning: Failed to fetch ${repo.name}: ${fetchResult.error}`);
     return null;
+  }
+
+  // Prune stale worktree references (handles manually-deleted directories)
+  const pruneResult = await pruneWorktrees(repo.path);
+  if (!pruneResult.success) {
+    printError(
+      `Warning: Failed to prune worktrees for ${repo.name}: ${pruneResult.error}`
+    );
   }
 
   // Get default branch for merge check

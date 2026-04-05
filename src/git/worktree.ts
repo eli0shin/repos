@@ -228,6 +228,19 @@ export async function createWorktreeFromBranch(
   return { success: true, data: undefined };
 }
 
+export async function pruneWorktrees(
+  repoDir: string
+): Promise<OperationResult> {
+  const result = await runGitCommand(['worktree', 'prune'], repoDir);
+  if (result.exitCode !== 0) {
+    return {
+      success: false,
+      error: result.stderr || 'Failed to prune worktrees',
+    };
+  }
+  return { success: true, data: undefined };
+}
+
 export async function removeWorktree(
   repoDir: string,
   worktreePath: string
