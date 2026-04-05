@@ -1,5 +1,11 @@
 # repos
 
+## 1.1.2
+
+### Patch Changes
+
+- [#70](https://github.com/eli0shin/repos/pull/70) [`8410525`](https://github.com/eli0shin/repos/commit/841052529460e74be599422ed8852b2b79b43fae) Thanks [@eli0shin](https://github.com/eli0shin)! - Fix `repos cleanup` crashing when worktree directories have been manually deleted by pruning stale git worktree references before listing and handling missing-directory errors in git command execution.
+
 ## 1.1.1
 
 ### Patch Changes
