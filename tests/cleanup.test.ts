@@ -86,7 +86,7 @@ describe('repos cleanup command', () => {
 
     // Run cleanup command
     const ctx = { configPath };
-    await cleanupCommand(ctx, { dryRun: false });
+    await cleanupCommand(ctx, { dryRun: false, tmux: false });
 
     // Verify worktree was removed
     expect(await isGitRepo(worktreePath)).toBe(false);
@@ -129,7 +129,7 @@ describe('repos cleanup command', () => {
 
     // Run cleanup command
     const ctx = { configPath };
-    await cleanupCommand(ctx, { dryRun: false });
+    await cleanupCommand(ctx, { dryRun: false, tmux: false });
 
     // Verify worktree was removed
     expect(await isGitRepo(worktreePath)).toBe(false);
@@ -168,7 +168,7 @@ describe('repos cleanup command', () => {
     // Run cleanup command
     const capture = captureStdout();
     const ctx = { configPath };
-    await cleanupCommand(ctx, { dryRun: false });
+    await cleanupCommand(ctx, { dryRun: false, tmux: false });
     capture.restore();
 
     // Verify worktree still exists (not removed due to uncommitted changes)
@@ -204,7 +204,7 @@ describe('repos cleanup command', () => {
 
     // Run cleanup
     const ctx = { configPath };
-    await cleanupCommand(ctx, { dryRun: false });
+    await cleanupCommand(ctx, { dryRun: false, tmux: false });
 
     // Main worktree should still exist
     expect(await isGitRepo(repoDir)).toBe(true);
@@ -240,7 +240,7 @@ describe('repos cleanup command', () => {
     // Run cleanup with dry-run
     const capture = captureStdout();
     const ctx = { configPath };
-    await cleanupCommand(ctx, { dryRun: true });
+    await cleanupCommand(ctx, { dryRun: true, tmux: false });
     capture.restore();
 
     // Verify worktree still exists
@@ -307,7 +307,7 @@ describe('repos cleanup command', () => {
 
     // Run cleanup
     const ctx = { configPath };
-    await cleanupCommand(ctx, { dryRun: false });
+    await cleanupCommand(ctx, { dryRun: false, tmux: false });
 
     // Verify both worktrees were removed
     expect(await isGitRepo(worktreePath1)).toBe(false);
@@ -342,7 +342,7 @@ describe('repos cleanup command', () => {
 
     // Run cleanup
     const ctx = { configPath };
-    await cleanupCommand(ctx, { dryRun: false });
+    await cleanupCommand(ctx, { dryRun: false, tmux: false });
 
     // Verify worktree still exists (not pushed, should not be cleaned)
     expect(await isGitRepo(worktreePath)).toBe(true);
@@ -371,7 +371,7 @@ describe('repos cleanup command', () => {
 
     // Run cleanup
     const ctx = { configPath };
-    await cleanupCommand(ctx, { dryRun: false });
+    await cleanupCommand(ctx, { dryRun: false, tmux: false });
 
     // Verify worktree still exists (fresh branch, should not be cleaned)
     expect(await isGitRepo(worktreePath)).toBe(true);
@@ -405,7 +405,7 @@ describe('repos cleanup command', () => {
 
     // Run cleanup
     const ctx = { configPath };
-    await cleanupCommand(ctx, { dryRun: false });
+    await cleanupCommand(ctx, { dryRun: false, tmux: false });
 
     // Verify worktree still exists (not cleaned up because remote exists and not merged)
     expect(await isGitRepo(worktreePath)).toBe(true);
@@ -453,7 +453,7 @@ describe('repos cleanup command', () => {
 
     // Run cleanup command
     const ctx = { configPath };
-    await cleanupCommand(ctx, { dryRun: false });
+    await cleanupCommand(ctx, { dryRun: false, tmux: false });
 
     // Verify worktree was removed (squash merge detected via git cherry)
     expect(await isGitRepo(worktreePath)).toBe(false);
@@ -510,7 +510,7 @@ describe('repos cleanup command', () => {
 
     // Run cleanup command
     const ctx = { configPath };
-    await cleanupCommand(ctx, { dryRun: false });
+    await cleanupCommand(ctx, { dryRun: false, tmux: false });
 
     // Verify worktree was removed (rebase merge detected via git cherry)
     expect(await isGitRepo(worktreePath)).toBe(false);
@@ -572,7 +572,7 @@ describe('repos cleanup command', () => {
 
     // Run cleanup
     const ctx = { configPath };
-    await cleanupCommand(ctx, { dryRun: false });
+    await cleanupCommand(ctx, { dryRun: false, tmux: false });
 
     // Verify only bare1's worktree was removed
     expect(await isGitRepo(worktreePath1)).toBe(false);
@@ -663,7 +663,7 @@ describe('repos cleanup command', () => {
 
     // Run repos cleanup
     const ctx = { configPath };
-    await cleanupCommand(ctx, { dryRun: false });
+    await cleanupCommand(ctx, { dryRun: false, tmux: false });
 
     // Run repos list again - only branch-b should remain
     process.chdir('/tmp');
@@ -739,7 +739,7 @@ describe('repos cleanup command', () => {
 
     // Run cleanup
     const ctx = { configPath };
-    await cleanupCommand(ctx, { dryRun: false });
+    await cleanupCommand(ctx, { dryRun: false, tmux: false });
 
     // Verify both worktrees were removed
     expect(await isGitRepo(worktreePath1)).toBe(false);

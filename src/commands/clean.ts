@@ -15,8 +15,15 @@ import {
   listWorktrees,
   findWorktreeByBranch,
   deleteBaseRef,
+  getDefaultBranch,
 } from '../git/index.ts';
 import { print, printError, printStatus } from '../output.ts';
+import {
+  getSessionName,
+  openTmuxSession,
+  tmuxHasSession,
+  tmuxKillSession,
+} from '../tmux.ts';
 
 function resolveCleanOutputPath(
   repoPath: string,
@@ -40,13 +47,14 @@ function resolveCleanOutputPath(
 type CleanOptions = {
   force: boolean;
   dryRun: boolean;
+  tmux: boolean;
 };
 
 export async function cleanCommand(
   ctx: CommandContext,
   branch?: string,
   repoName?: string,
-  options: CleanOptions = { force: false, dryRun: false }
+  options: CleanOptions = { force: false, dryRun: false, tmux: false }
 ): Promise<void> {
   const config = await loadConfig(ctx.configPath);
   const repo = await resolveRepo(config, repoName);
@@ -127,7 +135,39 @@ export async function cleanCommand(
 
   printStatus(`${prefix} worktree "${worktreeName}"`);
 
-  if (!options.dryRun) {
-    print(outputPath);
+  if (options.dryRun) {
+    return;
   }
+
+  if (options.tmux) {
+    const defaultBranchResult = await getDefaultBranch(repo.path);
+    if (!defaultBranchResult.success) {
+      printError(`Error: ${defaultBranchResult.error}`);
+      process.exit(1);
+    }
+    const defaultBranch = defaultBranchResult.data;
+    const mainWorktree = worktreesResult.data.find((wt) => wt.isMain);
+    const mainPath =
+      findWorktreeByBranch(worktreesResult.data, defaultBranch)?.path ??
+      mainWorktree?.path ??
+      repo.path;
+
+    // The cwd may have been the worktree we just removed; move somewhere
+    // valid so subsequent subprocess spawns (tmux) can resolve their cwd.
+    process.chdir(mainPath);
+
+    const sessionName = getSessionName(repo.name, worktree.branch);
+    const hasSession = await tmuxHasSession(sessionName);
+    if (hasSession.success && hasSession.data) {
+      const killResult = await tmuxKillSession(sessionName);
+      if (!killResult.success) {
+        printError(`Warning: ${killResult.error}`);
+      }
+    }
+
+    await openTmuxSession(repo.name, defaultBranch, mainPath);
+    return;
+  }
+
+  print(outputPath);
 }

@@ -10,12 +10,14 @@ import {
 import { mkdir, rm } from 'node:fs/promises';
 import { realpathSync } from 'node:fs';
 import { join } from 'node:path';
-import { runGitCommand, cloneBare } from '../src/git/index.ts';
+import { runGitCommand, cloneBare, isGitRepo } from '../src/git/index.ts';
 import { writeConfig } from '../src/config.ts';
 import type { ReposConfig } from '../src/types.ts';
 import * as tmux from '../src/tmux.ts';
 import { workCommand } from '../src/commands/work.ts';
 import { stackCommand } from '../src/commands/stack.ts';
+import { cleanCommand } from '../src/commands/clean.ts';
+import { cleanupCommand } from '../src/commands/cleanup.ts';
 
 async function createTestRepo(dir: string): Promise<void> {
   await mkdir(dir, { recursive: true });
@@ -31,6 +33,10 @@ describe('--tmux flag', () => {
   const configPath = '/tmp/repos-test-tmux-flag-config/config.json';
   let originalCwd: string;
   let openTmuxSessionSpy: Mock<typeof tmux.openTmuxSession>;
+  // Unique repo name for tests that create real tmux sessions,
+  // so session names (repo@branch) won't collide with the user's real sessions.
+  const REAL_TMUX_REPO = 'repos-test-tmux-flag';
+  const realTmuxSessionNames: string[] = [];
 
   beforeEach(async () => {
     originalCwd = process.cwd();
@@ -44,6 +50,9 @@ describe('--tmux flag', () => {
   afterEach(async () => {
     process.chdir(originalCwd);
     openTmuxSessionSpy.mockRestore();
+    for (const name of realTmuxSessionNames.splice(0)) {
+      await tmux.tmuxKillSession(name);
+    }
     await rm(testDir, { recursive: true, force: true });
     await rm(sourceDir, { recursive: true, force: true });
     await rm('/tmp/repos-test-tmux-flag-config', {
@@ -52,14 +61,22 @@ describe('--tmux flag', () => {
     });
   });
 
-  async function setupBareRepo(): Promise<{
-    bareDir: string;
-    config: ReposConfig;
-  }> {
-    const bareDir = join(testDir, 'bare.git');
+  async function startRealTmuxSession(
+    name: string,
+    dir: string
+  ): Promise<void> {
+    realTmuxSessionNames.push(name);
+    const result = await tmux.tmuxNewSession(name, dir);
+    if (!result.success) throw new Error(result.error);
+  }
+
+  async function setupBareRepo(
+    name = 'bare'
+  ): Promise<{ bareDir: string; config: ReposConfig }> {
+    const bareDir = join(testDir, `${name}.git`);
     await cloneBare(sourceDir, bareDir);
     const config = {
-      repos: [{ name: 'bare', url: sourceDir, path: bareDir, bare: true }],
+      repos: [{ name, url: sourceDir, path: bareDir, bare: true }],
     } satisfies ReposConfig;
     await writeConfig(configPath, config);
     return { bareDir, config };
@@ -131,6 +148,95 @@ describe('--tmux flag', () => {
     expect(output.join('')).toEqual(worktreePath + '\n');
   });
 
+  async function setupStaleWorktree(
+    repoName: string,
+    branch: string
+  ): Promise<{ bareDir: string; worktreePath: string }> {
+    const { bareDir } = await setupBareRepo(repoName);
+    const worktreePath = join(testDir, `${repoName}.git-${branch}`);
+    await runGitCommand(
+      ['worktree', 'add', '-b', branch, worktreePath],
+      bareDir
+    );
+    await Bun.write(join(worktreePath, `${branch}.txt`), branch);
+    await runGitCommand(['add', '.'], worktreePath);
+    await runGitCommand(['commit', '-m', `${branch} work`], worktreePath);
+    await runGitCommand(['push', '-u', 'origin', branch], worktreePath);
+    await runGitCommand(['branch', '-D', branch], sourceDir);
+    return { bareDir, worktreePath };
+  }
+
+  test('cleanup --tmux kills the tmux session for each removed worktree', async () => {
+    const { worktreePath } = await setupStaleWorktree(
+      REAL_TMUX_REPO,
+      'feature'
+    );
+    const sessionName = `${REAL_TMUX_REPO}@feature`;
+    await startRealTmuxSession(sessionName, worktreePath);
+
+    const { restore } = captureStdout();
+    await cleanupCommand({ configPath }, { dryRun: false, tmux: true });
+    restore();
+
+    expect(await isGitRepo(worktreePath)).toBe(false);
+    const hasAfter = await tmux.tmuxHasSession(sessionName);
+    expect(hasAfter).toEqual({ success: true, data: false });
+  });
+
+  test('cleanup --tmux is a no-op for worktrees without an existing session', async () => {
+    const { worktreePath } = await setupStaleWorktree(
+      REAL_TMUX_REPO,
+      'feature'
+    );
+    const sessionName = `${REAL_TMUX_REPO}@feature`;
+
+    const { output, restore } = captureStdout();
+    await cleanupCommand({ configPath }, { dryRun: false, tmux: true });
+    restore();
+
+    expect(await isGitRepo(worktreePath)).toBe(false);
+    const hasAfter = await tmux.tmuxHasSession(sessionName);
+    expect(hasAfter).toEqual({ success: true, data: false });
+    expect(output.join('')).not.toContain('Killed tmux session');
+  });
+
+  test('cleanup --tmux --dry-run reports without killing', async () => {
+    const { worktreePath } = await setupStaleWorktree(
+      REAL_TMUX_REPO,
+      'feature'
+    );
+    const sessionName = `${REAL_TMUX_REPO}@feature`;
+    await startRealTmuxSession(sessionName, worktreePath);
+
+    const { output, restore } = captureStdout();
+    await cleanupCommand({ configPath }, { dryRun: true, tmux: true });
+    restore();
+
+    expect(await isGitRepo(worktreePath)).toBe(true);
+    const hasAfter = await tmux.tmuxHasSession(sessionName);
+    expect(hasAfter).toEqual({ success: true, data: true });
+    expect(output.join('')).toContain(
+      `Would kill tmux session "${sessionName}"`
+    );
+  });
+
+  test('cleanup without --tmux leaves the tmux session alone', async () => {
+    const { worktreePath } = await setupStaleWorktree(
+      REAL_TMUX_REPO,
+      'feature'
+    );
+    const sessionName = `${REAL_TMUX_REPO}@feature`;
+    await startRealTmuxSession(sessionName, worktreePath);
+
+    const { restore } = captureStdout();
+    await cleanupCommand({ configPath }, { dryRun: false, tmux: false });
+    restore();
+
+    expect(await isGitRepo(worktreePath)).toBe(false);
+    const hasAfter = await tmux.tmuxHasSession(sessionName);
+    expect(hasAfter).toEqual({ success: true, data: true });
+  });
+
   test('stack --tmux calls openTmuxSession and prints nothing to stdout', async () => {
     const { bareDir } = await setupBareRepo();
 
@@ -155,6 +261,122 @@ describe('--tmux flag', () => {
     expect(openTmuxSessionSpy).toHaveBeenCalledTimes(1);
     expect(openTmuxSessionSpy).toHaveBeenCalledWith('bare', 'child', childPath);
     expect(output).toEqual([]);
+  });
+
+  test('clean --tmux kills worktree session and opens main session', async () => {
+    const { bareDir } = await setupBareRepo(REAL_TMUX_REPO);
+
+    const worktreePath = join(testDir, `${REAL_TMUX_REPO}.git-feature`);
+    await runGitCommand(
+      ['worktree', 'add', '-b', 'feature', worktreePath],
+      bareDir
+    );
+    const mainPath = join(testDir, `${REAL_TMUX_REPO}.git-main`);
+    await runGitCommand(['worktree', 'add', mainPath, 'main'], bareDir);
+
+    const sessionName = `${REAL_TMUX_REPO}@feature`;
+    await startRealTmuxSession(sessionName, worktreePath);
+
+    process.chdir(worktreePath);
+
+    const { output, restore } = captureStdout();
+    await cleanCommand({ configPath }, 'feature', REAL_TMUX_REPO, {
+      force: false,
+      dryRun: false,
+      tmux: true,
+    });
+    restore();
+
+    expect(await isGitRepo(worktreePath)).toBe(false);
+    const hasAfter = await tmux.tmuxHasSession(sessionName);
+    expect(hasAfter).toEqual({ success: true, data: false });
+    expect(openTmuxSessionSpy).toHaveBeenCalledTimes(1);
+    expect(openTmuxSessionSpy).toHaveBeenCalledWith(
+      REAL_TMUX_REPO,
+      'main',
+      realpathSync(mainPath)
+    );
+    // No path printed to stdout when --tmux is used
+    expect(output).toEqual([]);
+  });
+
+  test('clean --tmux opens main session even when no worktree session exists', async () => {
+    const { bareDir } = await setupBareRepo(REAL_TMUX_REPO);
+    const worktreePath = join(testDir, `${REAL_TMUX_REPO}.git-feature`);
+    await runGitCommand(
+      ['worktree', 'add', '-b', 'feature', worktreePath],
+      bareDir
+    );
+    const mainPath = join(testDir, `${REAL_TMUX_REPO}.git-main`);
+    await runGitCommand(['worktree', 'add', mainPath, 'main'], bareDir);
+
+    process.chdir(worktreePath);
+
+    const { restore } = captureStdout();
+    await cleanCommand({ configPath }, 'feature', REAL_TMUX_REPO, {
+      force: false,
+      dryRun: false,
+      tmux: true,
+    });
+    restore();
+
+    expect(await isGitRepo(worktreePath)).toBe(false);
+    expect(openTmuxSessionSpy).toHaveBeenCalledTimes(1);
+    expect(openTmuxSessionSpy).toHaveBeenCalledWith(
+      REAL_TMUX_REPO,
+      'main',
+      realpathSync(mainPath)
+    );
+  });
+
+  test('clean --tmux --dry-run does not touch tmux', async () => {
+    const { bareDir } = await setupBareRepo(REAL_TMUX_REPO);
+    const worktreePath = join(testDir, `${REAL_TMUX_REPO}.git-feature`);
+    await runGitCommand(
+      ['worktree', 'add', '-b', 'feature', worktreePath],
+      bareDir
+    );
+
+    const sessionName = `${REAL_TMUX_REPO}@feature`;
+    await startRealTmuxSession(sessionName, worktreePath);
+
+    const { restore } = captureStdout();
+    await cleanCommand({ configPath }, 'feature', REAL_TMUX_REPO, {
+      force: false,
+      dryRun: true,
+      tmux: true,
+    });
+    restore();
+
+    expect(await isGitRepo(worktreePath)).toBe(true);
+    const hasAfter = await tmux.tmuxHasSession(sessionName);
+    expect(hasAfter).toEqual({ success: true, data: true });
+    expect(openTmuxSessionSpy).toHaveBeenCalledTimes(0);
+  });
+
+  test('clean without --tmux leaves the tmux session alone', async () => {
+    const { bareDir } = await setupBareRepo(REAL_TMUX_REPO);
+    const worktreePath = join(testDir, `${REAL_TMUX_REPO}.git-feature`);
+    await runGitCommand(
+      ['worktree', 'add', '-b', 'feature', worktreePath],
+      bareDir
+    );
+    const sessionName = `${REAL_TMUX_REPO}@feature`;
+    await startRealTmuxSession(sessionName, worktreePath);
+
+    const { output, restore } = captureStdout();
+    await cleanCommand({ configPath }, 'feature', REAL_TMUX_REPO, {
+      force: false,
+      dryRun: false,
+      tmux: false,
+    });
+    restore();
+
+    expect(await isGitRepo(worktreePath)).toBe(false);
+    expect(output.join('')).toContain(realpathSync(bareDir));
+    const hasAfter = await tmux.tmuxHasSession(sessionName);
+    expect(hasAfter).toEqual({ success: true, data: true });
+    expect(openTmuxSessionSpy).toHaveBeenCalledTimes(0);
   });
 
   test('stack without --tmux does not call openTmuxSession', async () => {

@@ -1,5 +1,10 @@
 import { describe, expect, test, beforeEach, afterEach } from 'bun:test';
-import { getSessionName, isInsideTmux, tmuxHasSession } from '../src/tmux.ts';
+import {
+  getSessionName,
+  isInsideTmux,
+  tmuxHasSession,
+  tmuxKillSession,
+} from '../src/tmux.ts';
 
 describe('getSessionName', () => {
   test('creates session name from repo and branch', () => {
@@ -31,6 +36,13 @@ describe('tmuxHasSession', () => {
     // The fixed code treats exit code 1 as "session not found" (not an error).
     const result = await tmuxHasSession('nonexistent-session-12345');
     expect(result).toEqual({ success: true, data: false });
+  });
+});
+
+describe('tmuxKillSession', () => {
+  test('returns error when session does not exist', async () => {
+    const result = await tmuxKillSession('nonexistent-session-67890');
+    expect(result.success).toBe(false);
   });
 });
 
