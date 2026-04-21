@@ -1,5 +1,11 @@
 # repos
 
+## 1.2.0
+
+### Minor Changes
+
+- [#73](https://github.com/eli0shin/repos/pull/73) [`8b0865f`](https://github.com/eli0shin/repos/commit/8b0865fbcf86ab1230917db950b25d2c0c305487) Thanks [@eli0shin](https://github.com/eli0shin)! - Add `-t` flag to `repos clean` and `repos cleanup` to kill tmux sessions for removed worktrees. `clean -t` additionally transitions tmux to the main worktree's session.
+
 ## 1.1.2
 
 ### Patch Changes
