@@ -403,4 +403,88 @@ describe('--tmux flag', () => {
     const childPath = join(testDir, 'bare.git-child');
     expect(output.join('')).toEqual(childPath + '\n');
   });
+
+  test('clean --tmux on non-bare repo opens main session at the main worktree', async () => {
+    // Non-bare path: the main worktree IS the first worktree (default branch
+    // checked out). Verify main-path resolution finds that, not the repo dir.
+    const repoDir = join(testDir, `${REAL_TMUX_REPO}-nonbare`);
+    await runGitCommand(['clone', sourceDir, repoDir]);
+    const config = {
+      repos: [{ name: REAL_TMUX_REPO, url: sourceDir, path: repoDir }],
+    } satisfies ReposConfig;
+    await writeConfig(configPath, config);
+
+    const worktreePath = join(testDir, `${REAL_TMUX_REPO}-nonbare-feature`);
+    await runGitCommand(
+      ['worktree', 'add', '-b', 'feature', worktreePath],
+      repoDir
+    );
+
+    const sessionName = `${REAL_TMUX_REPO}@feature`;
+    await startRealTmuxSession(sessionName, worktreePath);
+
+    process.chdir(worktreePath);
+
+    const { restore } = captureStdout();
+    await cleanCommand({ configPath }, 'feature', REAL_TMUX_REPO, {
+      force: false,
+      dryRun: false,
+      tmux: true,
+    });
+    restore();
+
+    expect(await isGitRepo(worktreePath)).toBe(false);
+    const hasAfter = await tmux.tmuxHasSession(sessionName);
+    expect(hasAfter).toEqual({ success: true, data: false });
+    expect(openTmuxSessionSpy).toHaveBeenCalledTimes(1);
+    expect(openTmuxSessionSpy).toHaveBeenCalledWith(
+      REAL_TMUX_REPO,
+      'main',
+      realpathSync(repoDir)
+    );
+  });
+
+  test('clean --tmux --force removes a parent worktree with stacked children and still opens main', async () => {
+    const { bareDir } = await setupBareRepo(REAL_TMUX_REPO);
+
+    const parentPath = join(testDir, `${REAL_TMUX_REPO}.git-parent`);
+    await runGitCommand(
+      ['worktree', 'add', '-b', 'parent', parentPath],
+      bareDir
+    );
+    await Bun.write(join(parentPath, 'parent.txt'), 'parent');
+    await runGitCommand(['add', '.'], parentPath);
+    await runGitCommand(['commit', '-m', 'parent commit'], parentPath);
+
+    // Create a stacked child off parent via the stack command so stack
+    // metadata exists in the config — exercises the force cleanup path.
+    process.chdir(parentPath);
+    await stackCommand({ configPath }, 'child');
+
+    const mainPath = join(testDir, `${REAL_TMUX_REPO}.git-main`);
+    await runGitCommand(['worktree', 'add', mainPath, 'main'], bareDir);
+
+    const sessionName = `${REAL_TMUX_REPO}@parent`;
+    await startRealTmuxSession(sessionName, parentPath);
+
+    process.chdir(parentPath);
+
+    const { restore } = captureStdout();
+    await cleanCommand({ configPath }, 'parent', REAL_TMUX_REPO, {
+      force: true,
+      dryRun: false,
+      tmux: true,
+    });
+    restore();
+
+    expect(await isGitRepo(parentPath)).toBe(false);
+    const hasAfter = await tmux.tmuxHasSession(sessionName);
+    expect(hasAfter).toEqual({ success: true, data: false });
+    expect(openTmuxSessionSpy).toHaveBeenCalledTimes(1);
+    expect(openTmuxSessionSpy).toHaveBeenCalledWith(
+      REAL_TMUX_REPO,
+      'main',
+      realpathSync(mainPath)
+    );
+  });
 });
