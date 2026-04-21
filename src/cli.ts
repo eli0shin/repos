@@ -217,10 +217,15 @@ program
   .argument('[repo-name]', 'Repo name (optional if inside a tracked repo)')
   .option('--force', 'Force removal even if branch has stacked children')
   .option('--dry-run', 'Show what would be removed without removing')
+  .option(
+    '-t, --tmux',
+    'Kill the worktree tmux session and switch to the main worktree session'
+  )
   .action(async (branch, repoName, options) => {
     await cleanCommand(getCommandContext(), branch, repoName, {
       force: options.force ?? false,
       dryRun: options.dryRun ?? false,
+      tmux: options.tmux ?? false,
     });
   });
 
@@ -250,9 +255,11 @@ program
   .command('cleanup')
   .description('Remove worktrees for merged or deleted branches')
   .option('--dry-run', 'Show what would be removed without removing')
+  .option('-t, --tmux', 'Also kill tmux sessions for removed worktrees')
   .action(async (options) => {
     await cleanupCommand(getCommandContext(), {
       dryRun: options.dryRun ?? false,
+      tmux: options.tmux ?? false,
     });
   });
 

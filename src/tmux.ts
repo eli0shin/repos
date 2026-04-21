@@ -59,6 +59,17 @@ export async function tmuxNewSession(
   return { success: true, data: undefined };
 }
 
+export async function tmuxKillSession(name: string): Promise<OperationResult> {
+  const result = await runTmuxCommand(['kill-session', '-t', name]);
+  if (result.exitCode !== 0) {
+    return {
+      success: false,
+      error: result.stderr || 'Failed to kill tmux session',
+    };
+  }
+  return { success: true, data: undefined };
+}
+
 export async function tmuxSwitchClient(name: string): Promise<OperationResult> {
   const result = await runTmuxCommand(['switch-client', '-t', name]);
   if (result.exitCode !== 0) {

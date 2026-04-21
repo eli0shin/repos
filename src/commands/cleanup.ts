@@ -14,9 +14,11 @@ import {
   ensureRefspecConfig,
 } from '../git/index.ts';
 import { print, printError } from '../output.ts';
+import { getSessionName, tmuxHasSession, tmuxKillSession } from '../tmux.ts';
 
 export type CleanupOptions = {
   dryRun: boolean;
+  tmux: boolean;
 };
 
 type CleanupResult = {
@@ -210,5 +212,29 @@ export async function cleanupCommand(
 
   if (skipped.length > 0) {
     print(`Skipped ${skipped.length} worktree(s) with uncommitted changes`);
+  }
+
+  if (options.tmux) {
+    // The cwd may have been a worktree we just removed; move somewhere
+    // valid so subsequent subprocess spawns (tmux) can resolve their cwd.
+    const safeDir = repoContexts.find((ctx): ctx is RepoContext => ctx !== null)
+      ?.repo.path;
+    if (safeDir) process.chdir(safeDir);
+
+    const killPrefix = options.dryRun ? 'Would kill' : 'Killed';
+    for (const result of removed) {
+      const sessionName = getSessionName(result.repo, result.branch);
+      const hasSession = await tmuxHasSession(sessionName);
+      if (!hasSession.success || !hasSession.data) continue;
+
+      if (!options.dryRun) {
+        const killResult = await tmuxKillSession(sessionName);
+        if (!killResult.success) {
+          printError(`Warning: ${killResult.error}`);
+          continue;
+        }
+      }
+      print(`${killPrefix} tmux session "${sessionName}"`);
+    }
   }
 }

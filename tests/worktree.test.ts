@@ -607,7 +607,11 @@ describe('repos clean command', () => {
 
     // Clean parent with --force - should succeed
     const ctx = { configPath };
-    await cleanCommand(ctx, 'parent', 'bare', { force: true, dryRun: false });
+    await cleanCommand(ctx, 'parent', 'bare', {
+      force: true,
+      dryRun: false,
+      tmux: false,
+    });
 
     // Verify parent worktree was removed
     expect(await isGitRepo(parentPath)).toBe(false);
@@ -758,7 +762,11 @@ describe('repos clean command', () => {
 
     // Clean child
     const ctx = { configPath };
-    await cleanCommand(ctx, 'child', 'bare', { force: false, dryRun: false });
+    await cleanCommand(ctx, 'child', 'bare', {
+      force: false,
+      dryRun: false,
+      tmux: false,
+    });
     process.stdout.write = originalStdoutWrite;
     process.stderr.write = originalStderrWrite;
 
@@ -803,7 +811,11 @@ describe('repos clean command', () => {
     };
 
     const ctx = { configPath };
-    await cleanCommand(ctx, 'child', 'bare', { force: false, dryRun: false });
+    await cleanCommand(ctx, 'child', 'bare', {
+      force: false,
+      dryRun: false,
+      tmux: false,
+    });
     process.stdout.write = originalStdoutWrite;
 
     expect(stdoutOutput.join('')).toBe(`${expectedMainPath}\n`);
@@ -837,7 +849,11 @@ describe('repos clean command', () => {
     };
 
     const ctx = { configPath };
-    await cleanCommand(ctx, 'feature', 'repo', { force: false, dryRun: false });
+    await cleanCommand(ctx, 'feature', 'repo', {
+      force: false,
+      dryRun: false,
+      tmux: false,
+    });
     process.stdout.write = originalStdoutWrite;
 
     expect(stdoutOutput.join('')).toBe(`${repoDir}\n`);
@@ -905,7 +921,11 @@ describe('repos clean command', () => {
 
     // Run clean with dry-run
     const ctx = { configPath };
-    await cleanCommand(ctx, 'feature', 'bare', { force: true, dryRun: true });
+    await cleanCommand(ctx, 'feature', 'bare', {
+      force: true,
+      dryRun: true,
+      tmux: false,
+    });
     process.stdout.write = originalStdoutWrite;
     process.stderr.write = originalStderrWrite;
 
