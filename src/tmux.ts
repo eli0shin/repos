@@ -81,6 +81,47 @@ export async function tmuxSwitchClient(name: string): Promise<OperationResult> {
   return { success: true, data: undefined };
 }
 
+export async function tmuxSwitchClientLast(): Promise<OperationResult> {
+  const result = await runTmuxCommand(['switch-client', '-l']);
+  if (result.exitCode !== 0) {
+    return {
+      success: false,
+      error: result.stderr || 'Failed to switch to last tmux session',
+    };
+  }
+  return { success: true, data: undefined };
+}
+
+export async function tmuxCurrentSession(): Promise<OperationResult<string>> {
+  const result = await runTmuxCommand(['display-message', '-p', '#S']);
+  if (result.exitCode !== 0) {
+    return {
+      success: false,
+      error: result.stderr || 'Failed to read current tmux session',
+    };
+  }
+  return { success: true, data: result.stdout };
+}
+
+export async function tmuxNewSessionDefault(): Promise<
+  OperationResult<string>
+> {
+  const result = await runTmuxCommand([
+    'new-session',
+    '-d',
+    '-P',
+    '-F',
+    '#{session_name}',
+  ]);
+  if (result.exitCode !== 0) {
+    return {
+      success: false,
+      error: result.stderr || 'Failed to create tmux session',
+    };
+  }
+  return { success: true, data: result.stdout };
+}
+
 export async function tmuxAttachSession(
   name: string
 ): Promise<OperationResult> {

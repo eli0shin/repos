@@ -14,7 +14,16 @@ import {
   ensureRefspecConfig,
 } from '../git/index.ts';
 import { print, printError } from '../output.ts';
-import { getSessionName, tmuxHasSession, tmuxKillSession } from '../tmux.ts';
+import {
+  getSessionName,
+  isInsideTmux,
+  tmuxCurrentSession,
+  tmuxHasSession,
+  tmuxKillSession,
+  tmuxNewSessionDefault,
+  tmuxSwitchClient,
+  tmuxSwitchClientLast,
+} from '../tmux.ts';
 
 export type CleanupOptions = {
   dryRun: boolean;
@@ -217,13 +226,41 @@ export async function cleanupCommand(
   if (options.tmux) {
     // The cwd may have been a worktree we just removed; move somewhere
     // valid so subsequent subprocess spawns (tmux) can resolve their cwd.
-    const safeDir = repoContexts.find((ctx): ctx is RepoContext => ctx !== null)
-      ?.repo.path;
+    const liveContexts = repoContexts.filter(
+      (ctx): ctx is RepoContext => ctx !== null
+    );
+    const safeDir = liveContexts[0]?.repo.path;
     if (safeDir) process.chdir(safeDir);
+
+    const killingSessions = new Set(
+      removed.map((r) => getSessionName(r.repo, r.branch))
+    );
+
+    // If we're inside tmux and about to kill the session hosting this
+    // command, switch the client away first — otherwise killing the
+    // current session disconnects the client from the tmux server.
+    let skipCurrentSession: string | null = null;
+    if (!options.dryRun && isInsideTmux()) {
+      const currentResult = await tmuxCurrentSession();
+      if (currentResult.success && killingSessions.has(currentResult.data)) {
+        const switched = await switchClientAwayFromCurrentSession(
+          currentResult.data,
+          killingSessions,
+          liveContexts
+        );
+        if (!switched) {
+          printError(
+            `Warning: cannot kill current tmux session "${currentResult.data}" — no safe session to switch to`
+          );
+          skipCurrentSession = currentResult.data;
+        }
+      }
+    }
 
     const killPrefix = options.dryRun ? 'Would kill' : 'Killed';
     for (const result of removed) {
       const sessionName = getSessionName(result.repo, result.branch);
+      if (sessionName === skipCurrentSession) continue;
       const hasSession = await tmuxHasSession(sessionName);
       if (!hasSession.success || !hasSession.data) continue;
 
@@ -237,4 +274,31 @@ export async function cleanupCommand(
       print(`${killPrefix} tmux session "${sessionName}"`);
     }
   }
+}
+
+async function switchClientAwayFromCurrentSession(
+  currentSession: string,
+  killingSessions: Set<string>,
+  repoContexts: RepoContext[]
+): Promise<boolean> {
+  // 1. Prefer an existing main-worktree session for a repo we're processing
+  for (const ctx of repoContexts) {
+    const candidate = getSessionName(ctx.repo.name, ctx.defaultBranch);
+    if (candidate === currentSession || killingSessions.has(candidate))
+      continue;
+    const has = await tmuxHasSession(candidate);
+    if (!has.success || !has.data) continue;
+    const sw = await tmuxSwitchClient(candidate);
+    if (sw.success) return true;
+  }
+
+  // 2. Fall back to the last-visited session (mirrors user's tmux keybind)
+  const last = await tmuxSwitchClientLast();
+  if (last.success) return true;
+
+  // 3. Last resort: create a fresh unnamed session and switch to it
+  const fresh = await tmuxNewSessionDefault();
+  if (!fresh.success) return false;
+  const sw = await tmuxSwitchClient(fresh.data);
+  return sw.success;
 }
