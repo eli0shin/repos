@@ -20,6 +20,7 @@ import {
 import { print, printError, printStatus } from '../output.ts';
 import {
   getSessionName,
+  isInsideTmux,
   openTmuxSession,
   tmuxHasSession,
   tmuxKillSession,
@@ -157,15 +158,30 @@ export async function cleanCommand(
     process.chdir(mainPath);
 
     const sessionName = getSessionName(repo.name, worktree.branch);
-    const hasSession = await tmuxHasSession(sessionName);
-    if (hasSession.success && hasSession.data) {
+
+    const killWorktreeSession = async (): Promise<void> => {
+      const hasSession = await tmuxHasSession(sessionName);
+      if (!hasSession.success || !hasSession.data) return;
       const killResult = await tmuxKillSession(sessionName);
       if (!killResult.success) {
         printError(`Warning: ${killResult.error}`);
       }
-    }
+    };
 
-    await openTmuxSession(repo.name, defaultBranch, mainPath);
+    // Inside tmux we must move the client to the main session BEFORE
+    // killing the worktree session — killing the session we're attached
+    // to would disconnect the client (and in the single-session case the
+    // whole tmux server exits).
+    //
+    // Outside tmux we kill first because openTmuxSession attaches, which
+    // blocks until the user detaches.
+    if (isInsideTmux()) {
+      await openTmuxSession(repo.name, defaultBranch, mainPath);
+      await killWorktreeSession();
+    } else {
+      await killWorktreeSession();
+      await openTmuxSession(repo.name, defaultBranch, mainPath);
+    }
     return;
   }
 
