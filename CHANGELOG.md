@@ -1,5 +1,11 @@
 # repos
 
+## 1.2.1
+
+### Patch Changes
+
+- [#75](https://github.com/eli0shin/repos/pull/75) [`1188f22`](https://github.com/eli0shin/repos/commit/1188f22281ba5edd4466f717f073dc21bacc8387) Thanks [@eli0shin](https://github.com/eli0shin)! - Fix `clean -t` and `cleanup -t` disconnecting the tmux client when killing the session it is attached to. `clean -t` now opens the main-worktree session before killing the old one; `cleanup -t` switches the client away (preferring an existing main-worktree session, then `switch-client -l`, then a fresh session) before killing the current session.
+
 ## 1.2.0
 
 ### Minor Changes
