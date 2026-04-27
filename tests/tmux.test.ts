@@ -1,10 +1,13 @@
 import { describe, expect, test, beforeEach, afterEach } from 'bun:test';
+import { mkdir, rm } from 'node:fs/promises';
 import {
+  findSessionForWorktree,
   getSessionName,
   isInsideTmux,
   matchSession,
   tmuxHasSession,
   tmuxKillSession,
+  tmuxNewSession,
 } from '../src/tmux.ts';
 
 describe('getSessionName', () => {
@@ -44,6 +47,33 @@ describe('tmuxKillSession', () => {
   test('returns error when session does not exist', async () => {
     const result = await tmuxKillSession('nonexistent-session-67890');
     expect(result.success).toBe(false);
+  });
+});
+
+describe('findSessionForWorktree', () => {
+  const sessionName = 'repos-test-tmux-main-session-match';
+  const testDir = '/tmp/repos-test-tmux-main-session-match';
+
+  afterEach(async () => {
+    await tmuxKillSession(sessionName);
+    await rm(testDir, { recursive: true, force: true });
+  });
+
+  test('does not match a repo-name session in a sibling main worktree', async () => {
+    const mainPath = `${testDir}/repo`;
+    const worktreePath = `${testDir}/repo-feature`;
+
+    await mkdir(mainPath, { recursive: true });
+    const createResult = await tmuxNewSession(sessionName, mainPath);
+    expect(createResult).toEqual({ success: true, data: undefined });
+
+    const result = await findSessionForWorktree(
+      sessionName,
+      'feature',
+      worktreePath
+    );
+
+    expect(result).toEqual({ success: true, data: null });
   });
 });
 

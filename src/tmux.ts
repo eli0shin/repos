@@ -211,7 +211,7 @@ export async function findSessionForWorktree(
   if (!listResult.success) {
     return listResult;
   }
-  const candidateNames = [getSessionName(repoName, branch), repoName];
+  const candidateNames = [getSessionName(repoName, branch)];
   return {
     success: true,
     data: matchSession(listResult.data, candidateNames, worktreePath),
