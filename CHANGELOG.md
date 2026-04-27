@@ -1,5 +1,11 @@
 # repos
 
+## 1.2.3
+
+### Patch Changes
+
+- [`134b1bb`](https://github.com/eli0shin/repos/commit/134b1bb9d1b9de38645834a6da7bd01f8db53a25) Thanks [@eli0shin](https://github.com/eli0shin)! - Fix `repos work -t` so an existing main worktree tmux session is not reused for a new sibling worktree.
+
 ## 1.2.2
 
 ### Patch Changes
