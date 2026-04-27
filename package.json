@@ -1,6 +1,6 @@
 {
   "name": "repos",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "CLI tool for managing git repositories",
   "type": "module",
   "private": true,

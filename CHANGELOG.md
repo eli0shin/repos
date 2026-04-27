@@ -1,5 +1,13 @@
 # repos
 
+## 1.2.2
+
+### Patch Changes
+
+- [#78](https://github.com/eli0shin/repos/pull/78) [`6c2575f`](https://github.com/eli0shin/repos/commit/6c2575f0dd40a63826c175609bdd22fa2c418f65) Thanks [@eli0shin](https://github.com/eli0shin)! - Identify the main worktree's tmux session by name (`repo@main` or bare `repo`) with a fallback to matching by working directory, so `clean -t` and `session` reuse an existing session instead of creating a duplicate.
+
+- [#77](https://github.com/eli0shin/repos/pull/77) [`1625637`](https://github.com/eli0shin/repos/commit/1625637fe4554712c1f7615d61e5e85a3f57a68a) Thanks [@eli0shin](https://github.com/eli0shin)! - Fix `repos clean` failing with "Directory not empty" when a worktree contains gitignored files (e.g., `node_modules`, build artifacts). `clean` now retries by removing the leftover directory only after `git worktree remove`'s safety checks pass — so locked worktrees and in-progress rebases still block removal. `cleanup` and `remove` use `--force` because they've already established the worktree is disposable.
+
 ## 1.2.1
 
 ### Patch Changes
