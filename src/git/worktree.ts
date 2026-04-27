@@ -1,4 +1,6 @@
 import { rm } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { printError } from '../output.ts';
 import type { OperationResult } from '../types.ts';
 import { runGitCommand } from './core.ts';
@@ -242,11 +244,48 @@ export async function pruneWorktrees(
   return { success: true, data: undefined };
 }
 
+async function getInProgressOperation(
+  worktreePath: string
+): Promise<string | undefined> {
+  const gitDirResult = await runGitCommand(
+    ['rev-parse', '--absolute-git-dir'],
+    worktreePath
+  );
+  if (gitDirResult.exitCode !== 0) {
+    return undefined;
+  }
+  const gitDir = gitDirResult.stdout.trim();
+  const stateFiles: { file: string; label: string }[] = [
+    { file: 'rebase-merge', label: 'rebase' },
+    { file: 'rebase-apply', label: 'rebase' },
+    { file: 'MERGE_HEAD', label: 'merge' },
+    { file: 'CHERRY_PICK_HEAD', label: 'cherry-pick' },
+    { file: 'REVERT_HEAD', label: 'revert' },
+    { file: 'BISECT_LOG', label: 'bisect' },
+  ];
+  for (const { file, label } of stateFiles) {
+    if (existsSync(join(gitDir, file))) {
+      return label;
+    }
+  }
+  return undefined;
+}
+
 export async function removeWorktree(
   repoDir: string,
   worktreePath: string,
   options: { force?: boolean } = {}
 ): Promise<OperationResult> {
+  if (!options.force) {
+    const inProgress = await getInProgressOperation(worktreePath);
+    if (inProgress) {
+      return {
+        success: false,
+        error: `worktree has an in-progress ${inProgress}; finish or abort it before removing`,
+      };
+    }
+  }
+
   const args = options.force
     ? ['worktree', 'remove', '--force', worktreePath]
     : ['worktree', 'remove', worktreePath];
