@@ -114,20 +114,87 @@ export function getSessionName(repoName: string, branch: string): string {
   return `${repoName}@${branch.replace(/\//g, '-')}`;
 }
 
+type SessionInfo = { name: string; path: string };
+
+export async function tmuxListSessionPaths(): Promise<
+  OperationResult<SessionInfo[]>
+> {
+  const result = await runTmuxCommand([
+    'list-sessions',
+    '-F',
+    '#{session_name}\t#{pane_current_path}',
+  ]);
+  if (result.exitCode === 1) {
+    return { success: true, data: [] };
+  }
+  if (result.exitCode !== 0) {
+    return {
+      success: false,
+      error: result.stderr || 'Failed to list tmux sessions',
+    };
+  }
+  const sessions = result.stdout
+    .split('\n')
+    .filter((line) => line.includes('\t'))
+    .map((line) => {
+      const [name, path] = line.split('\t');
+      return { name, path };
+    });
+  return { success: true, data: sessions };
+}
+
+export function matchSession(
+  sessions: SessionInfo[],
+  candidateNames: string[],
+  worktreePath: string
+): string | null {
+  for (const name of candidateNames) {
+    if (sessions.some((s) => s.name === name)) {
+      return name;
+    }
+  }
+
+  const prefix = worktreePath.endsWith('/') ? worktreePath : worktreePath + '/';
+  const match = sessions.find(
+    (s) => s.path === worktreePath || s.path.startsWith(prefix)
+  );
+  return match?.name ?? null;
+}
+
+export async function findSessionForWorktree(
+  repoName: string,
+  branch: string,
+  worktreePath: string
+): Promise<OperationResult<string | null>> {
+  const listResult = await tmuxListSessionPaths();
+  if (!listResult.success) {
+    return listResult;
+  }
+  const candidateNames = [getSessionName(repoName, branch), repoName];
+  return {
+    success: true,
+    data: matchSession(listResult.data, candidateNames, worktreePath),
+  };
+}
+
 export async function openTmuxSession(
   repoName: string,
   branch: string,
   worktreePath: string
 ): Promise<void> {
-  const sessionName = getSessionName(repoName, branch);
-
-  const hasSessionResult = await tmuxHasSession(sessionName);
-  if (!hasSessionResult.success) {
-    printError(`Error: ${hasSessionResult.error}`);
+  const findResult = await findSessionForWorktree(
+    repoName,
+    branch,
+    worktreePath
+  );
+  if (!findResult.success) {
+    printError(`Error: ${findResult.error}`);
     process.exit(1);
   }
 
-  if (!hasSessionResult.data) {
+  const sessionName = findResult.data ?? getSessionName(repoName, branch);
+
+  if (!findResult.data) {
     const createResult = await tmuxNewSession(sessionName, worktreePath);
     if (!createResult.success) {
       printError(`Error: ${createResult.error}`);
