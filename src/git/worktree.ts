@@ -246,7 +246,7 @@ export async function removeWorktree(
   worktreePath: string
 ): Promise<OperationResult> {
   const result = await runGitCommand(
-    ['worktree', 'remove', worktreePath],
+    ['worktree', 'remove', '--force', worktreePath],
     repoDir
   );
 
