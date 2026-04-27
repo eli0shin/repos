@@ -255,13 +255,6 @@ async function getInProgressOperation(
     return undefined;
   }
   const gitDir = gitDirResult.stdout.trim();
-  console.error('[DEBUG] gitDir:', gitDir);
-  try {
-    const { readdirSync } = await import('node:fs');
-    console.error('[DEBUG] gitDir contents:', readdirSync(gitDir).sort().join(', '));
-  } catch (e) {
-    console.error('[DEBUG] cannot read gitDir:', e);
-  }
   const stateFiles: { file: string; label: string }[] = [
     { file: 'rebase-merge', label: 'rebase' },
     { file: 'rebase-apply', label: 'rebase' },

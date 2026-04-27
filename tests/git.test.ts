@@ -582,9 +582,21 @@ describe('createWorktree and removeWorktree', () => {
 
     // Resolve and stage the conflict so `git status --porcelain` is clean.
     // The rebase remains paused (not continued), which is the case
-    // `hasUncommittedChanges` doesn't catch — git's own safety must.
+    // `hasUncommittedChanges` doesn't catch.
     await runGitCommand(['checkout', '--theirs', 'conflict.txt'], worktreeDir);
     await runGitCommand(['add', 'conflict.txt'], worktreeDir);
+
+    // Sanity-check the test setup: rebase state should exist on disk.
+    const gitDirResult = await runGitCommand(
+      ['rev-parse', '--absolute-git-dir'],
+      worktreeDir
+    );
+    expect(gitDirResult.exitCode).toBe(0);
+    const gitDir = gitDirResult.stdout.trim();
+    const rebaseStateExists =
+      existsSync(join(gitDir, 'rebase-merge')) ||
+      existsSync(join(gitDir, 'rebase-apply'));
+    expect(rebaseStateExists).toBe(true);
 
     const result = await removeWorktree(bareDir, worktreeDir);
 
