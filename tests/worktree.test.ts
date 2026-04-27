@@ -452,43 +452,6 @@ describe('repos clean command', () => {
     expect(await isGitRepo(worktreePath)).toBe(false);
   });
 
-  test('removes a worktree containing gitignored files', async () => {
-    // Clone as bare
-    const bareDir = join(testDir, 'bare.git');
-    await cloneBare(sourceDir, bareDir);
-
-    // Create worktree
-    const worktreePath = join(testDir, 'bare.git-feature');
-    await runGitCommand(
-      ['worktree', 'add', '-b', 'feature', worktreePath],
-      bareDir
-    );
-
-    // Add a .gitignore that ignores build/, commit it, then create
-    // gitignored content in the worktree (e.g., simulating node_modules
-    // or build artifacts). These do not show in `git status --porcelain`,
-    // so they pass the uncommitted-changes check but used to block
-    // `git worktree remove` with "Directory not empty".
-    await Bun.write(join(worktreePath, '.gitignore'), 'build/\n');
-    await runGitCommand(['add', '.gitignore'], worktreePath);
-    await runGitCommand(['commit', '-m', 'add gitignore'], worktreePath);
-    await mkdir(join(worktreePath, 'build'), { recursive: true });
-    await Bun.write(join(worktreePath, 'build', 'artifact.txt'), 'output');
-
-    // Create config
-    const config = {
-      repos: [{ name: 'bare', url: sourceDir, path: bareDir, bare: true }],
-    } satisfies ReposConfig;
-    await writeConfig(configPath, config);
-
-    // Run clean command - should succeed despite gitignored content
-    const ctx = { configPath };
-    await cleanCommand(ctx, 'feature', 'bare');
-
-    // Verify worktree directory was fully removed
-    expect(existsSync(worktreePath)).toBe(false);
-  });
-
   test('fails when worktree has uncommitted changes', async () => {
     // Clone as bare
     const bareDir = join(testDir, 'bare.git');

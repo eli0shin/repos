@@ -1,5 +1,6 @@
 import { describe, expect, test, beforeEach, afterEach } from 'bun:test';
 import { mkdir, rm } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   runGitCommand,
@@ -524,6 +525,113 @@ describe('createWorktree and removeWorktree', () => {
 
     // Verify worktree is gone
     expect(await isGitRepo(worktreeDir)).toBe(false);
+  });
+
+  test('removes a worktree that contains gitignored files', async () => {
+    const bareDir = join(testDir, 'bare.git');
+    await cloneBare(sourceDir, bareDir);
+    await ensureRefspecConfig(bareDir);
+
+    const worktreeDir = join(testDir, 'worktree-ignored');
+    await createWorktree(bareDir, worktreeDir, 'feature');
+
+    // Commit a .gitignore that ignores build/, then drop a build artifact.
+    // Ignored files are not reported by `git status --porcelain` so they
+    // pass cleanliness checks but block `git worktree remove`'s rmdir
+    // with "Directory not empty".
+    await Bun.write(join(worktreeDir, '.gitignore'), 'build/\n');
+    await runGitCommand(['add', '.gitignore'], worktreeDir);
+    await runGitCommand(['commit', '-m', 'add gitignore'], worktreeDir);
+    await mkdir(join(worktreeDir, 'build'), { recursive: true });
+    await Bun.write(join(worktreeDir, 'build', 'artifact.txt'), 'output');
+
+    const result = await removeWorktree(bareDir, worktreeDir);
+
+    expect(result).toEqual({ success: true, data: undefined });
+    expect(existsSync(worktreeDir)).toBe(false);
+    const list = await listWorktrees(bareDir);
+    expect(
+      list.success && list.data.some((wt) => wt.path === worktreeDir)
+    ).toBe(false);
+  });
+
+  test('refuses to remove a worktree with a paused rebase', async () => {
+    const bareDir = join(testDir, 'bare.git');
+    await cloneBare(sourceDir, bareDir);
+    await ensureRefspecConfig(bareDir);
+
+    // Worktree on a feature branch with a conflicting commit
+    const worktreeDir = join(testDir, 'worktree-rebase');
+    await createWorktree(bareDir, worktreeDir, 'feature');
+    await Bun.write(join(worktreeDir, 'conflict.txt'), 'feature version');
+    await runGitCommand(['add', 'conflict.txt'], worktreeDir);
+    await runGitCommand(['commit', '-m', 'feature change'], worktreeDir);
+
+    // Make a conflicting commit on the source's main branch and fetch it.
+    await Bun.write(join(sourceDir, 'conflict.txt'), 'main version');
+    await runGitCommand(['add', 'conflict.txt'], sourceDir);
+    await runGitCommand(['commit', '-m', 'main change'], sourceDir);
+    await runGitCommand(['fetch', 'origin'], bareDir);
+
+    // Start a rebase that conflicts and pauses.
+    const rebaseResult = await runGitCommand(
+      ['rebase', 'origin/main'],
+      worktreeDir
+    );
+    expect(rebaseResult.exitCode).not.toBe(0);
+
+    // Resolve and stage the conflict so `git status --porcelain` is clean.
+    // The rebase remains paused (not continued), which is the case
+    // `hasUncommittedChanges` doesn't catch — git's own safety must.
+    await runGitCommand(['checkout', '--theirs', 'conflict.txt'], worktreeDir);
+    await runGitCommand(['add', 'conflict.txt'], worktreeDir);
+
+    const result = await removeWorktree(bareDir, worktreeDir);
+
+    expect(result.success).toBe(false);
+    expect(existsSync(worktreeDir)).toBe(true);
+
+    await runGitCommand(['rebase', '--abort'], worktreeDir);
+  });
+
+  test('refuses to remove a locked worktree', async () => {
+    const bareDir = join(testDir, 'bare.git');
+    await cloneBare(sourceDir, bareDir);
+    await ensureRefspecConfig(bareDir);
+
+    const worktreeDir = join(testDir, 'worktree-locked');
+    await createWorktree(bareDir, worktreeDir, 'feature');
+    await runGitCommand(['worktree', 'lock', worktreeDir], bareDir);
+
+    const result = await removeWorktree(bareDir, worktreeDir);
+
+    expect(result.success).toBe(false);
+    expect(existsSync(worktreeDir)).toBe(true);
+
+    await runGitCommand(['worktree', 'unlock', worktreeDir], bareDir);
+  });
+
+  test('force-removes a worktree with uncommitted changes', async () => {
+    const bareDir = join(testDir, 'bare.git');
+    await cloneBare(sourceDir, bareDir);
+    await ensureRefspecConfig(bareDir);
+
+    const worktreeDir = join(testDir, 'worktree-dirty');
+    await createWorktree(bareDir, worktreeDir, 'feature');
+    await Bun.write(join(worktreeDir, 'dirty.txt'), 'unsaved');
+
+    // Without force, git refuses dirty worktrees.
+    const refuseResult = await removeWorktree(bareDir, worktreeDir);
+    expect(refuseResult.success).toBe(false);
+    expect(existsSync(worktreeDir)).toBe(true);
+
+    // With force, git removes anyway. This is what `cleanup` and `remove`
+    // use after their own merged/intentional-delete checks.
+    const forceResult = await removeWorktree(bareDir, worktreeDir, {
+      force: true,
+    });
+    expect(forceResult).toEqual({ success: true, data: undefined });
+    expect(existsSync(worktreeDir)).toBe(false);
   });
 
   test('new branch worktree does not track origin/main', async () => {
