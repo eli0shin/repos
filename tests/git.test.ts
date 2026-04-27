@@ -560,6 +560,14 @@ describe('createWorktree and removeWorktree', () => {
     await cloneBare(sourceDir, bareDir);
     await ensureRefspecConfig(bareDir);
 
+    // Resolve the source's default branch (CI may default to "master",
+    // local dev to "main") so the rebase target is portable.
+    const defaultBranchResult = await getDefaultBranch(bareDir);
+    expect(defaultBranchResult.success).toBe(true);
+    const defaultBranch = defaultBranchResult.success
+      ? defaultBranchResult.data
+      : 'main';
+
     // Worktree on a feature branch with a conflicting commit
     const worktreeDir = join(testDir, 'worktree-rebase');
     await createWorktree(bareDir, worktreeDir, 'feature');
@@ -567,7 +575,7 @@ describe('createWorktree and removeWorktree', () => {
     await runGitCommand(['add', 'conflict.txt'], worktreeDir);
     await runGitCommand(['commit', '-m', 'feature change'], worktreeDir);
 
-    // Make a conflicting commit on the source's main branch and fetch it.
+    // Make a conflicting commit on the source's default branch and fetch it.
     await Bun.write(join(sourceDir, 'conflict.txt'), 'main version');
     await runGitCommand(['add', 'conflict.txt'], sourceDir);
     await runGitCommand(['commit', '-m', 'main change'], sourceDir);
@@ -575,7 +583,7 @@ describe('createWorktree and removeWorktree', () => {
 
     // Start a rebase that conflicts and pauses.
     const rebaseResult = await runGitCommand(
-      ['rebase', 'origin/main'],
+      ['rebase', `origin/${defaultBranch}`],
       worktreeDir
     );
     expect(rebaseResult.exitCode).not.toBe(0);
