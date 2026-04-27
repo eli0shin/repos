@@ -139,7 +139,9 @@ async function processWorktree(
 
   // Remove worktree unless dry-run
   if (!options.dryRun) {
-    const removeResult = await removeWorktree(repo.path, worktree.path);
+    const removeResult = await removeWorktree(repo.path, worktree.path, {
+      force: true,
+    });
     if (!removeResult.success) {
       printError(
         `Error removing worktree ${worktree.branch}: ${removeResult.error}`
