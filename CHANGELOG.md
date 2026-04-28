@@ -1,5 +1,11 @@
 # repos
 
+## 1.3.0
+
+### Minor Changes
+
+- [#88](https://github.com/eli0shin/repos/pull/88) [`0b52aab`](https://github.com/eli0shin/repos/commit/0b52aab3cbf72176877fd5b7521b9f3324a3e89e) Thanks [@eli0shin](https://github.com/eli0shin)! - Auto-adopt untracked git repositories when running commands that require a tracked current repo.
+
 ## 1.2.6
 
 ### Patch Changes
