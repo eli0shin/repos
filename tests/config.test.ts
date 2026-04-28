@@ -1,5 +1,6 @@
 import { describe, expect, test, beforeEach, afterEach } from 'bun:test';
 import { mkdir, rm } from 'node:fs/promises';
+import { realpathSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -15,9 +16,12 @@ import {
   addStackEntry,
   removeStackEntry,
   updateRepoInConfig,
+  resolveRepoFromCwd,
 } from '../src/config.ts';
 import type { ReposConfig, RepoEntry } from '../src/types.ts';
-import { objectContaining } from './helpers.ts';
+import { createTestRepo, objectContaining } from './helpers.ts';
+import { runGitCommand } from '../src/git/index.ts';
+import { mockProcessExit, type MockExit } from './utils.ts';
 
 describe('getConfigPath', () => {
   const originalXdgConfigHome = process.env.XDG_CONFIG_HOME;
@@ -100,6 +104,138 @@ describe('extractRepoName', () => {
       success: false,
       error: 'Could not extract repo name from URL',
     });
+  });
+});
+
+describe('resolveRepoFromCwd', () => {
+  const testDir = '/tmp/repos-test-auto-adopt';
+  const configPath = join(testDir, 'config.json');
+  const repoDir = join(testDir, 'repo');
+  const nestedDir = join(repoDir, 'src', 'commands');
+  let originalCwd: string;
+  let exit: MockExit | undefined;
+
+  beforeEach(async () => {
+    originalCwd = process.cwd();
+    await rm(testDir, { recursive: true, force: true });
+    await createTestRepo(repoDir);
+    await mkdir(nestedDir, { recursive: true });
+    await runGitCommand(
+      ['remote', 'add', 'origin', 'git@github.com:user/repo.git'],
+      repoDir
+    );
+    await writeConfig(configPath, { repos: [] });
+  });
+
+  afterEach(async () => {
+    process.chdir(originalCwd);
+    exit?.mockRestore();
+    exit = undefined;
+    await rm(testDir, { recursive: true, force: true });
+  });
+
+  test('auto-adopts the current git repo from a nested directory', async () => {
+    process.chdir(nestedDir);
+
+    const config = await readConfig(configPath);
+    expect(config).toEqual({ success: true, data: { repos: [] } });
+    if (!config.success) throw new Error('config read failed');
+
+    const result = await resolveRepoFromCwd(configPath, config.data);
+    const repo = {
+      name: 'repo',
+      url: 'git@github.com:user/repo.git',
+      path: realpathSync(repoDir),
+    };
+
+    expect(result).toEqual({
+      repo,
+      config: { repos: [repo] },
+    });
+    expect(await readConfig(configPath)).toEqual({
+      success: true,
+      data: {
+        repos: [repo],
+      },
+    });
+  });
+
+  test('fails when auto-adopted repo name is already tracked elsewhere', async () => {
+    exit = mockProcessExit();
+    process.chdir(nestedDir);
+    await writeConfig(configPath, {
+      repos: [
+        {
+          name: 'repo',
+          url: 'git@github.com:user/other.git',
+          path: '/tmp/other/repo',
+        },
+      ],
+    });
+
+    const config = await readConfig(configPath);
+    expect(config).toEqual({
+      success: true,
+      data: {
+        repos: [
+          {
+            name: 'repo',
+            url: 'git@github.com:user/other.git',
+            path: '/tmp/other/repo',
+          },
+        ],
+      },
+    });
+    if (!config.success) throw new Error('config read failed');
+
+    await expect(resolveRepoFromCwd(configPath, config.data)).rejects.toThrow(
+      'process.exit(1)'
+    );
+  });
+
+  test('fails when current git repo has no origin remote', async () => {
+    exit = mockProcessExit();
+    process.chdir(nestedDir);
+    await runGitCommand(['remote', 'remove', 'origin'], repoDir);
+
+    const config = await readConfig(configPath);
+    expect(config).toEqual({ success: true, data: { repos: [] } });
+    if (!config.success) throw new Error('config read failed');
+
+    await expect(resolveRepoFromCwd(configPath, config.data)).rejects.toThrow(
+      'process.exit(1)'
+    );
+  });
+
+  test('fails when cwd is not inside a git repo', async () => {
+    exit = mockProcessExit();
+    process.chdir(testDir);
+
+    const config = await readConfig(configPath);
+    expect(config).toEqual({ success: true, data: { repos: [] } });
+    if (!config.success) throw new Error('config read failed');
+
+    await expect(resolveRepoFromCwd(configPath, config.data)).rejects.toThrow(
+      'process.exit(1)'
+    );
+  });
+
+  test('fails when cwd is inside an untracked linked worktree', async () => {
+    exit = mockProcessExit();
+    const worktreeDir = join(testDir, 'repo-feature');
+    await runGitCommand(
+      ['worktree', 'add', '-b', 'feature', worktreeDir],
+      repoDir
+    );
+    process.chdir(worktreeDir);
+
+    const config = await readConfig(configPath);
+    expect(config).toEqual({ success: true, data: { repos: [] } });
+    if (!config.success) throw new Error('config read failed');
+
+    await expect(resolveRepoFromCwd(configPath, config.data)).rejects.toThrow(
+      'process.exit(1)'
+    );
   });
 });
 

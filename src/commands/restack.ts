@@ -243,7 +243,6 @@ export async function restackCommand(
 ): Promise<void> {
   const config = await loadConfig(ctx.configPath);
 
-  // Find repo from current working directory
   const repo = await findRepoFromCwd(config, process.cwd());
   if (!repo) {
     printError('Error: Not inside a tracked repo.');

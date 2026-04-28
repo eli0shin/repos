@@ -1,7 +1,7 @@
 import type { CommandContext } from '../cli.ts';
 import {
   loadConfig,
-  findRepoFromCwd,
+  resolveRepoFromCwd,
   getWorktreePath,
   recordStack,
 } from '../config.ts';
@@ -26,14 +26,12 @@ export async function stackCommand(
   newBranch: string,
   options?: { tmux?: boolean }
 ): Promise<void> {
-  const config = await loadConfig(ctx.configPath);
+  const initialConfig = await loadConfig(ctx.configPath);
 
-  // Find repo from current working directory
-  const repo = await findRepoFromCwd(config, process.cwd());
-  if (!repo) {
-    printError('Error: Not inside a tracked repo.');
-    process.exit(1);
-  }
+  const { repo, config } = await resolveRepoFromCwd(
+    ctx.configPath,
+    initialConfig
+  );
 
   const worktreeConfigResult = await loadRepoWorktreeConfig(repo.path);
   if (!worktreeConfigResult.success) {

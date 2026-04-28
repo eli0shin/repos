@@ -1,4 +1,4 @@
-import { mkdir } from 'node:fs/promises';
+import { mkdir, realpath } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import {
@@ -9,8 +9,11 @@ import {
   getDefaultBranch,
   resolveRef,
   runGitCommand,
+  getGitRepoRoot,
+  getRemoteUrl,
+  isLinkedWorktreeRoot,
 } from './git/index.ts';
-import { printError } from './output.ts';
+import { printError, printStatus } from './output.ts';
 import type {
   RepoEntry,
   ReposConfig,
@@ -215,6 +218,74 @@ export async function resolveRepo(
     process.exit(1);
   }
   return repo;
+}
+
+export type ResolvedRepoFromCwd = {
+  repo: RepoEntry;
+  config: ReposConfig;
+};
+
+export async function resolveRepoWithConfig(
+  configPath: string,
+  config: ReposConfig,
+  repoName?: string
+): Promise<ResolvedRepoFromCwd> {
+  if (repoName) {
+    const repo = findRepo(config, repoName);
+    if (!repo) {
+      printError(`Error: "${repoName}" not found in config`);
+      process.exit(1);
+    }
+    return { repo, config };
+  }
+
+  return resolveRepoFromCwd(configPath, config);
+}
+
+export async function resolveRepoFromCwd(
+  configPath: string,
+  config: ReposConfig
+): Promise<ResolvedRepoFromCwd> {
+  const cwd = process.cwd();
+  const trackedRepo = await findRepoFromCwd(config, cwd);
+  if (trackedRepo) return { repo: trackedRepo, config };
+
+  const rootResult = await getGitRepoRoot(cwd);
+  if (!rootResult.success) {
+    printError('Error: Not inside a tracked repo.');
+    process.exit(1);
+  }
+
+  const repoPath = await realpath(rootResult.data);
+  if (await isLinkedWorktreeRoot(repoPath)) {
+    printError('Error: Cannot auto-adopt from inside a linked worktree.');
+    process.exit(1);
+  }
+
+  const name = basename(repoPath);
+  const existingRepo = findRepo(config, name);
+  if (existingRepo) {
+    printError(
+      `Error: Cannot auto-adopt "${name}" because that name is already tracked at ${existingRepo.path}`
+    );
+    process.exit(1);
+  }
+
+  const urlResult = await getRemoteUrl(repoPath);
+  if (!urlResult.success) {
+    printError('Error: Cannot auto-adopt repo without remote origin.');
+    process.exit(1);
+  }
+
+  const repo = {
+    name,
+    url: urlResult.data,
+    path: repoPath,
+  } satisfies RepoEntry;
+  const newConfig = addRepoToConfig(config, repo);
+  await saveConfig(configPath, newConfig);
+  printStatus(`Auto-adopted "${name}"`);
+  return { repo, config: newConfig };
 }
 
 export function getWorktreePath(repoPath: string, branch: string): string {

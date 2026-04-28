@@ -23,7 +23,6 @@ import { print, printError } from '../output.ts';
 export async function unstackCommand(ctx: CommandContext): Promise<void> {
   const config = await loadConfig(ctx.configPath);
 
-  // Find repo from current working directory
   const repo = await findRepoFromCwd(config, process.cwd());
   if (!repo) {
     printError('Error: Not inside a tracked repo.');

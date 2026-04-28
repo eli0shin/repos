@@ -1,4 +1,4 @@
-import { readdir } from 'node:fs/promises';
+import { lstat, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { OperationResult } from '../types.ts';
 import { runGitCommand } from './core.ts';
@@ -29,6 +29,28 @@ export async function isBareRepo(repoDir: string): Promise<boolean> {
 
 export async function isGitRepoOrBare(dir: string): Promise<boolean> {
   return (await isGitRepo(dir)) || (await isBareRepo(dir));
+}
+
+export async function getGitRepoRoot(
+  dir: string
+): Promise<OperationResult<string>> {
+  const result = await runGitCommand(['rev-parse', '--show-toplevel'], dir);
+
+  if (result.exitCode !== 0) {
+    return { success: false, error: 'Not inside a git repo' };
+  }
+
+  return { success: true, data: result.stdout };
+}
+
+export async function isLinkedWorktreeRoot(dir: string): Promise<boolean> {
+  try {
+    const gitPath = join(dir, '.git');
+    const stats = await lstat(gitPath);
+    return stats.isFile();
+  } catch {
+    return false;
+  }
 }
 
 export async function findGitRepos(parentDir: string): Promise<string[]> {
