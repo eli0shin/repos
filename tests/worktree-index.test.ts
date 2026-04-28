@@ -19,11 +19,11 @@ describe('worktree indexes', () => {
       ],
     } satisfies RepoEntry;
     const worktrees = [
-      { path: '/tmp/repo.git-a', branch: 'a', isMain: false, isBare: false },
-      { path: '/tmp/repo.git-b', branch: 'b', isMain: false, isBare: false },
-      { path: '/tmp/repo.git-c', branch: 'c', isMain: false, isBare: false },
-      { path: '/tmp/repo.git-d', branch: 'd', isMain: false, isBare: false },
-      { path: '/tmp/repo.git-e', branch: 'e', isMain: false, isBare: false },
+      { path: '/tmp/repo.git-a', branch: 'a', isMain: false },
+      { path: '/tmp/repo.git-b', branch: 'b', isMain: false },
+      { path: '/tmp/repo.git-c', branch: 'c', isMain: false },
+      { path: '/tmp/repo.git-d', branch: 'd', isMain: false },
+      { path: '/tmp/repo.git-e', branch: 'e', isMain: false },
     ] satisfies WorktreeInfo[];
 
     expect(getIndexedWorktrees(repo, worktrees)).toEqual([
@@ -31,35 +31,30 @@ describe('worktree indexes', () => {
         path: '/tmp/repo.git-a',
         branch: 'a',
         isMain: false,
-        isBare: false,
         index: 1,
       },
       {
         path: '/tmp/repo.git-b',
         branch: 'b',
         isMain: false,
-        isBare: false,
         index: 2,
       },
       {
         path: '/tmp/repo.git-c',
         branch: 'c',
         isMain: false,
-        isBare: false,
         index: 3,
       },
       {
         path: '/tmp/repo.git-d',
         branch: 'd',
         isMain: false,
-        isBare: false,
         index: 4,
       },
       {
         path: '/tmp/repo.git-e',
         branch: 'e',
         isMain: false,
-        isBare: false,
         index: 5,
       },
     ]);
