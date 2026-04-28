@@ -1,5 +1,11 @@
 # repos
 
+## 1.2.4
+
+### Patch Changes
+
+- [#82](https://github.com/eli0shin/repos/pull/82) [`0d04d3c`](https://github.com/eli0shin/repos/commit/0d04d3cfa5f741483c567a26603a0c0ce0077026) Thanks [@eli0shin](https://github.com/eli0shin)! - Add worktree indexes to scoped list output and allow `repos work` to resume worktrees by index.
+
 ## 1.2.3
 
 ### Patch Changes
