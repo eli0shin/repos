@@ -95,7 +95,7 @@ describe('repos list command - auto-detect repo', () => {
     const expectedOutput = [
       `  repo1 (bare) ✓`,
       `    ${bareDir1}`,
-      `      └─ feature: ${realWt1Path}`,
+      `      └─ [1] feature: ${realWt1Path}`,
       '',
     ].join('\n');
     expect(output).toEqual(expectedOutput);
@@ -176,8 +176,8 @@ describe('repos list command - auto-detect repo', () => {
     const expectedOutput = [
       `  repo (bare) ✓`,
       `    ${bareDir}`,
-      `      └─ parent: ${realParentPath}`,
-      `         └─ child: ${realChildPath} (stacked)`,
+      `      └─ [1] parent: ${realParentPath}`,
+      `         └─ [2] child: ${realChildPath} (stacked)`,
       '',
     ].join('\n');
     expect(output).toEqual(expectedOutput);
@@ -217,7 +217,7 @@ describe('repos list command - auto-detect repo', () => {
     const expectedOutput = [
       `  repo1 (bare) ✓`,
       `    ${bareDir1}`,
-      `      └─ feature: ${realWt1Path}`,
+      `      └─ [1] feature: ${realWt1Path}`,
       '',
     ].join('\n');
     expect(output).toEqual(expectedOutput);
@@ -277,11 +277,11 @@ describe('repos list command - auto-detect repo', () => {
     const expectedOutput = [
       `  repo (bare) ✓`,
       `    ${bareDir}`,
-      `      ├─ a: ${realAPath} (stacked)`,
-      `      │  └─ b: ${realBPath} (stacked)`,
-      `      ├─ c: ${realCPath} (stacked)`,
-      `      │  └─ d: ${realDPath} (stacked)`,
-      `      └─ e: ${realEPath} (stacked)`,
+      `      ├─ [1] a: ${realAPath} (stacked)`,
+      `      │  └─ [2] b: ${realBPath} (stacked)`,
+      `      ├─ [3] c: ${realCPath} (stacked)`,
+      `      │  └─ [4] d: ${realDPath} (stacked)`,
+      `      └─ [5] e: ${realEPath} (stacked)`,
       '',
     ].join('\n');
     expect(output).toEqual(expectedOutput);
@@ -341,11 +341,11 @@ describe('repos list command - auto-detect repo', () => {
     const expectedOutput = [
       `  repo ✓`,
       `    ${repoDir}`,
-      `      ├─ a: ${realAPath} (stacked)`,
-      `      │  └─ b: ${realBPath} (stacked)`,
-      `      ├─ c: ${realCPath} (stacked)`,
-      `      │  └─ d: ${realDPath} (stacked)`,
-      `      └─ e: ${realEPath} (stacked)`,
+      `      ├─ [1] a: ${realAPath} (stacked)`,
+      `      │  └─ [2] b: ${realBPath} (stacked)`,
+      `      ├─ [3] c: ${realCPath} (stacked)`,
+      `      │  └─ [4] d: ${realDPath} (stacked)`,
+      `      └─ [5] e: ${realEPath} (stacked)`,
       '',
     ].join('\n');
     expect(output).toEqual(expectedOutput);

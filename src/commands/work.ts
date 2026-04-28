@@ -16,18 +16,73 @@ import { print, printError, printStatus } from '../output.ts';
 import { openTmuxSession } from '../tmux.ts';
 import { loadRepoWorktreeConfig } from '../worktree-config.ts';
 import { printSetupWarnings, runWorktreeSetup } from '../worktree-setup.ts';
+import { getIndexedWorktrees } from './list.ts';
+
+type WorkOptions = { tmux?: boolean; index?: boolean | number };
+
+function getRequestedIndex(
+  branch: string | undefined,
+  options?: WorkOptions
+): number | undefined {
+  if (typeof options?.index === 'number') {
+    return options.index;
+  }
+
+  if (options?.index) {
+    return branch ? Number(branch) : undefined;
+  }
+
+  return undefined;
+}
 
 export async function workCommand(
   ctx: CommandContext,
-  branch: string,
+  branch?: string,
   repoName?: string,
-  options?: { tmux?: boolean }
+  options?: WorkOptions
 ): Promise<void> {
   const config = await loadConfig(ctx.configPath);
   const repo = await resolveRepo(config, repoName);
+  const requestedIndex = getRequestedIndex(branch, options);
+
+  if (
+    options?.index &&
+    (!requestedIndex || !Number.isInteger(requestedIndex))
+  ) {
+    printError(
+      `Invalid worktree index ${branch ?? ''}. Run repos list from this repo to see indexes.`
+    );
+    process.exit(1);
+  }
 
   // Check if worktree already exists
   const worktreesResult = await listWorktrees(repo.path);
+  if (requestedIndex) {
+    const indexedWorktrees = worktreesResult.success
+      ? getIndexedWorktrees(repo, worktreesResult.data)
+      : [];
+    const indexed = indexedWorktrees.find((wt) => wt.index === requestedIndex);
+
+    if (!indexed) {
+      printError(
+        `Invalid worktree index ${requestedIndex}. Run repos list from this repo to see indexes.`
+      );
+      process.exit(1);
+    }
+
+    if (options?.tmux) {
+      await openTmuxSession(repo.name, indexed.branch, indexed.path);
+    } else {
+      print(indexed.path);
+    }
+    return;
+  }
+
+  if (!branch) {
+    printError('Error: missing required argument "branch"');
+    process.exit(1);
+  }
+
   const existing = worktreesResult.success
     ? findWorktreeByBranch(worktreesResult.data, branch)
     : undefined;

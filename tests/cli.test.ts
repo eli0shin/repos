@@ -56,7 +56,7 @@ Commands:
   adopt                                 Add existing repos to config
   sync                                  Adopt existing + clone missing repos
   update                                Update repos CLI to latest version
-  work [options] <branch> [repo-name]   Create a worktree for a branch
+  work [options] [branch] [repo-name]   Create a worktree for a branch
   stack [options] <branch>              Create a stacked worktree from current
                                         branch
   restack [options]                     Rebase current branch and children on

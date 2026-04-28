@@ -142,12 +142,19 @@ program
 program
   .command('work')
   .description('Create a worktree for a branch')
-  .argument('<branch>', 'Branch name for the worktree')
+  .argument('[branch]', 'Branch name for the worktree')
   .argument('[repo-name]', 'Repo name (optional if inside a tracked repo)')
   .option('-t, --tmux', 'Open a tmux session in the worktree')
+  .option('-i, --index [index]', 'Use a worktree index from repos list')
   .action(async (branch, repoName, options) => {
     await workCommand(getCommandContext(), branch, repoName, {
       tmux: options.tmux,
+      index:
+        options.index === undefined
+          ? undefined
+          : options.index === true
+            ? true
+            : Number(options.index),
     });
   });
 
