@@ -1,5 +1,9 @@
 #!/usr/bin/env bun
-import { Command, InvalidArgumentError } from '@commander-js/extra-typings';
+import {
+  Command,
+  InvalidArgumentError,
+  Option,
+} from '@commander-js/extra-typings';
 import { version } from '../package.json';
 import {
   getConfigPath,
@@ -30,6 +34,7 @@ import { initCommand, initPrintCommand } from './commands/init.ts';
 import { runUpdaterWorker } from './updater-worker.ts';
 import { handleAutoUpdate, printUpdateMessage } from './auto-update.ts';
 import { print, printError } from './output.ts';
+import { isInsideTmux } from './tmux.ts';
 import type { UpdateBehavior } from './types.ts';
 
 // Handle update worker mode early
@@ -152,7 +157,12 @@ program
   .description('Create a worktree for a branch')
   .argument('[branch]', 'Branch name for the worktree')
   .argument('[repo-name]', 'Repo name (optional if inside a tracked repo)')
-  .option('-t, --tmux', 'Open a tmux session in the worktree')
+  .addOption(
+    new Option('-t, --tmux', 'Open a tmux session in the worktree').default(
+      isInsideTmux()
+    )
+  )
+  .option('--no-tmux', 'Do not use tmux, even inside a tmux session')
   .option(
     '-i, --index <index>',
     'Use a worktree index from repos list',
@@ -169,7 +179,12 @@ program
   .command('stack')
   .description('Create a stacked worktree from current branch')
   .argument('<branch>', 'New branch name')
-  .option('-t, --tmux', 'Open a tmux session in the worktree')
+  .addOption(
+    new Option('-t, --tmux', 'Open a tmux session in the worktree').default(
+      isInsideTmux()
+    )
+  )
+  .option('--no-tmux', 'Do not use tmux, even inside a tmux session')
   .action(async (branch, options) => {
     await stackCommand(getCommandContext(), branch, {
       tmux: options.tmux,
@@ -231,15 +246,18 @@ program
   .argument('[repo-name]', 'Repo name (optional if inside a tracked repo)')
   .option('--force', 'Force removal even if branch has stacked children')
   .option('--dry-run', 'Show what would be removed without removing')
-  .option(
-    '-t, --tmux',
-    'Kill the worktree tmux session and switch to the main worktree session'
+  .addOption(
+    new Option(
+      '-t, --tmux',
+      'Kill the worktree tmux session and switch to the main worktree session'
+    ).default(isInsideTmux())
   )
+  .option('--no-tmux', 'Do not use tmux, even inside a tmux session')
   .action(async (branch, repoName, options) => {
     await cleanCommand(getCommandContext(), branch, repoName, {
       force: options.force ?? false,
       dryRun: options.dryRun ?? false,
-      tmux: options.tmux ?? false,
+      tmux: options.tmux,
     });
   });
 
@@ -269,11 +287,17 @@ program
   .command('cleanup')
   .description('Remove worktrees for merged or deleted branches')
   .option('--dry-run', 'Show what would be removed without removing')
-  .option('-t, --tmux', 'Also kill tmux sessions for removed worktrees')
+  .addOption(
+    new Option(
+      '-t, --tmux',
+      'Also kill tmux sessions for removed worktrees'
+    ).default(isInsideTmux())
+  )
+  .option('--no-tmux', 'Do not use tmux, even inside a tmux session')
   .action(async (options) => {
     await cleanupCommand(getCommandContext(), {
       dryRun: options.dryRun ?? false,
-      tmux: options.tmux ?? false,
+      tmux: options.tmux,
     });
   });
 
