@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-import { Command } from '@commander-js/extra-typings';
+import { Command, InvalidArgumentError } from '@commander-js/extra-typings';
 import { version } from '../package.json';
 import {
   getConfigPath,
@@ -46,6 +46,14 @@ function getCommandContext(): CommandContext {
   return {
     configPath: getConfigPath(),
   };
+}
+
+function parseWorktreeIndex(value: string): number {
+  const index = Number(value);
+  if (!Number.isInteger(index) || index < 1) {
+    throw new InvalidArgumentError('index must be a positive integer');
+  }
+  return index;
 }
 
 type UpdateConfig = {
@@ -145,16 +153,15 @@ program
   .argument('[branch]', 'Branch name for the worktree')
   .argument('[repo-name]', 'Repo name (optional if inside a tracked repo)')
   .option('-t, --tmux', 'Open a tmux session in the worktree')
-  .option('-i, --index [index]', 'Use a worktree index from repos list')
+  .option(
+    '-i, --index <index>',
+    'Use a worktree index from repos list',
+    parseWorktreeIndex
+  )
   .action(async (branch, repoName, options) => {
     await workCommand(getCommandContext(), branch, repoName, {
       tmux: options.tmux,
-      index:
-        options.index === undefined
-          ? undefined
-          : options.index === true
-            ? true
-            : Number(options.index),
+      index: options.index,
     });
   });
 

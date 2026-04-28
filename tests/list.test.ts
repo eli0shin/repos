@@ -136,6 +136,39 @@ describe('repos list command - auto-detect repo', () => {
     expect(output).toEqual(expectedOutput);
   });
 
+  test('does not show worktree indexes when outside any tracked repo', async () => {
+    const bareDir = join(testDir, 'bare.git');
+    await cloneBare(sourceDir1, bareDir);
+
+    const worktreePath = join(testDir, 'bare.git-feature');
+    await runGitCommand(
+      ['worktree', 'add', '-b', 'feature', worktreePath],
+      bareDir
+    );
+
+    const config = {
+      repos: [{ name: 'repo', url: sourceDir1, path: bareDir, bare: true }],
+    } satisfies ReposConfig;
+    await writeConfig(configPath, config);
+
+    process.chdir('/tmp');
+    const capture = captureOutput();
+    await listCommand({ configPath });
+    capture.restore();
+
+    const output = capture.output.join('');
+    const realWorktreePath = await realpath(worktreePath);
+    const expectedOutput = [
+      'Tracked repositories:',
+      '',
+      `  repo (bare) ✓`,
+      `    ${bareDir}`,
+      `      └─ feature: ${realWorktreePath}`,
+      '',
+    ].join('\n');
+    expect(output).toEqual(expectedOutput);
+  });
+
   test('shows worktrees with stack relationships in tree format', async () => {
     // Setup: Create bare repo with stacked worktrees
     const bareDir = join(testDir, 'bare.git');

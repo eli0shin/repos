@@ -9,59 +9,11 @@ import { isGitRepoOrBare, listWorktrees } from '../git/index.ts';
 import type { WorktreeInfo } from '../git/index.ts';
 import type { RepoEntry } from '../types.ts';
 import { print } from '../output.ts';
-
-export type IndexedWorktree = WorktreeInfo & { index: number };
+import { getIndexedWorktrees, getRootWorktrees } from '../worktree-index.ts';
 
 type PrintRepoOptions = {
   showIndexes: boolean;
 };
-
-function getRootWorktrees(
-  repo: RepoEntry,
-  worktrees: WorktreeInfo[]
-): WorktreeInfo[] {
-  return worktrees.filter((wt) => {
-    const parent = getParentBranch(repo, wt.branch);
-    return !parent || !worktrees.some((w) => w.branch === parent);
-  });
-}
-
-function appendIndexedWorktreeTree(
-  repo: RepoEntry,
-  worktrees: WorktreeInfo[],
-  branch: string,
-  indexed: IndexedWorktree[]
-): void {
-  const wt = worktrees.find((w) => w.branch === branch);
-  if (!wt) return;
-
-  if (wt.branch) {
-    indexed.push({ ...wt, index: indexed.length + 1 });
-  }
-
-  const children = getChildBranches(repo, branch).filter((child) =>
-    worktrees.some((w) => w.branch === child)
-  );
-
-  children.forEach((child) => {
-    appendIndexedWorktreeTree(repo, worktrees, child, indexed);
-  });
-}
-
-export function getIndexedWorktrees(
-  repo: RepoEntry,
-  worktrees: WorktreeInfo[]
-): IndexedWorktree[] {
-  const nonMainWorktrees = worktrees.filter((wt) => !wt.isMain);
-  const rootWorktrees = getRootWorktrees(repo, nonMainWorktrees);
-  const indexed: IndexedWorktree[] = [];
-
-  rootWorktrees.forEach((wt) => {
-    appendIndexedWorktreeTree(repo, nonMainWorktrees, wt.branch, indexed);
-  });
-
-  return indexed;
-}
 
 function printWorktreeTree(
   repo: RepoEntry,
@@ -69,7 +21,7 @@ function printWorktreeTree(
   branch: string,
   indent: string,
   isLast: boolean,
-  indexedWorktrees?: IndexedWorktree[]
+  indexByPath?: Map<string, number>
 ): void {
   const wt = worktrees.find((w) => w.branch === branch);
   if (!wt) return;
@@ -77,10 +29,8 @@ function printWorktreeTree(
   const prefix = indent + (isLast ? '└─ ' : '├─ ');
   const parentBranch = getParentBranch(repo, branch);
   const stackedLabel = parentBranch ? ' (stacked)' : '';
-  const indexed = indexedWorktrees?.find(
-    (indexedWt) => indexedWt.path === wt.path
-  );
-  const indexLabel = indexed ? `[${indexed.index}] ` : '';
+  const index = indexByPath?.get(wt.path);
+  const indexLabel = index ? `[${index}] ` : '';
   print(`${prefix}${indexLabel}${wt.branch}: ${wt.path}${stackedLabel}`);
 
   const children = getChildBranches(repo, branch).filter((child) =>
@@ -95,7 +45,7 @@ function printWorktreeTree(
       child,
       newIndent,
       index === children.length - 1,
-      indexedWorktrees
+      indexByPath
     );
   });
 }
@@ -117,8 +67,13 @@ async function printRepo(
     if (worktreesResult.success) {
       const nonMainWorktrees = worktreesResult.data.filter((wt) => !wt.isMain);
       const rootWorktrees = getRootWorktrees(repo, nonMainWorktrees);
-      const indexedWorktrees = options.showIndexes
-        ? getIndexedWorktrees(repo, worktreesResult.data)
+      const indexByPath = options.showIndexes
+        ? new Map(
+            getIndexedWorktrees(repo, nonMainWorktrees).map((wt) => [
+              wt.path,
+              wt.index,
+            ])
+          )
         : undefined;
 
       // Print each root and its children
@@ -129,7 +84,7 @@ async function printRepo(
           wt.branch,
           '      ',
           index === rootWorktrees.length - 1,
-          indexedWorktrees
+          indexByPath
         );
       });
     }

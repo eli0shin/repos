@@ -16,24 +16,9 @@ import { print, printError, printStatus } from '../output.ts';
 import { openTmuxSession } from '../tmux.ts';
 import { loadRepoWorktreeConfig } from '../worktree-config.ts';
 import { printSetupWarnings, runWorktreeSetup } from '../worktree-setup.ts';
-import { getIndexedWorktrees } from './list.ts';
+import { getIndexedWorktrees } from '../worktree-index.ts';
 
-type WorkOptions = { tmux?: boolean; index?: boolean | number };
-
-function getRequestedIndex(
-  branch: string | undefined,
-  options?: WorkOptions
-): number | undefined {
-  if (typeof options?.index === 'number') {
-    return options.index;
-  }
-
-  if (options?.index) {
-    return branch ? Number(branch) : undefined;
-  }
-
-  return undefined;
-}
+type WorkOptions = { tmux?: boolean; index?: number };
 
 export async function workCommand(
   ctx: CommandContext,
@@ -43,23 +28,26 @@ export async function workCommand(
 ): Promise<void> {
   const config = await loadConfig(ctx.configPath);
   const repo = await resolveRepo(config, repoName);
-  const requestedIndex = getRequestedIndex(branch, options);
+  const requestedIndex = options?.index;
 
   if (
-    options?.index &&
-    (!requestedIndex || !Number.isInteger(requestedIndex))
+    requestedIndex !== undefined &&
+    (!Number.isInteger(requestedIndex) || requestedIndex < 1)
   ) {
     printError(
-      `Invalid worktree index ${branch ?? ''}. Run repos list from this repo to see indexes.`
+      `Invalid worktree index ${requestedIndex}. Run repos list from this repo to see indexes.`
     );
     process.exit(1);
   }
 
   // Check if worktree already exists
   const worktreesResult = await listWorktrees(repo.path);
-  if (requestedIndex) {
+  if (requestedIndex !== undefined) {
     const indexedWorktrees = worktreesResult.success
-      ? getIndexedWorktrees(repo, worktreesResult.data)
+      ? getIndexedWorktrees(
+          repo,
+          worktreesResult.data.filter((wt) => !wt.isMain)
+        )
       : [];
     const indexed = indexedWorktrees.find((wt) => wt.index === requestedIndex);
 
