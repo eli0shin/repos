@@ -7,11 +7,14 @@ import {
 } from '../config.ts';
 import {
   createWorktreeFromBranch,
+  fetchOrigin,
   listWorktrees,
   ensureRefspecConfig,
   findWorktreeByDirectory,
   findWorktreeByBranch,
   getHeadCommit,
+  getDefaultBranch,
+  resolveRef,
 } from '../git/index.ts';
 import { print, printError, printStatus } from '../output.ts';
 import { openTmuxSession } from '../tmux.ts';
@@ -71,6 +74,42 @@ export async function stackCommand(
   // Ensure refspec is configured correctly (fixes bare repo issues)
   await ensureRefspecConfig(repo.path);
 
+  const defaultBranchResult = await getDefaultBranch(repo.path);
+  if (!defaultBranchResult.success) {
+    printError(`Error: ${defaultBranchResult.error}`);
+    process.exit(1);
+  }
+
+  const defaultBranch = defaultBranchResult.data;
+  const isStackingFromDefaultBranch = parentBranch === defaultBranch;
+  let sourceRef = parentBranch;
+  let parentCommit: string;
+
+  if (isStackingFromDefaultBranch) {
+    const fetchResult = await fetchOrigin(repo.path);
+    if (!fetchResult.success) {
+      printError(`Error: Failed to fetch origin: ${fetchResult.error}`);
+      process.exit(1);
+    }
+
+    sourceRef = `origin/${defaultBranch}`;
+    const parentCommitResult = await resolveRef(repo.path, sourceRef);
+    if (!parentCommitResult.success) {
+      printError(`Error: ${parentCommitResult.error}`);
+      process.exit(1);
+    }
+    parentCommit = parentCommitResult.data;
+  } else {
+    // Get the current HEAD of the parent branch before creating the child.
+    // This becomes the fork point for future restack operations.
+    const parentHeadResult = await getHeadCommit(currentWorktree.path);
+    if (!parentHeadResult.success) {
+      printError(`Error: ${parentHeadResult.error}`);
+      process.exit(1);
+    }
+    parentCommit = parentHeadResult.data;
+  }
+
   const worktreePath = getWorktreePath(repo.path, newBranch);
   printStatus(
     `Creating stacked branch "${newBranch}" from "${parentBranch}"...`
@@ -80,19 +119,11 @@ export async function stackCommand(
     repo.path,
     worktreePath,
     newBranch,
-    parentBranch
+    sourceRef
   );
 
   if (!result.success) {
     printError(`Error: ${result.error}`);
-    process.exit(1);
-  }
-
-  // Get the current HEAD of the parent branch (before cd'ing to new worktree)
-  // This becomes the fork point for future restack operations
-  const parentHeadResult = await getHeadCommit(currentWorktree.path);
-  if (!parentHeadResult.success) {
-    printError(`Error: ${parentHeadResult.error}`);
     process.exit(1);
   }
 
@@ -104,7 +135,7 @@ export async function stackCommand(
     repo,
     parentBranch,
     newBranch,
-    parentHeadResult.data
+    parentCommit
   );
 
   const setupResult = await runWorktreeSetup(

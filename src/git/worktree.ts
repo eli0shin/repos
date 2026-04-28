@@ -149,7 +149,10 @@ export async function createWorktree(
   } else {
     const fetchResult = await fetchOrigin(repoDir);
     if (!fetchResult.success) {
-      return fetchResult;
+      return {
+        success: false,
+        error: `Failed to fetch origin: ${fetchResult.error}`,
+      };
     }
 
     // Get default branch to base new branch on

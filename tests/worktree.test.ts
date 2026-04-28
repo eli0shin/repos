@@ -128,7 +128,7 @@ describe('repos work command', () => {
     });
   });
 
-  test('creates new branch from latest origin default branch', async () => {
+  test('creates new branch and base ref from latest origin default branch', async () => {
     const repoDir = join(testDir, 'repo');
     await runGitCommand(['clone', sourceDir, repoDir]);
 
@@ -137,7 +137,7 @@ describe('repos work command', () => {
     await runGitCommand(['commit', '-m', 'latest main commit'], sourceDir);
 
     const latestMainCommit = await getHeadCommit(sourceDir);
-    expect(latestMainCommit.success).toBe(true);
+    expect(latestMainCommit).toEqual({ success: true, data: anyString() });
 
     const config = {
       repos: [{ name: 'repo', url: sourceDir, path: repoDir }],
@@ -150,27 +150,6 @@ describe('repos work command', () => {
     const worktreePath = join(testDir, 'repo-feature');
     const featureCommit = await getHeadCommit(worktreePath);
     expect(featureCommit).toEqual(latestMainCommit);
-  });
-
-  test('records base ref from latest origin default branch', async () => {
-    const repoDir = join(testDir, 'repo');
-    await runGitCommand(['clone', sourceDir, repoDir]);
-
-    await Bun.write(join(sourceDir, 'latest.txt'), 'latest');
-    await runGitCommand(['add', '.'], sourceDir);
-    await runGitCommand(['commit', '-m', 'latest main commit'], sourceDir);
-
-    const latestMainCommit = await getHeadCommit(sourceDir);
-    expect(latestMainCommit.success).toBe(true);
-
-    const config = {
-      repos: [{ name: 'repo', url: sourceDir, path: repoDir }],
-    } satisfies ReposConfig;
-    await writeConfig(configPath, config);
-
-    const ctx = { configPath };
-    await workCommand(ctx, 'feature', 'repo');
-
     const baseRef = await getBaseRef(repoDir, 'feature');
     expect(baseRef).toEqual(latestMainCommit);
   });
@@ -1540,6 +1519,69 @@ describe('repos stack command', () => {
         ],
       },
     });
+  });
+
+  test('creates stacked worktree from latest origin default branch when stacking from default branch', async () => {
+    const repoDir = join(testDir, 'repo');
+    await runGitCommand(['clone', sourceDir, repoDir]);
+
+    await Bun.write(join(sourceDir, 'latest.txt'), 'latest');
+    await runGitCommand(['add', '.'], sourceDir);
+    await runGitCommand(['commit', '-m', 'latest main commit'], sourceDir);
+
+    const latestMainCommit = await getHeadCommit(sourceDir);
+    expect(latestMainCommit).toEqual({ success: true, data: anyString() });
+
+    const config = {
+      repos: [{ name: 'repo', url: sourceDir, path: repoDir }],
+    } satisfies ReposConfig;
+    await writeConfig(configPath, config);
+
+    const ctx = { configPath };
+    process.chdir(repoDir);
+    await stackCommand(ctx, 'child-branch');
+
+    const childWorktreePath = join(testDir, 'repo-child-branch');
+    const childCommit = await getHeadCommit(childWorktreePath);
+    expect(childCommit).toEqual(latestMainCommit);
+
+    const baseRef = await getBaseRef(repoDir, 'child-branch');
+    expect(baseRef).toEqual(latestMainCommit);
+  });
+
+  test('creates stacked worktree from local parent branch head', async () => {
+    const bareDir = join(testDir, 'bare.git');
+    await cloneBare(sourceDir, bareDir);
+
+    const config = {
+      repos: [{ name: 'bare', url: sourceDir, path: bareDir, bare: true }],
+    } satisfies ReposConfig;
+    await writeConfig(configPath, config);
+
+    const ctx = { configPath };
+    await workCommand(ctx, 'parent-branch', 'bare');
+    const parentWorktreePath = join(testDir, 'bare.git-parent-branch');
+
+    await Bun.write(join(parentWorktreePath, 'parent.txt'), 'parent content');
+    await runGitCommand(['add', '.'], parentWorktreePath);
+    await runGitCommand(['commit', '-m', 'parent commit'], parentWorktreePath);
+
+    const parentCommit = await getHeadCommit(parentWorktreePath);
+    expect(parentCommit).toEqual({ success: true, data: anyString() });
+
+    await Bun.write(join(sourceDir, 'latest.txt'), 'latest');
+    await runGitCommand(['add', '.'], sourceDir);
+    await runGitCommand(['commit', '-m', 'latest main commit'], sourceDir);
+
+    process.chdir(parentWorktreePath);
+    await stackCommand(ctx, 'child-branch');
+
+    const childWorktreePath = join(testDir, 'bare.git-child-branch');
+    const childCommit = await getHeadCommit(childWorktreePath);
+    expect(childCommit).toEqual(parentCommit);
+
+    const baseRef = await getBaseRef(bareDir, 'child-branch');
+    expect(baseRef).toEqual(parentCommit);
   });
 
   test('fails when not inside a worktree', async () => {
