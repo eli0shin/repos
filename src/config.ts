@@ -202,8 +202,7 @@ export async function findRepoFromCwd(
 
 export async function resolveRepo(
   config: ReposConfig,
-  repoName?: string,
-  configPath?: string
+  repoName?: string
 ): Promise<RepoEntry> {
   if (repoName) {
     const repo = findRepo(config, repoName);
@@ -213,9 +212,7 @@ export async function resolveRepo(
     }
     return repo;
   }
-  const repo = configPath
-    ? (await resolveRepoFromCwd(configPath, config)).repo
-    : await findRepoFromCwd(config, process.cwd());
+  const repo = await findRepoFromCwd(config, process.cwd());
   if (!repo) {
     printError('Error: Not inside a tracked repo. Specify repo name.');
     process.exit(1);
