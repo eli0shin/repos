@@ -1,5 +1,12 @@
 # repos
 
+## 1.2.5
+
+### Patch Changes
+
+- [#84](https://github.com/eli0shin/repos/pull/84) [`8f2346a`](https://github.com/eli0shin/repos/commit/8f2346a46f0dc745b963f5c13feff6f4691c2c73) Thanks [@eli0shin](https://github.com/eli0shin)! - Default tmux-enabled commands to use tmux when run inside an existing tmux
+  session, with `--no-tmux` to opt out.
+
 ## 1.2.4
 
 ### Patch Changes
