@@ -1,4 +1,4 @@
-import { readdir } from 'node:fs/promises';
+import { lstat, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { OperationResult } from '../types.ts';
 import { runGitCommand } from './core.ts';
@@ -41,6 +41,16 @@ export async function getGitRepoRoot(
   }
 
   return { success: true, data: result.stdout };
+}
+
+export async function isLinkedWorktreeRoot(dir: string): Promise<boolean> {
+  try {
+    const gitPath = join(dir, '.git');
+    const stats = await lstat(gitPath);
+    return stats.isFile();
+  } catch {
+    return false;
+  }
 }
 
 export async function findGitRepos(parentDir: string): Promise<string[]> {

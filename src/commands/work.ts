@@ -1,7 +1,7 @@
 import type { CommandContext } from '../cli.ts';
 import {
   loadConfig,
-  resolveRepo,
+  resolveRepoWithConfig,
   getWorktreePath,
   checkIsNewBranch,
   recordStackOnDefaultBranch,
@@ -26,8 +26,12 @@ export async function workCommand(
   repoName?: string,
   options?: WorkOptions
 ): Promise<void> {
-  const config = await loadConfig(ctx.configPath);
-  const repo = await resolveRepo(config, repoName, ctx.configPath);
+  const initialConfig = await loadConfig(ctx.configPath);
+  const { repo, config } = await resolveRepoWithConfig(
+    ctx.configPath,
+    initialConfig,
+    repoName
+  );
   const requestedIndex = options?.index;
 
   if (

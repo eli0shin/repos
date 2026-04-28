@@ -11,6 +11,7 @@ import {
   runGitCommand,
   getGitRepoRoot,
   getRemoteUrl,
+  isLinkedWorktreeRoot,
 } from './git/index.ts';
 import { printError, printStatus } from './output.ts';
 import type {
@@ -213,7 +214,7 @@ export async function resolveRepo(
     return repo;
   }
   const repo = configPath
-    ? await resolveRepoFromCwd(configPath, config)
+    ? (await resolveRepoFromCwd(configPath, config)).repo
     : await findRepoFromCwd(config, process.cwd());
   if (!repo) {
     printError('Error: Not inside a tracked repo. Specify repo name.');
@@ -222,13 +223,35 @@ export async function resolveRepo(
   return repo;
 }
 
+export type ResolvedRepoFromCwd = {
+  repo: RepoEntry;
+  config: ReposConfig;
+};
+
+export async function resolveRepoWithConfig(
+  configPath: string,
+  config: ReposConfig,
+  repoName?: string
+): Promise<ResolvedRepoFromCwd> {
+  if (repoName) {
+    const repo = findRepo(config, repoName);
+    if (!repo) {
+      printError(`Error: "${repoName}" not found in config`);
+      process.exit(1);
+    }
+    return { repo, config };
+  }
+
+  return resolveRepoFromCwd(configPath, config);
+}
+
 export async function resolveRepoFromCwd(
   configPath: string,
   config: ReposConfig
-): Promise<RepoEntry> {
+): Promise<ResolvedRepoFromCwd> {
   const cwd = process.cwd();
   const trackedRepo = await findRepoFromCwd(config, cwd);
-  if (trackedRepo) return trackedRepo;
+  if (trackedRepo) return { repo: trackedRepo, config };
 
   const rootResult = await getGitRepoRoot(cwd);
   if (!rootResult.success) {
@@ -237,6 +260,11 @@ export async function resolveRepoFromCwd(
   }
 
   const repoPath = await realpath(rootResult.data);
+  if (await isLinkedWorktreeRoot(repoPath)) {
+    printError('Error: Cannot auto-adopt from inside a linked worktree.');
+    process.exit(1);
+  }
+
   const name = basename(repoPath);
   const existingRepo = findRepo(config, name);
   if (existingRepo) {
@@ -259,9 +287,8 @@ export async function resolveRepoFromCwd(
   } satisfies RepoEntry;
   const newConfig = addRepoToConfig(config, repo);
   await saveConfig(configPath, newConfig);
-  config.repos = newConfig.repos;
-  printStatus(`Adopted "${name}"`);
-  return repo;
+  printStatus(`Auto-adopted "${name}"`);
+  return { repo, config: newConfig };
 }
 
 export function getWorktreePath(repoPath: string, branch: string): string {

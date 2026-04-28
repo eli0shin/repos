@@ -141,12 +141,16 @@ describe('resolveRepoFromCwd', () => {
     expect(config).toEqual({ success: true, data: { repos: [] } });
     if (!config.success) throw new Error('config read failed');
 
-    const repo = await resolveRepoFromCwd(configPath, config.data);
-
-    expect(repo).toEqual({
+    const result = await resolveRepoFromCwd(configPath, config.data);
+    const repo = {
       name: 'repo',
       url: 'git@github.com:user/repo.git',
       path: realpathSync(repoDir),
+    };
+
+    expect(result).toEqual({
+      repo,
+      config: { repos: [repo] },
     });
     expect(await readConfig(configPath)).toEqual({
       success: true,
@@ -182,6 +186,51 @@ describe('resolveRepoFromCwd', () => {
         ],
       },
     });
+    if (!config.success) throw new Error('config read failed');
+
+    await expect(resolveRepoFromCwd(configPath, config.data)).rejects.toThrow(
+      'process.exit(1)'
+    );
+  });
+
+  test('fails when current git repo has no origin remote', async () => {
+    exit = mockProcessExit();
+    process.chdir(nestedDir);
+    await runGitCommand(['remote', 'remove', 'origin'], repoDir);
+
+    const config = await readConfig(configPath);
+    expect(config).toEqual({ success: true, data: { repos: [] } });
+    if (!config.success) throw new Error('config read failed');
+
+    await expect(resolveRepoFromCwd(configPath, config.data)).rejects.toThrow(
+      'process.exit(1)'
+    );
+  });
+
+  test('fails when cwd is not inside a git repo', async () => {
+    exit = mockProcessExit();
+    process.chdir(testDir);
+
+    const config = await readConfig(configPath);
+    expect(config).toEqual({ success: true, data: { repos: [] } });
+    if (!config.success) throw new Error('config read failed');
+
+    await expect(resolveRepoFromCwd(configPath, config.data)).rejects.toThrow(
+      'process.exit(1)'
+    );
+  });
+
+  test('fails when cwd is inside an untracked linked worktree', async () => {
+    exit = mockProcessExit();
+    const worktreeDir = join(testDir, 'repo-feature');
+    await runGitCommand(
+      ['worktree', 'add', '-b', 'feature', worktreeDir],
+      repoDir
+    );
+    process.chdir(worktreeDir);
+
+    const config = await readConfig(configPath);
+    expect(config).toEqual({ success: true, data: { repos: [] } });
     if (!config.success) throw new Error('config read failed');
 
     await expect(resolveRepoFromCwd(configPath, config.data)).rejects.toThrow(

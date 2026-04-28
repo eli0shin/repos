@@ -1,7 +1,7 @@
 import type { CommandContext } from '../cli.ts';
 import {
   loadConfig,
-  resolveRepoFromCwd,
+  findRepoFromCwd,
   getParentBranch,
   getChildBranches,
   removeStackEntry,
@@ -25,7 +25,11 @@ import { print, printError } from '../output.ts';
 export async function collapseCommand(ctx: CommandContext): Promise<void> {
   const config = await loadConfig(ctx.configPath);
 
-  const repo = await resolveRepoFromCwd(ctx.configPath, config);
+  const repo = await findRepoFromCwd(config, process.cwd());
+  if (!repo) {
+    printError('Error: Not inside a tracked repo.');
+    process.exit(1);
+  }
 
   // List worktrees to find current branch
   const worktreesResult = await listWorktrees(repo.path);

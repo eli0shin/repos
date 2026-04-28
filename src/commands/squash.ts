@@ -1,5 +1,5 @@
 import type { CommandContext } from '../cli.ts';
-import { loadConfig, resolveRepoFromCwd, getParentBranch } from '../config.ts';
+import { loadConfig, findRepoFromCwd, getParentBranch } from '../config.ts';
 import {
   hasUncommittedChanges,
   getDefaultBranch,
@@ -97,7 +97,11 @@ export async function squashCommand(
   // Step 1: Read config and find repo
   const config = await loadConfig(ctx.configPath);
 
-  const repo = await resolveRepoFromCwd(ctx.configPath, config);
+  const repo = await findRepoFromCwd(config, process.cwd());
+  if (!repo) {
+    printError('Error: Not inside a tracked repo.');
+    process.exit(1);
+  }
 
   // Step 2: Get current worktree/branch
   const worktreesResult = await listWorktrees(repo.path);
