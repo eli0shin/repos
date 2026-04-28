@@ -9,13 +9,19 @@ import { isGitRepoOrBare, listWorktrees } from '../git/index.ts';
 import type { WorktreeInfo } from '../git/index.ts';
 import type { RepoEntry } from '../types.ts';
 import { print } from '../output.ts';
+import { getIndexedWorktrees, getRootWorktrees } from '../worktree-index.ts';
+
+type PrintRepoOptions = {
+  showIndexes: boolean;
+};
 
 function printWorktreeTree(
   repo: RepoEntry,
   worktrees: WorktreeInfo[],
   branch: string,
   indent: string,
-  isLast: boolean
+  isLast: boolean,
+  indexByPath?: Map<string, number>
 ): void {
   const wt = worktrees.find((w) => w.branch === branch);
   if (!wt) return;
@@ -23,7 +29,9 @@ function printWorktreeTree(
   const prefix = indent + (isLast ? '└─ ' : '├─ ');
   const parentBranch = getParentBranch(repo, branch);
   const stackedLabel = parentBranch ? ' (stacked)' : '';
-  print(`${prefix}${wt.branch}: ${wt.path}${stackedLabel}`);
+  const index = indexByPath?.get(wt.path);
+  const indexLabel = index ? `[${index}] ` : '';
+  print(`${prefix}${indexLabel}${wt.branch}: ${wt.path}${stackedLabel}`);
 
   const children = getChildBranches(repo, branch).filter((child) =>
     worktrees.some((w) => w.branch === child)
@@ -36,12 +44,16 @@ function printWorktreeTree(
       worktrees,
       child,
       newIndent,
-      index === children.length - 1
+      index === children.length - 1,
+      indexByPath
     );
   });
 }
 
-async function printRepo(repo: RepoEntry): Promise<void> {
+async function printRepo(
+  repo: RepoEntry,
+  options: PrintRepoOptions = { showIndexes: false }
+): Promise<void> {
   const exists = await isGitRepoOrBare(repo.path);
   const bareLabel = repo.bare ? ' (bare)' : '';
   const status = exists ? '✓' : '✗ not cloned';
@@ -54,12 +66,15 @@ async function printRepo(repo: RepoEntry): Promise<void> {
     const worktreesResult = await listWorktrees(repo.path);
     if (worktreesResult.success) {
       const nonMainWorktrees = worktreesResult.data.filter((wt) => !wt.isMain);
-
-      // Find root worktrees (no parent or parent not in worktrees)
-      const rootWorktrees = nonMainWorktrees.filter((wt) => {
-        const parent = getParentBranch(repo, wt.branch);
-        return !parent || !nonMainWorktrees.some((w) => w.branch === parent);
-      });
+      const rootWorktrees = getRootWorktrees(repo, nonMainWorktrees);
+      const indexByPath = options.showIndexes
+        ? new Map(
+            getIndexedWorktrees(repo, nonMainWorktrees).map((wt) => [
+              wt.path,
+              wt.index,
+            ])
+          )
+        : undefined;
 
       // Print each root and its children
       rootWorktrees.forEach((wt, index) => {
@@ -68,7 +83,8 @@ async function printRepo(repo: RepoEntry): Promise<void> {
           nonMainWorktrees,
           wt.branch,
           '      ',
-          index === rootWorktrees.length - 1
+          index === rootWorktrees.length - 1,
+          indexByPath
         );
       });
     }
@@ -85,7 +101,7 @@ export async function listCommand(ctx: CommandContext): Promise<void> {
 
   if (currentRepo) {
     // Inside a tracked repo - show only this repo
-    await printRepo(currentRepo);
+    await printRepo(currentRepo, { showIndexes: true });
   } else {
     // Not inside a tracked repo - show all repos
     if (repos.length === 0) {

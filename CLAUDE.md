@@ -47,7 +47,8 @@ type OperationResult<T = void> =
 | `repos latest`                       | Parallel pull all repos                         |
 | `repos adopt`                        | Add existing repos to config                    |
 | `repos sync`                         | Adopt + clone missing                           |
-| `repos work <branch> [repo]`         | Create a worktree for a branch                  |
+| `repos work <branch> [repo] [-t]`    | Create or resume a worktree for a branch        |
+| `repos work -i <index> [repo] [-t]`  | Resume a worktree by list index                 |
 | `repos stack <branch>`               | Create a stacked worktree from current branch   |
 | `repos restack [--only]`             | Rebase stacked branch(es) on parent (recursive) |
 | `repos continue`                     | Continue restack after resolving conflicts      |

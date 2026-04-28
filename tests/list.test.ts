@@ -95,7 +95,7 @@ describe('repos list command - auto-detect repo', () => {
     const expectedOutput = [
       `  repo1 (bare) ✓`,
       `    ${bareDir1}`,
-      `      └─ feature: ${realWt1Path}`,
+      `      └─ [1] feature: ${realWt1Path}`,
       '',
     ].join('\n');
     expect(output).toEqual(expectedOutput);
@@ -131,6 +131,39 @@ describe('repos list command - auto-detect repo', () => {
       `    ${bareDir1}`,
       `  repo2 (bare) ✓`,
       `    ${bareDir2}`,
+      '',
+    ].join('\n');
+    expect(output).toEqual(expectedOutput);
+  });
+
+  test('does not show worktree indexes when outside any tracked repo', async () => {
+    const bareDir = join(testDir, 'bare.git');
+    await cloneBare(sourceDir1, bareDir);
+
+    const worktreePath = join(testDir, 'bare.git-feature');
+    await runGitCommand(
+      ['worktree', 'add', '-b', 'feature', worktreePath],
+      bareDir
+    );
+
+    const config = {
+      repos: [{ name: 'repo', url: sourceDir1, path: bareDir, bare: true }],
+    } satisfies ReposConfig;
+    await writeConfig(configPath, config);
+
+    process.chdir('/tmp');
+    const capture = captureOutput();
+    await listCommand({ configPath });
+    capture.restore();
+
+    const output = capture.output.join('');
+    const realWorktreePath = await realpath(worktreePath);
+    const expectedOutput = [
+      'Tracked repositories:',
+      '',
+      `  repo (bare) ✓`,
+      `    ${bareDir}`,
+      `      └─ feature: ${realWorktreePath}`,
       '',
     ].join('\n');
     expect(output).toEqual(expectedOutput);
@@ -176,8 +209,8 @@ describe('repos list command - auto-detect repo', () => {
     const expectedOutput = [
       `  repo (bare) ✓`,
       `    ${bareDir}`,
-      `      └─ parent: ${realParentPath}`,
-      `         └─ child: ${realChildPath} (stacked)`,
+      `      └─ [1] parent: ${realParentPath}`,
+      `         └─ [2] child: ${realChildPath} (stacked)`,
       '',
     ].join('\n');
     expect(output).toEqual(expectedOutput);
@@ -217,7 +250,7 @@ describe('repos list command - auto-detect repo', () => {
     const expectedOutput = [
       `  repo1 (bare) ✓`,
       `    ${bareDir1}`,
-      `      └─ feature: ${realWt1Path}`,
+      `      └─ [1] feature: ${realWt1Path}`,
       '',
     ].join('\n');
     expect(output).toEqual(expectedOutput);
@@ -277,11 +310,11 @@ describe('repos list command - auto-detect repo', () => {
     const expectedOutput = [
       `  repo (bare) ✓`,
       `    ${bareDir}`,
-      `      ├─ a: ${realAPath} (stacked)`,
-      `      │  └─ b: ${realBPath} (stacked)`,
-      `      ├─ c: ${realCPath} (stacked)`,
-      `      │  └─ d: ${realDPath} (stacked)`,
-      `      └─ e: ${realEPath} (stacked)`,
+      `      ├─ [1] a: ${realAPath} (stacked)`,
+      `      │  └─ [2] b: ${realBPath} (stacked)`,
+      `      ├─ [3] c: ${realCPath} (stacked)`,
+      `      │  └─ [4] d: ${realDPath} (stacked)`,
+      `      └─ [5] e: ${realEPath} (stacked)`,
       '',
     ].join('\n');
     expect(output).toEqual(expectedOutput);
@@ -341,11 +374,11 @@ describe('repos list command - auto-detect repo', () => {
     const expectedOutput = [
       `  repo ✓`,
       `    ${repoDir}`,
-      `      ├─ a: ${realAPath} (stacked)`,
-      `      │  └─ b: ${realBPath} (stacked)`,
-      `      ├─ c: ${realCPath} (stacked)`,
-      `      │  └─ d: ${realDPath} (stacked)`,
-      `      └─ e: ${realEPath} (stacked)`,
+      `      ├─ [1] a: ${realAPath} (stacked)`,
+      `      │  └─ [2] b: ${realBPath} (stacked)`,
+      `      ├─ [3] c: ${realCPath} (stacked)`,
+      `      │  └─ [4] d: ${realDPath} (stacked)`,
+      `      └─ [5] e: ${realEPath} (stacked)`,
       '',
     ].join('\n');
     expect(output).toEqual(expectedOutput);

@@ -136,6 +136,35 @@ describe('--tmux flag', () => {
     expect(output).toEqual([]);
   });
 
+  test('work --tmux with index calls openTmuxSession with indexed worktree', async () => {
+    const { bareDir } = await setupBareRepo();
+
+    const firstPath = join(testDir, 'bare.git-first');
+    const secondPath = join(testDir, 'bare.git-second');
+    await runGitCommand(['worktree', 'add', '-b', 'first', firstPath], bareDir);
+    await runGitCommand(
+      ['worktree', 'add', '-b', 'second', secondPath],
+      bareDir
+    );
+    process.chdir(firstPath);
+
+    const { output, restore } = captureStdout();
+
+    await workCommand({ configPath }, undefined, undefined, {
+      tmux: true,
+      index: 2,
+    });
+    restore();
+
+    expect(openTmuxSessionSpy).toHaveBeenCalledTimes(1);
+    expect(openTmuxSessionSpy).toHaveBeenCalledWith(
+      'bare',
+      'second',
+      realpathSync(secondPath)
+    );
+    expect(output).toEqual([]);
+  });
+
   test('work without --tmux does not call openTmuxSession', async () => {
     await setupBareRepo();
     const { output, restore } = captureStdout();

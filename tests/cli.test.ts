@@ -56,7 +56,7 @@ Commands:
   adopt                                 Add existing repos to config
   sync                                  Adopt existing + clone missing repos
   update                                Update repos CLI to latest version
-  work [options] <branch> [repo-name]   Create a worktree for a branch
+  work [options] [branch] [repo-name]   Create a worktree for a branch
   stack [options] <branch>              Create a stacked worktree from current
                                         branch
   restack [options]                     Rebase current branch and children on
@@ -133,6 +133,25 @@ describe('CLI remove command', () => {
     expect(await runCli(['remove'])).toEqual({
       stdout: '',
       stderr: "error: missing required argument 'name'\n",
+      exitCode: 1,
+    });
+  });
+});
+
+describe('CLI work command', () => {
+  test('errors when index option value is missing', async () => {
+    expect(await runCli(['work', '--index'])).toEqual({
+      stdout: '',
+      stderr: "error: option '-i, --index <index>' argument missing\n",
+      exitCode: 1,
+    });
+  });
+
+  test('errors when index option is not numeric', async () => {
+    expect(await runCli(['work', '--index', 'abc'])).toEqual({
+      stdout: '',
+      stderr:
+        "error: option '-i, --index <index>' argument 'abc' is invalid. index must be a positive integer\n",
       exitCode: 1,
     });
   });

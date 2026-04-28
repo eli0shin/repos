@@ -192,6 +192,132 @@ describe('repos work command', () => {
     expect(output.join('')).toEqual(realpathSync(worktreePath) + '\n');
   });
 
+  test('outputs existing worktree path by index option', async () => {
+    const bareDir = join(testDir, 'bare.git');
+    await cloneBare(sourceDir, bareDir);
+
+    const config = {
+      repos: [{ name: 'bare', url: sourceDir, path: bareDir, bare: true }],
+    } satisfies ReposConfig;
+    await writeConfig(configPath, config);
+
+    const firstPath = join(testDir, 'bare.git-first');
+    const secondPath = join(testDir, 'bare.git-second');
+    await runGitCommand(['worktree', 'add', '-b', 'first', firstPath], bareDir);
+    await runGitCommand(
+      ['worktree', 'add', '-b', 'second', secondPath],
+      bareDir
+    );
+
+    process.chdir(firstPath);
+
+    const output: string[] = [];
+    const originalWrite = process.stdout.write.bind(process.stdout);
+    process.stdout.write = (chunk: string) => {
+      output.push(chunk);
+      return true;
+    };
+
+    const ctx = { configPath };
+    await workCommand(ctx, undefined, undefined, { index: 2 });
+    process.stdout.write = originalWrite;
+
+    expect(output.join('')).toEqual(realpathSync(secondPath) + '\n');
+  });
+
+  test('outputs existing worktree path by index and repo name', async () => {
+    const bareDir = join(testDir, 'bare.git');
+    await cloneBare(sourceDir, bareDir);
+
+    const config = {
+      repos: [{ name: 'bare', url: sourceDir, path: bareDir, bare: true }],
+    } satisfies ReposConfig;
+    await writeConfig(configPath, config);
+
+    const worktreePath = join(testDir, 'bare.git-feature');
+    await runGitCommand(
+      ['worktree', 'add', '-b', 'feature', worktreePath],
+      bareDir
+    );
+
+    process.chdir('/tmp');
+
+    const output: string[] = [];
+    const originalWrite = process.stdout.write.bind(process.stdout);
+    process.stdout.write = (chunk: string) => {
+      output.push(chunk);
+      return true;
+    };
+
+    const ctx = { configPath };
+    await workCommand(ctx, undefined, 'bare', { index: 1 });
+    process.stdout.write = originalWrite;
+
+    expect(output.join('')).toEqual(realpathSync(worktreePath) + '\n');
+  });
+
+  test('fails when worktree index is zero', async () => {
+    const mockExit = mockProcessExit();
+    const bareDir = join(testDir, 'bare.git');
+    await cloneBare(sourceDir, bareDir);
+
+    const config = {
+      repos: [{ name: 'bare', url: sourceDir, path: bareDir, bare: true }],
+    } satisfies ReposConfig;
+    await writeConfig(configPath, config);
+
+    const ctx = { configPath };
+    await expect(
+      workCommand(ctx, undefined, 'bare', { index: 0 })
+    ).rejects.toThrow('process.exit(1)');
+    expect(mockExit).toHaveBeenCalledWith(1);
+    mockExit.mockRestore();
+  });
+
+  test('fails when branch is missing without index', async () => {
+    const mockExit = mockProcessExit();
+    const bareDir = join(testDir, 'bare.git');
+    await cloneBare(sourceDir, bareDir);
+
+    const config = {
+      repos: [{ name: 'bare', url: sourceDir, path: bareDir, bare: true }],
+    } satisfies ReposConfig;
+    await writeConfig(configPath, config);
+
+    const ctx = { configPath };
+    await expect(workCommand(ctx, undefined, 'bare')).rejects.toThrow(
+      'process.exit(1)'
+    );
+    expect(mockExit).toHaveBeenCalledWith(1);
+    mockExit.mockRestore();
+  });
+
+  test('fails when worktree index does not exist', async () => {
+    const mockExit = mockProcessExit();
+    const bareDir = join(testDir, 'bare.git');
+    await cloneBare(sourceDir, bareDir);
+
+    const config = {
+      repos: [{ name: 'bare', url: sourceDir, path: bareDir, bare: true }],
+    } satisfies ReposConfig;
+    await writeConfig(configPath, config);
+
+    const worktreePath = join(testDir, 'bare.git-feature');
+    await runGitCommand(
+      ['worktree', 'add', '-b', 'feature', worktreePath],
+      bareDir
+    );
+
+    process.chdir(worktreePath);
+
+    const ctx = { configPath };
+    await expect(
+      workCommand(ctx, undefined, undefined, { index: 9 })
+    ).rejects.toThrow('process.exit(1)');
+    expect(mockExit).toHaveBeenCalledWith(1);
+    mockExit.mockRestore();
+  });
+
   test('stacks new branch on default branch', async () => {
     // Clone as bare
     const bareDir = join(testDir, 'bare.git');
