@@ -1,7 +1,7 @@
 import type { CommandContext } from '../cli.ts';
 import {
   loadConfig,
-  findRepoFromCwd,
+  resolveRepoFromCwd,
   getParentBranch,
   getChildBranches,
   removeStackEntry,
@@ -243,12 +243,7 @@ export async function restackCommand(
 ): Promise<void> {
   const config = await loadConfig(ctx.configPath);
 
-  // Find repo from current working directory
-  const repo = await findRepoFromCwd(config, process.cwd());
-  if (!repo) {
-    printError('Error: Not inside a tracked repo.');
-    process.exit(1);
-  }
+  const repo = await resolveRepoFromCwd(ctx.configPath, config);
 
   // List worktrees to find current branch
   const worktreesResult = await listWorktrees(repo.path);

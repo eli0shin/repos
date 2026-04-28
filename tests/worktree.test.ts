@@ -128,6 +128,36 @@ describe('repos work command', () => {
     });
   });
 
+  test('auto-adopts untracked current repo before creating worktree', async () => {
+    const repoDir = join(testDir, 'repo');
+    await runGitCommand(['clone', sourceDir, repoDir]);
+    await writeConfig(configPath, { repos: [] });
+
+    process.chdir(repoDir);
+    const ctx = { configPath };
+    await workCommand(ctx, 'feature');
+
+    const worktreePath = join(testDir, 'repo-feature');
+    expect(await isGitRepo(worktreePath)).toBe(true);
+    expect(await getCurrentBranch(worktreePath)).toEqual({
+      success: true,
+      data: 'feature',
+    });
+    expect(await readConfig(configPath)).toEqual({
+      success: true,
+      data: {
+        repos: [
+          {
+            name: 'repo',
+            url: sourceDir,
+            path: realpathSync(repoDir),
+            stacks: [{ parent: 'main', child: 'feature' }],
+          },
+        ],
+      },
+    });
+  });
+
   test('creates new branch and base ref from latest origin default branch', async () => {
     const repoDir = join(testDir, 'repo');
     await runGitCommand(['clone', sourceDir, repoDir]);

@@ -27,7 +27,7 @@ export async function workCommand(
   options?: WorkOptions
 ): Promise<void> {
   const config = await loadConfig(ctx.configPath);
-  const repo = await resolveRepo(config, repoName);
+  const repo = await resolveRepo(config, repoName, ctx.configPath);
   const requestedIndex = options?.index;
 
   if (

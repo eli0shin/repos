@@ -1,4 +1,4 @@
-import { mkdir } from 'node:fs/promises';
+import { mkdir, realpath } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import {
@@ -9,8 +9,10 @@ import {
   getDefaultBranch,
   resolveRef,
   runGitCommand,
+  getGitRepoRoot,
+  getRemoteUrl,
 } from './git/index.ts';
-import { printError } from './output.ts';
+import { printError, printStatus } from './output.ts';
 import type {
   RepoEntry,
   ReposConfig,
@@ -199,7 +201,8 @@ export async function findRepoFromCwd(
 
 export async function resolveRepo(
   config: ReposConfig,
-  repoName?: string
+  repoName?: string,
+  configPath?: string
 ): Promise<RepoEntry> {
   if (repoName) {
     const repo = findRepo(config, repoName);
@@ -209,11 +212,55 @@ export async function resolveRepo(
     }
     return repo;
   }
-  const repo = await findRepoFromCwd(config, process.cwd());
+  const repo = configPath
+    ? await resolveRepoFromCwd(configPath, config)
+    : await findRepoFromCwd(config, process.cwd());
   if (!repo) {
     printError('Error: Not inside a tracked repo. Specify repo name.');
     process.exit(1);
   }
+  return repo;
+}
+
+export async function resolveRepoFromCwd(
+  configPath: string,
+  config: ReposConfig
+): Promise<RepoEntry> {
+  const cwd = process.cwd();
+  const trackedRepo = await findRepoFromCwd(config, cwd);
+  if (trackedRepo) return trackedRepo;
+
+  const rootResult = await getGitRepoRoot(cwd);
+  if (!rootResult.success) {
+    printError('Error: Not inside a tracked repo.');
+    process.exit(1);
+  }
+
+  const repoPath = await realpath(rootResult.data);
+  const name = basename(repoPath);
+  const existingRepo = findRepo(config, name);
+  if (existingRepo) {
+    printError(
+      `Error: Cannot auto-adopt "${name}" because that name is already tracked at ${existingRepo.path}`
+    );
+    process.exit(1);
+  }
+
+  const urlResult = await getRemoteUrl(repoPath);
+  if (!urlResult.success) {
+    printError('Error: Cannot auto-adopt repo without remote origin.');
+    process.exit(1);
+  }
+
+  const repo = {
+    name,
+    url: urlResult.data,
+    path: repoPath,
+  } satisfies RepoEntry;
+  const newConfig = addRepoToConfig(config, repo);
+  await saveConfig(configPath, newConfig);
+  config.repos = newConfig.repos;
+  printStatus(`Adopted "${name}"`);
   return repo;
 }
 

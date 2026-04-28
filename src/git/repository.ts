@@ -31,6 +31,18 @@ export async function isGitRepoOrBare(dir: string): Promise<boolean> {
   return (await isGitRepo(dir)) || (await isBareRepo(dir));
 }
 
+export async function getGitRepoRoot(
+  dir: string
+): Promise<OperationResult<string>> {
+  const result = await runGitCommand(['rev-parse', '--show-toplevel'], dir);
+
+  if (result.exitCode !== 0) {
+    return { success: false, error: 'Not inside a git repo' };
+  }
+
+  return { success: true, data: result.stdout };
+}
+
 export async function findGitRepos(parentDir: string): Promise<string[]> {
   try {
     const entries = await readdir(parentDir, { withFileTypes: true });
