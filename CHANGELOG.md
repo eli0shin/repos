@@ -1,5 +1,11 @@
 # repos
 
+## 1.2.6
+
+### Patch Changes
+
+- [#86](https://github.com/eli0shin/repos/pull/86) [`46a48d6`](https://github.com/eli0shin/repos/commit/46a48d6a86bf8da1e7b3651310ed7129a981e5cc) Thanks [@eli0shin](https://github.com/eli0shin)! - Fetch origin before creating new worktrees from the default branch.
+
 ## 1.2.5
 
 ### Patch Changes
