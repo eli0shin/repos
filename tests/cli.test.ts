@@ -1,14 +1,26 @@
-import { describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, test } from 'bun:test';
+import { mkdir, rm } from 'node:fs/promises';
+import { join } from 'node:path';
 import { version } from '../package.json';
+import { cloneBare, runGitCommand } from '../src/git/index.ts';
+import { tmuxKillSession, tmuxNewSession } from '../src/tmux.ts';
 
 // Helper to run CLI and capture output
 async function runCli(
-  args: string[]
+  args: string[],
+  env: Record<string, string | undefined> = {}
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+  const processEnv = Object.fromEntries(
+    Object.entries({ ...process.env, ...env }).filter(
+      (entry): entry is [string, string] => entry[1] !== undefined
+    )
+  );
+
   const proc = Bun.spawn(['bun', 'run', 'src/cli.ts', ...args], {
     stdout: 'pipe',
     stderr: 'pipe',
     cwd: import.meta.dir.replace('/tests', ''),
+    env: processEnv,
   });
 
   const [stdout, stderr] = await Promise.all([
@@ -153,6 +165,162 @@ describe('CLI work command', () => {
       stderr:
         "error: option '-i, --index <index>' argument 'abc' is invalid. index must be a positive integer\n",
       exitCode: 1,
+    });
+  });
+});
+
+describe('CLI tmux defaults', () => {
+  const testDir = '/tmp/repos-test-cli-tmux-default';
+  const sourceDir = '/tmp/repos-test-cli-tmux-default-source';
+  const configHome = '/tmp/repos-test-cli-tmux-default-config';
+  const sessionNames: string[] = [];
+
+  afterEach(async () => {
+    await cleanup();
+  });
+
+  async function createTestRepo(dir: string): Promise<void> {
+    await mkdir(dir, { recursive: true });
+    await runGitCommand(['init', '-b', 'main'], dir);
+    await Bun.write(join(dir, 'test.txt'), 'test');
+    await runGitCommand(['add', '.'], dir);
+    await runGitCommand(['commit', '-m', 'initial'], dir);
+  }
+
+  async function setupStaleWorktree(): Promise<string> {
+    await rm(testDir, { recursive: true, force: true });
+    await rm(sourceDir, { recursive: true, force: true });
+    await rm(configHome, { recursive: true, force: true });
+    await mkdir(testDir, { recursive: true });
+    await mkdir(join(configHome, 'repos'), { recursive: true });
+    await createTestRepo(sourceDir);
+
+    const repoName = 'cli-tmux-default';
+    const bareDir = join(testDir, `${repoName}.git`);
+    const worktreePath = join(testDir, `${repoName}.git-feature`);
+    await cloneBare(sourceDir, bareDir);
+    await runGitCommand(
+      ['worktree', 'add', '-b', 'feature', worktreePath],
+      bareDir
+    );
+    await Bun.write(join(worktreePath, 'feature.txt'), 'feature');
+    await runGitCommand(['add', '.'], worktreePath);
+    await runGitCommand(['commit', '-m', 'feature work'], worktreePath);
+    await runGitCommand(['push', '-u', 'origin', 'feature'], worktreePath);
+    await runGitCommand(['branch', '-D', 'feature'], sourceDir);
+
+    await Bun.write(
+      join(configHome, 'repos', 'config.json'),
+      JSON.stringify(
+        {
+          repos: [
+            { name: repoName, url: sourceDir, path: bareDir, bare: true },
+          ],
+          config: { updateBehavior: 'off' },
+        },
+        null,
+        2
+      )
+    );
+
+    const sessionName = `${repoName}@feature`;
+    await tmuxKillSession(sessionName);
+    sessionNames.push(sessionName);
+    const sessionResult = await tmuxNewSession(sessionName, worktreePath);
+    expect(sessionResult).toEqual({ success: true, data: undefined });
+    return sessionName;
+  }
+
+  async function cleanup(): Promise<void> {
+    for (const sessionName of sessionNames.splice(0)) {
+      await tmuxKillSession(sessionName);
+    }
+    await rm(testDir, { recursive: true, force: true });
+    await rm(sourceDir, { recursive: true, force: true });
+    await rm(configHome, { recursive: true, force: true });
+  }
+
+  async function getTmuxEnv(sessionName: string): Promise<string> {
+    const proc = Bun.spawn(
+      [
+        'tmux',
+        'display-message',
+        '-p',
+        '-t',
+        sessionName,
+        '#{socket_path},#{pid},0',
+      ],
+      { stdout: 'pipe', stderr: 'pipe' }
+    );
+    const [stdout, stderr] = await Promise.all([
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+    ]);
+    const exitCode = await proc.exited;
+    expect(stderr).toEqual('');
+    expect(exitCode).toEqual(0);
+    return stdout.trim();
+  }
+
+  test('does not use tmux by default outside tmux', async () => {
+    await setupStaleWorktree();
+    expect(
+      await runCli(['cleanup', '--dry-run'], {
+        XDG_CONFIG_HOME: configHome,
+        TMUX: undefined,
+      })
+    ).toEqual({
+      stdout:
+        'Would remove cli-tmux-default/feature (upstream deleted)\n\nWould remove 1 worktree(s) (1 upstream deleted)\n',
+      stderr: '',
+      exitCode: 0,
+    });
+  });
+
+  test('--tmux uses tmux outside tmux', async () => {
+    await setupStaleWorktree();
+    expect(
+      await runCli(['cleanup', '--dry-run', '--tmux'], {
+        XDG_CONFIG_HOME: configHome,
+        TMUX: undefined,
+      })
+    ).toEqual({
+      stdout:
+        'Would remove cli-tmux-default/feature (upstream deleted)\n\nWould remove 1 worktree(s) (1 upstream deleted)\nWould kill tmux session "cli-tmux-default@feature"\n',
+      stderr: '',
+      exitCode: 0,
+    });
+  });
+
+  test('uses tmux by default inside tmux', async () => {
+    const sessionName = await setupStaleWorktree();
+    const tmuxEnv = await getTmuxEnv(sessionName);
+    expect(
+      await runCli(['cleanup', '--dry-run'], {
+        XDG_CONFIG_HOME: configHome,
+        TMUX: tmuxEnv,
+      })
+    ).toEqual({
+      stdout:
+        'Would remove cli-tmux-default/feature (upstream deleted)\n\nWould remove 1 worktree(s) (1 upstream deleted)\nWould kill tmux session "cli-tmux-default@feature"\n',
+      stderr: '',
+      exitCode: 0,
+    });
+  });
+
+  test('--no-tmux opts out inside tmux', async () => {
+    const sessionName = await setupStaleWorktree();
+    const tmuxEnv = await getTmuxEnv(sessionName);
+    expect(
+      await runCli(['cleanup', '--dry-run', '--no-tmux'], {
+        XDG_CONFIG_HOME: configHome,
+        TMUX: tmuxEnv,
+      })
+    ).toEqual({
+      stdout:
+        'Would remove cli-tmux-default/feature (upstream deleted)\n\nWould remove 1 worktree(s) (1 upstream deleted)\n',
+      stderr: '',
+      exitCode: 0,
     });
   });
 });
