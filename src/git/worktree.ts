@@ -5,6 +5,7 @@ import { printError } from '../output.ts';
 import type { OperationResult } from '../types.ts';
 import { runGitCommand } from './core.ts';
 import { getDefaultBranch, localBranchExists } from './branch.ts';
+import { fetchOrigin } from './remote.ts';
 import type { WorktreeInfo } from './types.ts';
 
 export async function listWorktrees(
@@ -146,6 +147,11 @@ export async function createWorktree(
       `origin/${branch}`,
     ];
   } else {
+    const fetchResult = await fetchOrigin(repoDir);
+    if (!fetchResult.success) {
+      return fetchResult;
+    }
+
     // Get default branch to base new branch on
     const defaultBranchResult = await getDefaultBranch(repoDir);
     if (!defaultBranchResult.success) {

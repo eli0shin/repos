@@ -9,6 +9,8 @@ import {
   isGitRepo,
   getCurrentBranch,
   hasUncommittedChanges,
+  getHeadCommit,
+  getBaseRef,
 } from '../src/git/index.ts';
 import { workCommand } from '../src/commands/work.ts';
 import { stackCommand } from '../src/commands/stack.ts';
@@ -124,6 +126,53 @@ describe('repos work command', () => {
       success: true,
       data: 'feature',
     });
+  });
+
+  test('creates new branch from latest origin default branch', async () => {
+    const repoDir = join(testDir, 'repo');
+    await runGitCommand(['clone', sourceDir, repoDir]);
+
+    await Bun.write(join(sourceDir, 'latest.txt'), 'latest');
+    await runGitCommand(['add', '.'], sourceDir);
+    await runGitCommand(['commit', '-m', 'latest main commit'], sourceDir);
+
+    const latestMainCommit = await getHeadCommit(sourceDir);
+    expect(latestMainCommit.success).toBe(true);
+
+    const config = {
+      repos: [{ name: 'repo', url: sourceDir, path: repoDir }],
+    } satisfies ReposConfig;
+    await writeConfig(configPath, config);
+
+    const ctx = { configPath };
+    await workCommand(ctx, 'feature', 'repo');
+
+    const worktreePath = join(testDir, 'repo-feature');
+    const featureCommit = await getHeadCommit(worktreePath);
+    expect(featureCommit).toEqual(latestMainCommit);
+  });
+
+  test('records base ref from latest origin default branch', async () => {
+    const repoDir = join(testDir, 'repo');
+    await runGitCommand(['clone', sourceDir, repoDir]);
+
+    await Bun.write(join(sourceDir, 'latest.txt'), 'latest');
+    await runGitCommand(['add', '.'], sourceDir);
+    await runGitCommand(['commit', '-m', 'latest main commit'], sourceDir);
+
+    const latestMainCommit = await getHeadCommit(sourceDir);
+    expect(latestMainCommit.success).toBe(true);
+
+    const config = {
+      repos: [{ name: 'repo', url: sourceDir, path: repoDir }],
+    } satisfies ReposConfig;
+    await writeConfig(configPath, config);
+
+    const ctx = { configPath };
+    await workCommand(ctx, 'feature', 'repo');
+
+    const baseRef = await getBaseRef(repoDir, 'feature');
+    expect(baseRef).toEqual(latestMainCommit);
   });
 
   test('outputs existing worktree path when it already exists', async () => {
