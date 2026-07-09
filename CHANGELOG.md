@@ -1,5 +1,11 @@
 # repos
 
+## 1.4.1
+
+### Patch Changes
+
+- [#93](https://github.com/eli0shin/repos/pull/93) [`b6de681`](https://github.com/eli0shin/repos/commit/b6de681ae30d7c1a27cbe2dd83593104efb3524e) Thanks [@eli0shin](https://github.com/eli0shin)! - Show PR links alongside PR status labels in `repos list` output.
+
 ## 1.4.0
 
 ### Minor Changes
