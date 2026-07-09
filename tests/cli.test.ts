@@ -4,6 +4,8 @@ import { join } from 'node:path';
 import { version } from '../package.json';
 import { cloneBare, runGitCommand } from '../src/git/index.ts';
 import { tmuxKillSession, tmuxNewSession } from '../src/tmux.ts';
+import { writeConfig } from '../src/config.ts';
+import type { ReposConfig } from '../src/types.ts';
 
 // Helper to run CLI and capture output
 async function runCli(
@@ -55,41 +57,31 @@ const HELP_OUTPUT = `Usage: repos [options] [command]
 Git repository manager
 
 Options:
-  -v, --version                         output the version number
-  -h, --help                            display help for command
+  -v, --version                          output the version number
+  -h, --help                             display help for command
 
 Commands:
-  list                                  List all tracked repositories
-  add [options] <url>                   Clone a repo and add it to tracking
-  clone [name]                          Clone repos from config (all or
-                                        specific)
-  remove [options] <name>               Remove a repo from tracking
-  latest                                Pull all repos (parallel)
-  adopt                                 Add existing repos to config
-  sync                                  Adopt existing + clone missing repos
-  update                                Update repos CLI to latest version
-  work [options] [branch] [repo-name]   Create a worktree for a branch
-  stack [options] <branch>              Create a stacked worktree from current
-                                        branch
-  restack [options]                     Rebase current branch and children on
-                                        parent branch
-  unstack                               Rebase current branch on default branch
-                                        and remove stack relationship
-  continue                              Continue a paused rebase and update fork
-                                        point tracking
-  collapse                              Collapse parent branch into current
-                                        stacked branch
-  squash [options]                      Squash commits since base branch into a
-                                        single commit
-  clean [options] [branch] [repo-name]  Remove a worktree
-  main [repo-name]                      Output main worktree path (for shell
-                                        wrapper to cd)
-  rebase [branch] [repo-name]           Rebase a worktree branch on the default
-                                        branch
-  cleanup [options]                     Remove worktrees for merged or deleted
-                                        branches
-  init [options]                        Configure shell for work command
-  help [command]                        display help for command
+  list                                   List all tracked repositories
+  add [options] <url>                    Clone a repo and add it to tracking
+  clone [name]                           Clone repos from config (all or specific)
+  remove [options] <name>                Remove a repo from tracking
+  latest                                 Pull all repos (parallel)
+  adopt                                  Add existing repos to config
+  sync                                   Adopt existing + clone missing repos
+  update                                 Update repos CLI to latest version
+  work [options] [branch] [repo-name]    Create a worktree for a branch
+  stack [options] <branch>               Create a stacked worktree from current branch
+  restack [options]                      Rebase current branch and children on parent branch
+  unstack                                Rebase current branch on default branch and remove stack relationship
+  continue                               Continue a paused rebase and update fork point tracking
+  collapse                               Collapse parent branch into current stacked branch
+  squash [options]                       Squash commits since base branch into a single commit
+  clean [options] [branch] [repo-name]   Remove a worktree
+  main [repo-name]                       Output main worktree path (for shell wrapper to cd)
+  rebase [options] [branch] [repo-name]  Rebase a worktree branch on the default branch
+  cleanup [options]                      Remove worktrees for merged or deleted branches
+  init [options]                         Configure shell for work command
+  help [command]                         display help for command
 `;
 
 const REMOVE_HELP_OUTPUT = `Usage: repos remove [options] <name>
@@ -165,6 +157,85 @@ describe('CLI work command', () => {
       stderr:
         "error: option '-i, --index <index>' argument 'abc' is invalid. index must be a positive integer\n",
       exitCode: 1,
+    });
+  });
+});
+
+describe('CLI index options', () => {
+  const testDir = '/tmp/repos-test-cli-clean-index';
+  const sourceDir = '/tmp/repos-test-cli-clean-index-source';
+  const configHome = '/tmp/repos-test-cli-clean-index-config';
+
+  afterEach(async () => {
+    await rm(testDir, { recursive: true, force: true });
+    await rm(sourceDir, { recursive: true, force: true });
+    await rm(configHome, { recursive: true, force: true });
+  });
+
+  async function createTestRepo(dir: string): Promise<void> {
+    await mkdir(dir, { recursive: true });
+    await runGitCommand(['init', '-b', 'main'], dir);
+    await Bun.write(join(dir, 'test.txt'), 'test');
+    await runGitCommand(['add', '.'], dir);
+    await runGitCommand(['commit', '-m', 'initial'], dir);
+  }
+
+  async function setupIndexedRepo(): Promise<string> {
+    await mkdir(testDir, { recursive: true });
+    await mkdir(join(configHome, 'repos'), { recursive: true });
+    await createTestRepo(sourceDir);
+
+    const repoName = 'cli-clean-index';
+    const bareDir = join(testDir, `${repoName}.git`);
+    const worktreePath = join(testDir, `${repoName}.git-feature`);
+    await cloneBare(sourceDir, bareDir);
+    await runGitCommand(
+      ['worktree', 'add', '-b', 'feature', worktreePath],
+      bareDir
+    );
+
+    const config = {
+      repos: [
+        {
+          name: repoName,
+          url: sourceDir,
+          path: bareDir,
+          bare: true,
+        },
+      ],
+    } satisfies ReposConfig;
+    await writeConfig(join(configHome, 'repos', 'config.json'), config);
+
+    return worktreePath;
+  }
+
+  test('uses positional argument as repo name when work uses index', async () => {
+    const worktreePath = await setupIndexedRepo();
+
+    expect(
+      await runCli(['work', '--no-tmux', '-i', '1', 'cli-clean-index'], {
+        XDG_CONFIG_HOME: configHome,
+        TMUX: undefined,
+      })
+    ).toEqual({
+      stdout: `${worktreePath}\n`,
+      stderr: '',
+      exitCode: 0,
+    });
+  });
+
+  test('uses positional argument as repo name when clean uses index', async () => {
+    await setupIndexedRepo();
+
+    expect(
+      await runCli(['clean', '--dry-run', '-i', '1', 'cli-clean-index'], {
+        XDG_CONFIG_HOME: configHome,
+        TMUX: undefined,
+      })
+    ).toEqual({
+      stdout: '',
+      stderr: 'Would remove worktree "cli-clean-index-feature"\n',
+      exitCode: 0,
     });
   });
 });

@@ -169,6 +169,11 @@ program
     parseWorktreeIndex
   )
   .action(async (branch, repoName, options) => {
+    if (options.index !== undefined && branch && !repoName) {
+      repoName = branch;
+      branch = undefined;
+    }
+
     await workCommand(getCommandContext(), branch, repoName, {
       tmux: options.tmux,
       index: options.index,
@@ -246,6 +251,11 @@ program
   .argument('[repo-name]', 'Repo name (optional if inside a tracked repo)')
   .option('--force', 'Force removal even if branch has stacked children')
   .option('--dry-run', 'Show what would be removed without removing')
+  .option(
+    '-i, --index <index>',
+    'Use a worktree index from repos list',
+    parseWorktreeIndex
+  )
   .addOption(
     new Option(
       '-t, --tmux',
@@ -254,10 +264,16 @@ program
   )
   .option('--no-tmux', 'Do not use tmux, even inside a tmux session')
   .action(async (branch, repoName, options) => {
+    if (options.index !== undefined && branch && !repoName) {
+      repoName = branch;
+      branch = undefined;
+    }
+
     await cleanCommand(getCommandContext(), branch, repoName, {
       force: options.force ?? false,
       dryRun: options.dryRun ?? false,
       tmux: options.tmux,
+      index: options.index,
     });
   });
 
@@ -279,8 +295,20 @@ program
   .description('Rebase a worktree branch on the default branch')
   .argument('[branch]', 'Branch name to rebase (optional if inside a worktree)')
   .argument('[repo-name]', 'Repo name (optional if inside a tracked repo)')
-  .action(async (branch, repoName) => {
-    await rebaseCommand(getCommandContext(), branch, repoName);
+  .option(
+    '-i, --index <index>',
+    'Use a worktree index from repos list',
+    parseWorktreeIndex
+  )
+  .action(async (branch, repoName, options) => {
+    if (options.index !== undefined && branch && !repoName) {
+      repoName = branch;
+      branch = undefined;
+    }
+
+    await rebaseCommand(getCommandContext(), branch, repoName, {
+      index: options.index,
+    });
   });
 
 program

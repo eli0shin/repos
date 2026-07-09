@@ -11,14 +11,33 @@ import {
   runGitCommand,
 } from '../git/index.ts';
 import { print, printError } from '../output.ts';
+import { resolveWorktreeIndex } from '../worktree-index.ts';
+
+type RebaseOptions = { index?: number };
 
 export async function rebaseCommand(
   ctx: CommandContext,
   branch?: string,
-  repoName?: string
+  repoName?: string,
+  options: RebaseOptions = {}
 ): Promise<void> {
   const config = await loadConfig(ctx.configPath);
   const repo = await resolveRepo(config, repoName);
+
+  if (options.index !== undefined && branch) {
+    printError('Error: cannot specify both branch and --index');
+    process.exit(1);
+  }
+
+  if (options.index !== undefined) {
+    const indexedResult = await resolveWorktreeIndex(repo, options.index);
+    if (!indexedResult.success) {
+      printError(indexedResult.error);
+      process.exit(1);
+    }
+    branch = indexedResult.data.branch;
+  }
+
   const worktree = await resolveWorktree(repo.path, branch);
 
   // Get default branch
