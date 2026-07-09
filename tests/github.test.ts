@@ -11,12 +11,14 @@ describe('getPullRequestStatus', () => {
   let originalPath: string | undefined;
   let originalGhStdout: string | undefined;
   let originalGhExit: string | undefined;
+  let originalGhSleepMs: string | undefined;
   let originalRecordPath: string | undefined;
 
   beforeEach(async () => {
     originalPath = process.env.PATH;
     originalGhStdout = process.env.GH_STDOUT;
     originalGhExit = process.env.GH_EXIT;
+    originalGhSleepMs = process.env.GH_SLEEP_MS;
     originalRecordPath = process.env.RECORD_PATH;
 
     await mkdir(binDir, { recursive: true });
@@ -33,6 +35,9 @@ describe('getPullRequestStatus', () => {
         '  process.stderr.write("gh failed");',
         '  process.exit(Number(process.env.GH_EXIT));',
         '}',
+        'if (process.env.GH_SLEEP_MS) {',
+        '  await new Promise((resolve) => setTimeout(resolve, Number(process.env.GH_SLEEP_MS)));',
+        '}',
         'process.stdout.write(process.env.GH_STDOUT ?? "[]");',
       ].join('\n')
     );
@@ -41,6 +46,7 @@ describe('getPullRequestStatus', () => {
     process.env.PATH = `${binDir}:${process.env.PATH ?? ''}`;
     process.env.RECORD_PATH = recordPath;
     delete process.env.GH_EXIT;
+    delete process.env.GH_SLEEP_MS;
     delete process.env.GH_STDOUT;
   });
 
@@ -51,6 +57,8 @@ describe('getPullRequestStatus', () => {
     else process.env.GH_STDOUT = originalGhStdout;
     if (originalGhExit === undefined) delete process.env.GH_EXIT;
     else process.env.GH_EXIT = originalGhExit;
+    if (originalGhSleepMs === undefined) delete process.env.GH_SLEEP_MS;
+    else process.env.GH_SLEEP_MS = originalGhSleepMs;
     if (originalRecordPath === undefined) delete process.env.RECORD_PATH;
     else process.env.RECORD_PATH = originalRecordPath;
     await rm(testDir, { recursive: true, force: true });
@@ -104,5 +112,16 @@ describe('getPullRequestStatus', () => {
     delete process.env.GH_EXIT;
     process.env.GH_STDOUT = 'not json';
     expect(await getPullRequestStatus(worktreePath, 'feature')).toBe('unknown');
+  });
+
+  test('returns unknown when gh times out', async () => {
+    process.env.GH_SLEEP_MS = '1000';
+    process.env.GH_STDOUT = '[{"state":"OPEN","mergedAt":null}]';
+
+    const result = await getPullRequestStatus(worktreePath, 'feature', {
+      timeoutMs: 10,
+    });
+
+    expect(result).toBe('unknown');
   });
 });

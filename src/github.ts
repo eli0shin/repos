@@ -1,5 +1,11 @@
 export type PullRequestStatus = 'open' | 'merged' | 'closed' | 'unknown';
 
+const DEFAULT_GH_TIMEOUT_MS = 10_000;
+
+type GetPullRequestStatusOptions = {
+  timeoutMs?: number;
+};
+
 type GhPullRequest = {
   state?: string;
   mergedAt?: string | null;
@@ -31,7 +37,8 @@ function toGhPullRequest(value: unknown): GhPullRequest | undefined {
 
 export async function getPullRequestStatus(
   worktreePath: string,
-  branch: string
+  branch: string,
+  options: GetPullRequestStatusOptions = {}
 ): Promise<PullRequestStatus | undefined> {
   try {
     const proc = Bun.spawn(
@@ -57,13 +64,30 @@ export async function getPullRequestStatus(
       }
     );
 
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const exitResult = await Promise.race([
+      proc.exited.then((exitCode) => ({ exitCode })),
+      new Promise<{ timedOut: true }>((resolve) => {
+        timeout = setTimeout(
+          () => resolve({ timedOut: true }),
+          options.timeoutMs ?? DEFAULT_GH_TIMEOUT_MS
+        );
+      }),
+    ]);
+    if (timeout) clearTimeout(timeout);
+
+    if ('timedOut' in exitResult) {
+      proc.kill();
+      await proc.exited;
+      return 'unknown';
+    }
+
     const [stdout] = await Promise.all([
       new Response(proc.stdout).text(),
       new Response(proc.stderr).text(),
     ]);
-    const exitCode = await proc.exited;
 
-    if (exitCode !== 0) {
+    if (exitResult.exitCode !== 0) {
       return 'unknown';
     }
 
