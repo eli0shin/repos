@@ -1,10 +1,19 @@
-import { describe, expect, test, beforeEach, afterEach } from 'bun:test';
+import {
+  describe,
+  expect,
+  test,
+  beforeEach,
+  afterEach,
+  spyOn,
+  type Mock,
+} from 'bun:test';
 import { mkdir, rm, realpath } from 'node:fs/promises';
 import { join } from 'node:path';
 import { runGitCommand, cloneBare, isGitRepo } from '../src/git/index.ts';
 import { cleanupCommand } from '../src/commands/cleanup.ts';
 import { listCommand } from '../src/commands/list.ts';
 import { writeConfig } from '../src/config.ts';
+import * as github from '../src/github.ts';
 import type { ReposConfig } from '../src/types.ts';
 
 // Helper to create a test repo with commits
@@ -37,15 +46,21 @@ describe('repos cleanup command', () => {
   const sourceDir = '/tmp/repos-test-cleanup-cmd-source';
   const configPath = '/tmp/repos-test-cleanup-cmd-config/config.json';
   let originalCwd: string;
+  let getPullRequestStatusSpy: Mock<typeof github.getPullRequestStatus>;
 
   beforeEach(async () => {
     originalCwd = process.cwd();
+    getPullRequestStatusSpy = spyOn(
+      github,
+      'getPullRequestStatus'
+    ).mockResolvedValue(undefined);
     await mkdir(testDir, { recursive: true });
     await createTestRepo(sourceDir);
   });
 
   afterEach(async () => {
     process.chdir(originalCwd);
+    getPullRequestStatusSpy.mockRestore();
     await rm(testDir, { recursive: true, force: true });
     await rm(sourceDir, { recursive: true, force: true });
     await rm('/tmp/repos-test-cleanup-cmd-config', {

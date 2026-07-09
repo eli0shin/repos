@@ -1,9 +1,18 @@
-import { describe, expect, test, beforeEach, afterEach } from 'bun:test';
+import {
+  describe,
+  expect,
+  test,
+  beforeEach,
+  afterEach,
+  spyOn,
+  type Mock,
+} from 'bun:test';
 import { mkdir, rm, realpath } from 'node:fs/promises';
 import { join } from 'node:path';
 import { runGitCommand, cloneBare } from '../src/git/index.ts';
 import { listCommand } from '../src/commands/list.ts';
 import { writeConfig } from '../src/config.ts';
+import * as github from '../src/github.ts';
 import type { ReposConfig } from '../src/types.ts';
 
 // Helper to create a test repo with commits
@@ -37,9 +46,14 @@ describe('repos list command - auto-detect repo', () => {
   const sourceDir2 = '/tmp/repos-test-list-cmd-source2';
   const configPath = '/tmp/repos-test-list-cmd-config/config.json';
   let originalCwd: string;
+  let getPullRequestStatusSpy: Mock<typeof github.getPullRequestStatus>;
 
   beforeEach(async () => {
     originalCwd = process.cwd();
+    getPullRequestStatusSpy = spyOn(
+      github,
+      'getPullRequestStatus'
+    ).mockResolvedValue(undefined);
     await mkdir(testDir, { recursive: true });
     await createTestRepo(sourceDir1);
     await createTestRepo(sourceDir2);
@@ -47,6 +61,7 @@ describe('repos list command - auto-detect repo', () => {
 
   afterEach(async () => {
     process.chdir(originalCwd);
+    getPullRequestStatusSpy.mockRestore();
     await rm(testDir, { recursive: true, force: true });
     await rm(sourceDir1, { recursive: true, force: true });
     await rm(sourceDir2, { recursive: true, force: true });
@@ -164,6 +179,64 @@ describe('repos list command - auto-detect repo', () => {
       `  repo (bare) ✓`,
       `    ${bareDir}`,
       `      └─ feature: ${realWorktreePath}`,
+      '',
+    ].join('\n');
+    expect(output).toEqual(expectedOutput);
+  });
+
+  test('shows PR status labels for worktrees', async () => {
+    const bareDir = join(testDir, 'bare.git');
+    await cloneBare(sourceDir1, bareDir);
+
+    const openPath = join(testDir, 'bare.git-open');
+    const mergedPath = join(testDir, 'bare.git-merged');
+    const closedPath = join(testDir, 'bare.git-closed');
+    const unknownPath = join(testDir, 'bare.git-unknown');
+    const noPrPath = join(testDir, 'bare.git-no-pr');
+    await runGitCommand(['worktree', 'add', '-b', 'open', openPath], bareDir);
+    await runGitCommand(
+      ['worktree', 'add', '-b', 'merged', mergedPath],
+      bareDir
+    );
+    await runGitCommand(
+      ['worktree', 'add', '-b', 'closed', closedPath],
+      bareDir
+    );
+    await runGitCommand(
+      ['worktree', 'add', '-b', 'unknown', unknownPath],
+      bareDir
+    );
+    await runGitCommand(['worktree', 'add', '-b', 'no-pr', noPrPath], bareDir);
+
+    getPullRequestStatusSpy.mockImplementation(async (_path, branch) => {
+      if (branch === 'no-pr') return undefined;
+      if (branch === 'open') return 'open';
+      if (branch === 'merged') return 'merged';
+      if (branch === 'closed') return 'closed';
+      return 'unknown';
+    });
+
+    const config = {
+      repos: [{ name: 'repo', url: sourceDir1, path: bareDir, bare: true }],
+    } satisfies ReposConfig;
+    await writeConfig(configPath, config);
+
+    process.chdir('/tmp');
+    const capture = captureOutput();
+    await listCommand({ configPath });
+    capture.restore();
+
+    const output = capture.output.join('');
+    const expectedOutput = [
+      'Tracked repositories:',
+      '',
+      `  repo (bare) ✓`,
+      `    ${bareDir}`,
+      `      ├─ closed: ${await realpath(closedPath)} (PR closed)`,
+      `      ├─ merged: ${await realpath(mergedPath)} (PR merged)`,
+      `      ├─ no-pr: ${await realpath(noPrPath)}`,
+      `      ├─ open: ${await realpath(openPath)} (PR open)`,
+      `      └─ unknown: ${await realpath(unknownPath)} (PR unknown)`,
       '',
     ].join('\n');
     expect(output).toEqual(expectedOutput);
