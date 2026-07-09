@@ -57,41 +57,31 @@ const HELP_OUTPUT = `Usage: repos [options] [command]
 Git repository manager
 
 Options:
-  -v, --version                         output the version number
-  -h, --help                            display help for command
+  -v, --version                          output the version number
+  -h, --help                             display help for command
 
 Commands:
-  list                                  List all tracked repositories
-  add [options] <url>                   Clone a repo and add it to tracking
-  clone [name]                          Clone repos from config (all or
-                                        specific)
-  remove [options] <name>               Remove a repo from tracking
-  latest                                Pull all repos (parallel)
-  adopt                                 Add existing repos to config
-  sync                                  Adopt existing + clone missing repos
-  update                                Update repos CLI to latest version
-  work [options] [branch] [repo-name]   Create a worktree for a branch
-  stack [options] <branch>              Create a stacked worktree from current
-                                        branch
-  restack [options]                     Rebase current branch and children on
-                                        parent branch
-  unstack                               Rebase current branch on default branch
-                                        and remove stack relationship
-  continue                              Continue a paused rebase and update fork
-                                        point tracking
-  collapse                              Collapse parent branch into current
-                                        stacked branch
-  squash [options]                      Squash commits since base branch into a
-                                        single commit
-  clean [options] [branch] [repo-name]  Remove a worktree
-  main [repo-name]                      Output main worktree path (for shell
-                                        wrapper to cd)
-  rebase [options] [branch] [repo-name] Rebase a worktree branch on the default
-                                        branch
-  cleanup [options]                     Remove worktrees for merged or deleted
-                                        branches
-  init [options]                        Configure shell for work command
-  help [command]                        display help for command
+  list                                   List all tracked repositories
+  add [options] <url>                    Clone a repo and add it to tracking
+  clone [name]                           Clone repos from config (all or specific)
+  remove [options] <name>                Remove a repo from tracking
+  latest                                 Pull all repos (parallel)
+  adopt                                  Add existing repos to config
+  sync                                   Adopt existing + clone missing repos
+  update                                 Update repos CLI to latest version
+  work [options] [branch] [repo-name]    Create a worktree for a branch
+  stack [options] <branch>               Create a stacked worktree from current branch
+  restack [options]                      Rebase current branch and children on parent branch
+  unstack                                Rebase current branch on default branch and remove stack relationship
+  continue                               Continue a paused rebase and update fork point tracking
+  collapse                               Collapse parent branch into current stacked branch
+  squash [options]                       Squash commits since base branch into a single commit
+  clean [options] [branch] [repo-name]   Remove a worktree
+  main [repo-name]                       Output main worktree path (for shell wrapper to cd)
+  rebase [options] [branch] [repo-name]  Rebase a worktree branch on the default branch
+  cleanup [options]                      Remove worktrees for merged or deleted branches
+  init [options]                         Configure shell for work command
+  help [command]                         display help for command
 `;
 
 const REMOVE_HELP_OUTPUT = `Usage: repos remove [options] <name>

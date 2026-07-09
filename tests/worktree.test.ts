@@ -1349,7 +1349,10 @@ describe('repos rebase command', () => {
 
     const firstPath = join(testDir, 'local-first');
     const secondPath = join(testDir, 'local-second');
-    await runGitCommand(['worktree', 'add', '-b', 'first', firstPath], localDir);
+    await runGitCommand(
+      ['worktree', 'add', '-b', 'first', firstPath],
+      localDir
+    );
     await runGitCommand(
       ['worktree', 'add', '-b', 'second', secondPath],
       localDir
