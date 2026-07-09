@@ -210,10 +210,15 @@ describe('repos list command - auto-detect repo', () => {
 
     getPullRequestStatusSpy.mockImplementation(async (_path, branch) => {
       if (branch === 'no-pr') return undefined;
-      if (branch === 'open') return 'open';
-      if (branch === 'merged') return 'merged';
-      if (branch === 'closed') return 'closed';
-      return 'unknown';
+      if (branch === 'open') {
+        return {
+          status: 'open',
+          url: 'https://github.com/example/repo/pull/1',
+        };
+      }
+      if (branch === 'merged') return { status: 'merged' };
+      if (branch === 'closed') return { status: 'closed' };
+      return { status: 'unknown' };
     });
 
     const config = {
@@ -235,7 +240,7 @@ describe('repos list command - auto-detect repo', () => {
       `      ├─ closed: ${await realpath(closedPath)} (PR closed)`,
       `      ├─ merged: ${await realpath(mergedPath)} (PR merged)`,
       `      ├─ no-pr: ${await realpath(noPrPath)}`,
-      `      ├─ open: ${await realpath(openPath)} (PR open)`,
+      `      ├─ open: ${await realpath(openPath)} (PR open) [https://github.com/example/repo/pull/1]`,
       `      └─ unknown: ${await realpath(unknownPath)} (PR unknown)`,
       '',
     ].join('\n');
