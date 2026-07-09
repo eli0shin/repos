@@ -35,8 +35,8 @@ curl -fsSL https://raw.githubusercontent.com/eli0shin/repos/main/install.sh | ba
 | `repos unstack`                      | Rebase onto default branch and remove stack relation |
 | `repos collapse`                     | Collapse parent branch into current stacked branch   |
 | `repos squash [-m] [-f] [--dry-run]` | Squash commits since base into single commit         |
-| `repos clean <branch> [repo]`        | Remove a worktree (--force for parent branches)      |
-| `repos rebase [branch] [repo]`       | Rebase worktree branch on default branch             |
+| `repos clean <branch> [repo]` / `-i <index>` | Remove a worktree (--force for parent branches)      |
+| `repos rebase [branch] [repo]` / `-i <index>` | Rebase worktree branch on default branch             |
 | `repos cleanup [--dry-run]`          | Remove worktrees for merged/deleted branches         |
 | `repos init`                         | Configure shell for work command                     |
 | `work <branch>`                      | Create worktree and cd into it (shell function)      |

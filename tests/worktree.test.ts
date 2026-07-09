@@ -314,6 +314,24 @@ describe('repos work command', () => {
     expect(output.join('')).toEqual(realpathSync(worktreePath) + '\n');
   });
 
+  test('fails when work gets both branch and index', async () => {
+    const mockExit = mockProcessExit();
+    const bareDir = join(testDir, 'bare.git');
+    await cloneBare(sourceDir, bareDir);
+
+    const config = {
+      repos: [{ name: 'bare', url: sourceDir, path: bareDir, bare: true }],
+    } satisfies ReposConfig;
+    await writeConfig(configPath, config);
+
+    const ctx = { configPath };
+    await expect(
+      workCommand(ctx, 'feature', 'bare', { index: 1 })
+    ).rejects.toThrow('process.exit(1)');
+    expect(mockExit).toHaveBeenCalledWith(1);
+    mockExit.mockRestore();
+  });
+
   test('fails when worktree index is zero', async () => {
     const mockExit = mockProcessExit();
     const bareDir = join(testDir, 'bare.git');
@@ -634,6 +652,56 @@ describe('repos clean command', () => {
 
     // Verify worktree was removed
     expect(await isGitRepo(worktreePath)).toBe(false);
+  });
+
+  test('removes a worktree by index option', async () => {
+    const bareDir = join(testDir, 'bare.git');
+    await cloneBare(sourceDir, bareDir);
+
+    const firstPath = join(testDir, 'bare.git-first');
+    const secondPath = join(testDir, 'bare.git-second');
+    await runGitCommand(['worktree', 'add', '-b', 'first', firstPath], bareDir);
+    await runGitCommand(
+      ['worktree', 'add', '-b', 'second', secondPath],
+      bareDir
+    );
+
+    const config = {
+      repos: [{ name: 'bare', url: sourceDir, path: bareDir, bare: true }],
+    } satisfies ReposConfig;
+    await writeConfig(configPath, config);
+
+    const ctx = { configPath };
+    await cleanCommand(ctx, undefined, 'bare', {
+      force: false,
+      dryRun: false,
+      tmux: false,
+      index: 2,
+    });
+
+    expect(await isGitRepo(firstPath)).toBe(true);
+    expect(await isGitRepo(secondPath)).toBe(false);
+  });
+
+  test('fails when clean gets both branch and index', async () => {
+    const bareDir = join(testDir, 'bare.git');
+    await cloneBare(sourceDir, bareDir);
+
+    const config = {
+      repos: [{ name: 'bare', url: sourceDir, path: bareDir, bare: true }],
+    } satisfies ReposConfig;
+    await writeConfig(configPath, config);
+
+    const ctx = { configPath };
+    await expect(
+      cleanCommand(ctx, 'feature', 'bare', {
+        force: false,
+        dryRun: false,
+        tmux: false,
+        index: 1,
+      })
+    ).rejects.toThrow('process.exit(1)');
+    expect(mockExit).toHaveBeenCalledWith(1);
   });
 
   test('fails when worktree has uncommitted changes', async () => {
@@ -1267,6 +1335,41 @@ describe('repos rebase command', () => {
     expect(await getCurrentBranch(worktreePath)).toEqual({
       success: true,
       data: 'feature',
+    });
+  });
+
+  test('rebases worktree by index option', async () => {
+    const localDir = join(testDir, 'local');
+    await runGitCommand(['clone', remoteDir, localDir]);
+
+    await Bun.write(join(localDir, 'main.txt'), 'main');
+    await runGitCommand(['add', '.'], localDir);
+    await runGitCommand(['commit', '-m', 'main commit'], localDir);
+    await runGitCommand(['push', '-u', 'origin', 'HEAD'], localDir);
+
+    const firstPath = join(testDir, 'local-first');
+    const secondPath = join(testDir, 'local-second');
+    await runGitCommand(['worktree', 'add', '-b', 'first', firstPath], localDir);
+    await runGitCommand(
+      ['worktree', 'add', '-b', 'second', secondPath],
+      localDir
+    );
+
+    await Bun.write(join(secondPath, 'second.txt'), 'second');
+    await runGitCommand(['add', '.'], secondPath);
+    await runGitCommand(['commit', '-m', 'second commit'], secondPath);
+
+    const config = {
+      repos: [{ name: 'local', url: remoteDir, path: localDir }],
+    } satisfies ReposConfig;
+    await writeConfig(configPath, config);
+
+    const ctx = { configPath };
+    await rebaseCommand(ctx, undefined, 'local', { index: 2 });
+
+    expect(await getCurrentBranch(secondPath)).toEqual({
+      success: true,
+      data: 'second',
     });
   });
 

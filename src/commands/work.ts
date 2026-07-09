@@ -16,7 +16,7 @@ import { print, printError, printStatus } from '../output.ts';
 import { openTmuxSession } from '../tmux.ts';
 import { loadRepoWorktreeConfig } from '../worktree-config.ts';
 import { printSetupWarnings, runWorktreeSetup } from '../worktree-setup.ts';
-import { getIndexedWorktrees } from '../worktree-index.ts';
+import { resolveWorktreeIndex } from '../worktree-index.ts';
 
 type WorkOptions = { tmux?: boolean; index?: number };
 
@@ -34,38 +34,26 @@ export async function workCommand(
   );
   const requestedIndex = options?.index;
 
-  if (
-    requestedIndex !== undefined &&
-    (!Number.isInteger(requestedIndex) || requestedIndex < 1)
-  ) {
-    printError(
-      `Invalid worktree index ${requestedIndex}. Run repos list from this repo to see indexes.`
-    );
+  if (requestedIndex !== undefined && branch) {
+    printError('Error: cannot specify both branch and --index');
     process.exit(1);
   }
 
-  // Check if worktree already exists
-  const worktreesResult = await listWorktrees(repo.path);
   if (requestedIndex !== undefined) {
-    const indexedWorktrees = worktreesResult.success
-      ? getIndexedWorktrees(
-          repo,
-          worktreesResult.data.filter((wt) => !wt.isMain)
-        )
-      : [];
-    const indexed = indexedWorktrees.find((wt) => wt.index === requestedIndex);
-
-    if (!indexed) {
-      printError(
-        `Invalid worktree index ${requestedIndex}. Run repos list from this repo to see indexes.`
-      );
+    const indexedResult = await resolveWorktreeIndex(repo, requestedIndex);
+    if (!indexedResult.success) {
+      printError(indexedResult.error);
       process.exit(1);
     }
 
     if (options?.tmux) {
-      await openTmuxSession(repo.name, indexed.branch, indexed.path);
+      await openTmuxSession(
+        repo.name,
+        indexedResult.data.branch,
+        indexedResult.data.path
+      );
     } else {
-      print(indexed.path);
+      print(indexedResult.data.path);
     }
     return;
   }
@@ -75,6 +63,8 @@ export async function workCommand(
     process.exit(1);
   }
 
+  // Check if worktree already exists
+  const worktreesResult = await listWorktrees(repo.path);
   const existing = worktreesResult.success
     ? findWorktreeByBranch(worktreesResult.data, branch)
     : undefined;

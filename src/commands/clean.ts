@@ -25,6 +25,7 @@ import {
   tmuxHasSession,
   tmuxKillSession,
 } from '../tmux.ts';
+import { resolveWorktreeIndex } from '../worktree-index.ts';
 
 function resolveCleanOutputPath(
   repoPath: string,
@@ -49,6 +50,7 @@ type CleanOptions = {
   force: boolean;
   dryRun: boolean;
   tmux: boolean;
+  index?: number;
 };
 
 export async function cleanCommand(
@@ -59,6 +61,21 @@ export async function cleanCommand(
 ): Promise<void> {
   const config = await loadConfig(ctx.configPath);
   const repo = await resolveRepo(config, repoName);
+
+  if (options.index !== undefined && branch) {
+    printError('Error: cannot specify both branch and --index');
+    process.exit(1);
+  }
+
+  if (options.index !== undefined) {
+    const indexedResult = await resolveWorktreeIndex(repo, options.index);
+    if (!indexedResult.success) {
+      printError(indexedResult.error);
+      process.exit(1);
+    }
+    branch = indexedResult.data.branch;
+  }
+
   const worktree = await resolveWorktree(repo.path, branch);
 
   if (worktree.isMain) {

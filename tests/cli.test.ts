@@ -4,6 +4,8 @@ import { join } from 'node:path';
 import { version } from '../package.json';
 import { cloneBare, runGitCommand } from '../src/git/index.ts';
 import { tmuxKillSession, tmuxNewSession } from '../src/tmux.ts';
+import { writeConfig } from '../src/config.ts';
+import type { ReposConfig } from '../src/types.ts';
 
 // Helper to run CLI and capture output
 async function runCli(
@@ -84,7 +86,7 @@ Commands:
   clean [options] [branch] [repo-name]  Remove a worktree
   main [repo-name]                      Output main worktree path (for shell
                                         wrapper to cd)
-  rebase [branch] [repo-name]           Rebase a worktree branch on the default
+  rebase [options] [branch] [repo-name] Rebase a worktree branch on the default
                                         branch
   cleanup [options]                     Remove worktrees for merged or deleted
                                         branches
@@ -165,6 +167,85 @@ describe('CLI work command', () => {
       stderr:
         "error: option '-i, --index <index>' argument 'abc' is invalid. index must be a positive integer\n",
       exitCode: 1,
+    });
+  });
+});
+
+describe('CLI index options', () => {
+  const testDir = '/tmp/repos-test-cli-clean-index';
+  const sourceDir = '/tmp/repos-test-cli-clean-index-source';
+  const configHome = '/tmp/repos-test-cli-clean-index-config';
+
+  afterEach(async () => {
+    await rm(testDir, { recursive: true, force: true });
+    await rm(sourceDir, { recursive: true, force: true });
+    await rm(configHome, { recursive: true, force: true });
+  });
+
+  async function createTestRepo(dir: string): Promise<void> {
+    await mkdir(dir, { recursive: true });
+    await runGitCommand(['init', '-b', 'main'], dir);
+    await Bun.write(join(dir, 'test.txt'), 'test');
+    await runGitCommand(['add', '.'], dir);
+    await runGitCommand(['commit', '-m', 'initial'], dir);
+  }
+
+  async function setupIndexedRepo(): Promise<string> {
+    await mkdir(testDir, { recursive: true });
+    await mkdir(join(configHome, 'repos'), { recursive: true });
+    await createTestRepo(sourceDir);
+
+    const repoName = 'cli-clean-index';
+    const bareDir = join(testDir, `${repoName}.git`);
+    const worktreePath = join(testDir, `${repoName}.git-feature`);
+    await cloneBare(sourceDir, bareDir);
+    await runGitCommand(
+      ['worktree', 'add', '-b', 'feature', worktreePath],
+      bareDir
+    );
+
+    const config = {
+      repos: [
+        {
+          name: repoName,
+          url: sourceDir,
+          path: bareDir,
+          bare: true,
+        },
+      ],
+    } satisfies ReposConfig;
+    await writeConfig(join(configHome, 'repos', 'config.json'), config);
+
+    return worktreePath;
+  }
+
+  test('uses positional argument as repo name when work uses index', async () => {
+    const worktreePath = await setupIndexedRepo();
+
+    expect(
+      await runCli(['work', '--no-tmux', '-i', '1', 'cli-clean-index'], {
+        XDG_CONFIG_HOME: configHome,
+        TMUX: undefined,
+      })
+    ).toEqual({
+      stdout: `${worktreePath}\n`,
+      stderr: '',
+      exitCode: 0,
+    });
+  });
+
+  test('uses positional argument as repo name when clean uses index', async () => {
+    await setupIndexedRepo();
+
+    expect(
+      await runCli(['clean', '--dry-run', '-i', '1', 'cli-clean-index'], {
+        XDG_CONFIG_HOME: configHome,
+        TMUX: undefined,
+      })
+    ).toEqual({
+      stdout: '',
+      stderr: 'Would remove worktree "cli-clean-index-feature"\n',
+      exitCode: 0,
     });
   });
 });

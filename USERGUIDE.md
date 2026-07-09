@@ -863,16 +863,19 @@ Remove a worktree.
 ```bash
 repos clean feature-x              # Inside a tracked repo
 repos clean feature-x my-repo      # Specify repo explicitly
+repos clean -i 2                   # Use a worktree index from repos list
+repos clean -i 2 my-repo           # Use an index for a specific repo
 repos clean parent --force         # Force remove parent with stacked children
 ```
 
 **Arguments:**
 
-- `<branch>` (required) - Branch name of the worktree to remove
+- `<branch>` (required unless `--index` is used) - Branch name of the worktree to remove
 - `[repo-name]` (optional) - Repository name. Auto-detected if inside a tracked repo.
 
 **Options:**
 
+- `-i, --index <index>` - Use a worktree index from `repos list` instead of a branch name
 - `--force` - Force removal even if the branch has stacked children
 
 **Safety checks:**
@@ -913,13 +916,19 @@ Rebase a worktree branch on the default branch.
 ```bash
 repos rebase feature-x my-repo     # Specify branch and repo
 repos rebase feature-x             # Inside repo, specify branch
+repos rebase -i 2                  # Use a worktree index from repos list
+repos rebase -i 2 my-repo          # Use an index for a specific repo
 repos rebase                       # Inside worktree, auto-detect
 ```
 
 **Arguments:**
 
-- `[branch]` (optional) - Branch to rebase. Auto-detected if inside a worktree.
+- `[branch]` (optional) - Branch to rebase. Auto-detected if inside a worktree, or replaced by `--index`.
 - `[repo-name]` (optional) - Repository name. Auto-detected if inside a tracked repo.
+
+**Options:**
+
+- `-i, --index <index>` - Use a worktree index from `repos list` instead of a branch name
 
 **Behavior:**
 
@@ -1447,8 +1456,8 @@ cat ~/.config/repos/config.json | grep updateBehavior
 | `repos unstack`                      | Unstack branch onto default branch          |
 | `repos collapse`                     | Collapse parent into current stacked branch |
 | `repos squash [-m] [-f] [--dry-run]` | Squash commits since base into one commit   |
-| `repos clean <branch> [repo]`        | Remove a worktree (--force for parents)     |
-| `repos rebase [branch] [repo]`       | Rebase worktree on default branch           |
+| `repos clean <branch> [repo]` / `-i <index>` | Remove a worktree (--force for parents)     |
+| `repos rebase [branch] [repo]` / `-i <index>` | Rebase worktree on default branch           |
 | `repos cleanup [--dry-run]`          | Remove merged/deleted worktrees             |
 | `repos update`                       | Update CLI to latest version                |
 | `repos -v`                           | Show version                                |

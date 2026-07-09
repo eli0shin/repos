@@ -1,6 +1,7 @@
 import { getChildBranches, getParentBranch } from './config.ts';
+import { listWorktrees } from './git/index.ts';
 import type { WorktreeInfo } from './git/index.ts';
-import type { RepoEntry } from './types.ts';
+import type { OperationResult, RepoEntry } from './types.ts';
 
 export type IndexedWorktree = WorktreeInfo & { index: number };
 
@@ -49,4 +50,34 @@ export function getIndexedWorktrees(
   });
 
   return indexed;
+}
+
+export async function resolveWorktreeIndex(
+  repo: RepoEntry,
+  index: number
+): Promise<OperationResult<IndexedWorktree>> {
+  if (!Number.isInteger(index) || index < 1) {
+    return {
+      success: false,
+      error: `Invalid worktree index ${index}. Run repos list from this repo to see indexes.`,
+    };
+  }
+
+  const worktreesResult = await listWorktrees(repo.path);
+  const indexedWorktrees = worktreesResult.success
+    ? getIndexedWorktrees(
+        repo,
+        worktreesResult.data.filter((wt) => !wt.isMain)
+      )
+    : [];
+  const indexed = indexedWorktrees.find((wt) => wt.index === index);
+
+  if (!indexed) {
+    return {
+      success: false,
+      error: `Invalid worktree index ${index}. Run repos list from this repo to see indexes.`,
+    };
+  }
+
+  return { success: true, data: indexed };
 }
