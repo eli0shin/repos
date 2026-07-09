@@ -82,7 +82,7 @@ describe('getPullRequestStatus', () => {
         '--limit',
         '1',
         '--json',
-        'state,mergedAt',
+        'state,mergedAt,url',
       ],
       cwd: worktreePath,
     });
@@ -90,28 +90,48 @@ describe('getPullRequestStatus', () => {
 
   test('maps gh PR states to list labels', async () => {
     process.env.GH_STDOUT = '[{"state":"OPEN","mergedAt":null}]';
-    expect(await getPullRequestStatus(worktreePath, 'open')).toBe('open');
+    expect(await getPullRequestStatus(worktreePath, 'open')).toEqual({
+      status: 'open',
+    });
 
     process.env.GH_STDOUT = '[{"state":"MERGED","mergedAt":null}]';
-    expect(await getPullRequestStatus(worktreePath, 'merged')).toBe('merged');
+    expect(await getPullRequestStatus(worktreePath, 'merged')).toEqual({
+      status: 'merged',
+    });
 
     process.env.GH_STDOUT =
       '[{"state":"CLOSED","mergedAt":"2026-01-01T00:00:00Z"}]';
     expect(
       await getPullRequestStatus(worktreePath, 'closed-with-merge-date')
-    ).toBe('merged');
+    ).toEqual({ status: 'merged' });
 
     process.env.GH_STDOUT = '[{"state":"CLOSED","mergedAt":null}]';
-    expect(await getPullRequestStatus(worktreePath, 'closed')).toBe('closed');
+    expect(await getPullRequestStatus(worktreePath, 'closed')).toEqual({
+      status: 'closed',
+    });
+  });
+
+  test('returns PR status with URL when gh provides one', async () => {
+    process.env.GH_STDOUT =
+      '[{"state":"OPEN","mergedAt":null,"url":"https://github.com/example/repo/pull/1"}]';
+
+    expect(await getPullRequestStatus(worktreePath, 'feature')).toEqual({
+      status: 'open',
+      url: 'https://github.com/example/repo/pull/1',
+    });
   });
 
   test('returns unknown for gh errors and malformed output', async () => {
     process.env.GH_EXIT = '1';
-    expect(await getPullRequestStatus(worktreePath, 'feature')).toBe('unknown');
+    expect(await getPullRequestStatus(worktreePath, 'feature')).toEqual({
+      status: 'unknown',
+    });
 
     delete process.env.GH_EXIT;
     process.env.GH_STDOUT = 'not json';
-    expect(await getPullRequestStatus(worktreePath, 'feature')).toBe('unknown');
+    expect(await getPullRequestStatus(worktreePath, 'feature')).toEqual({
+      status: 'unknown',
+    });
   });
 
   test('returns unknown when gh times out', async () => {
@@ -122,6 +142,6 @@ describe('getPullRequestStatus', () => {
       timeoutMs: 10,
     });
 
-    expect(result).toBe('unknown');
+    expect(result).toEqual({ status: 'unknown' });
   });
 });

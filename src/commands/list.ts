@@ -7,7 +7,7 @@ import {
 } from '../config.ts';
 import { isGitRepoOrBare, listWorktrees } from '../git/index.ts';
 import type { WorktreeInfo } from '../git/index.ts';
-import type { PullRequestStatus } from '../github.ts';
+import type { PullRequestInfo } from '../github.ts';
 import * as github from '../github.ts';
 import type { RepoEntry } from '../types.ts';
 import { print } from '../output.ts';
@@ -17,10 +17,13 @@ type PrintRepoOptions = {
   showIndexes: boolean;
 };
 
-type PrStatusByPath = Map<string, PullRequestStatus | undefined>;
+type PrInfoByPath = Map<string, PullRequestInfo | undefined>;
 
-function formatPrLabel(status: PullRequestStatus | undefined): string {
-  return status ? ` (PR ${status})` : '';
+function formatPrLabel(prInfo: PullRequestInfo | undefined): string {
+  if (!prInfo) return '';
+
+  const urlLabel = prInfo.url ? ` [${prInfo.url}]` : '';
+  return ` (PR ${prInfo.status})${urlLabel}`;
 }
 
 function printWorktreeTree(
@@ -30,7 +33,7 @@ function printWorktreeTree(
   indent: string,
   isLast: boolean,
   indexByPath?: Map<string, number>,
-  prStatusByPath?: PrStatusByPath
+  prInfoByPath?: PrInfoByPath
 ): void {
   const wt = worktrees.find((w) => w.branch === branch);
   if (!wt) return;
@@ -38,7 +41,7 @@ function printWorktreeTree(
   const prefix = indent + (isLast ? '└─ ' : '├─ ');
   const parentBranch = getParentBranch(repo, branch);
   const stackedLabel = parentBranch ? ' (stacked)' : '';
-  const prLabel = formatPrLabel(prStatusByPath?.get(wt.path));
+  const prLabel = formatPrLabel(prInfoByPath?.get(wt.path));
   const index = indexByPath?.get(wt.path);
   const indexLabel = index ? `[${index}] ` : '';
   print(
@@ -58,7 +61,7 @@ function printWorktreeTree(
       newIndent,
       index === children.length - 1,
       indexByPath,
-      prStatusByPath
+      prInfoByPath
     );
   });
 }
@@ -88,7 +91,7 @@ async function printRepo(
             ])
           )
         : undefined;
-      const prStatusEntries = await Promise.all(
+      const prInfoEntries = await Promise.all(
         nonMainWorktrees.map(
           async (wt) =>
             [
@@ -99,7 +102,7 @@ async function printRepo(
             ] as const
         )
       );
-      const prStatusByPath: PrStatusByPath = new Map(prStatusEntries);
+      const prInfoByPath: PrInfoByPath = new Map(prInfoEntries);
 
       // Print each root and its children
       rootWorktrees.forEach((wt, index) => {
@@ -110,7 +113,7 @@ async function printRepo(
           '      ',
           index === rootWorktrees.length - 1,
           indexByPath,
-          prStatusByPath
+          prInfoByPath
         );
       });
     }

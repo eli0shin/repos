@@ -1,5 +1,10 @@
 export type PullRequestStatus = 'open' | 'merged' | 'closed' | 'unknown';
 
+export type PullRequestInfo = {
+  status: PullRequestStatus;
+  url?: string;
+};
+
 const DEFAULT_GH_TIMEOUT_MS = 10_000;
 
 type GetPullRequestStatusOptions = {
@@ -9,6 +14,7 @@ type GetPullRequestStatusOptions = {
 type GhPullRequest = {
   state?: string;
   mergedAt?: string | null;
+  url?: string;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -20,7 +26,7 @@ function toGhPullRequest(value: unknown): GhPullRequest | undefined {
     return undefined;
   }
 
-  const { state, mergedAt } = value;
+  const { state, mergedAt, url } = value;
   if (state !== undefined && typeof state !== 'string') {
     return undefined;
   }
@@ -31,15 +37,36 @@ function toGhPullRequest(value: unknown): GhPullRequest | undefined {
   ) {
     return undefined;
   }
+  if (url !== undefined && typeof url !== 'string') {
+    return undefined;
+  }
 
-  return { state, mergedAt };
+  return { state, mergedAt, url };
+}
+
+function formatPullRequestInfo(pr: GhPullRequest): PullRequestInfo {
+  const withUrl = (status: PullRequestStatus): PullRequestInfo => ({
+    status,
+    ...(pr.url ? { url: pr.url } : {}),
+  });
+
+  if (pr.state === 'OPEN') {
+    return withUrl('open');
+  }
+  if (pr.state === 'MERGED') {
+    return withUrl('merged');
+  }
+  if (pr.state === 'CLOSED') {
+    return withUrl(pr.mergedAt ? 'merged' : 'closed');
+  }
+  return withUrl('unknown');
 }
 
 export async function getPullRequestStatus(
   worktreePath: string,
   branch: string,
   options: GetPullRequestStatusOptions = {}
-): Promise<PullRequestStatus | undefined> {
+): Promise<PullRequestInfo | undefined> {
   try {
     const proc = Bun.spawn(
       [
@@ -53,7 +80,7 @@ export async function getPullRequestStatus(
         '--limit',
         '1',
         '--json',
-        'state,mergedAt',
+        'state,mergedAt,url',
       ],
       {
         cwd: worktreePath,
@@ -79,7 +106,7 @@ export async function getPullRequestStatus(
     if ('timedOut' in exitResult) {
       proc.kill();
       await proc.exited;
-      return 'unknown';
+      return { status: 'unknown' };
     }
 
     const [stdout] = await Promise.all([
@@ -88,12 +115,12 @@ export async function getPullRequestStatus(
     ]);
 
     if (exitResult.exitCode !== 0) {
-      return 'unknown';
+      return { status: 'unknown' };
     }
 
     const parsed: unknown = JSON.parse(stdout);
     if (!Array.isArray(parsed)) {
-      return 'unknown';
+      return { status: 'unknown' };
     }
 
     const firstPr = parsed[0];
@@ -103,20 +130,11 @@ export async function getPullRequestStatus(
 
     const pr = toGhPullRequest(firstPr);
     if (!pr) {
-      return 'unknown';
+      return { status: 'unknown' };
     }
 
-    if (pr.state === 'OPEN') {
-      return 'open';
-    }
-    if (pr.state === 'MERGED') {
-      return 'merged';
-    }
-    if (pr.state === 'CLOSED') {
-      return pr.mergedAt ? 'merged' : 'closed';
-    }
-    return 'unknown';
+    return formatPullRequestInfo(pr);
   } catch {
-    return 'unknown';
+    return { status: 'unknown' };
   }
 }
