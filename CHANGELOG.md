@@ -1,5 +1,13 @@
 # repos
 
+## 1.4.0
+
+### Minor Changes
+
+- [#92](https://github.com/eli0shin/repos/pull/92) [`bf88990`](https://github.com/eli0shin/repos/commit/bf889902d4f236a34a92e5ae25d8aed411b3b603) Thanks [@eli0shin](https://github.com/eli0shin)! - Allow `repos clean` and `repos rebase` to select worktrees by `repos list` index.
+
+- [#90](https://github.com/eli0shin/repos/pull/90) [`c4f0c27`](https://github.com/eli0shin/repos/commit/c4f0c273e8fcd76b91e2276aaa77478688bcb8ae) Thanks [@eli0shin](https://github.com/eli0shin)! - Show GitHub pull request status labels for worktrees in `repos list`.
+
 ## 1.3.0
 
 ### Minor Changes
