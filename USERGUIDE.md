@@ -644,59 +644,6 @@ repos unstack
 
 ---
 
-#### `repos collapse`
-
-Collapse parent branch into current stacked branch.
-
-```bash
-repos collapse    # Inside a stacked worktree
-```
-
-**Prerequisites:**
-
-- Must be run from inside a stacked worktree (a branch created with `repos stack`)
-- Parent branch must have no other children (siblings must be collapsed/unstacked first)
-- Parent worktree must have no uncommitted changes
-
-**Behavior:**
-
-1. Rebases current branch onto grandparent (or default branch if no grandparent)
-2. Removes the parent worktree automatically
-3. Updates config to reparent current branch to grandparent
-
-**Use cases:**
-
-- After a stacked PR is approved, collapse it to prepare the child for final merge
-- Combine multiple stacked diffs into a single branch for merging
-- Simplify a deep stack by collapsing intermediate layers
-
-**Example:**
-
-```bash
-# You have: main → feature-auth → feature-profile
-cd ~/code/api-server-feature-profile
-repos collapse
-# Result: main → feature-profile (feature-auth worktree removed)
-# feature-profile now contains all commits from feature-auth
-```
-
-**Multi-level stacks:**
-
-```bash
-# You have: main → A → B → C
-cd ~/code/api-server-branch-c
-repos collapse
-# Result: main → A → C (B worktree removed, C now based on A)
-```
-
-**Safety checks:**
-
-- Blocks if parent has uncommitted changes
-- Blocks if parent has sibling children (other branches stacked on it)
-- Parent worktree must exist
-
----
-
 #### `repos squash [-m, --message <message>] [-f, --first] [--dry-run]`
 
 Squash all commits since the base branch into a single commit.
@@ -1068,7 +1015,7 @@ git log -1 refs/bases/feature-profile
 
 - Created by `repos stack`
 - Updated by `repos rebase` and `repos continue`
-- Deleted by `repos clean`, `repos unstack`, and `repos collapse`
+- Deleted by `repos clean` and `repos unstack`
 - Stored in the git repository (not the config file), so they survive garbage collection
 
 ### Editing Config Manually
@@ -1255,31 +1202,21 @@ cd ~/code/api-server-feature-profile
 repos rebase
 # profile is now rebased on latest auth
 
-# After auth PR is approved, collapse the stack
-repos collapse
-# auth worktree is removed, profile now based on main with all auth commits
-```
-
-**Alternative: Automatic fallback when parent is merged**
-
-```bash
-# If auth is merged and its worktree is cleaned up
+# After auth is merged and its worktree is cleaned up, sync profile
 repos rebase
-# Automatically detects auth is gone, rebases on main instead
+# Automatically detects auth is gone, rebases profile on main
 ```
 
 **Benefits:**
 
 - Work on dependent features without waiting for PR merges
 - Keep child branches in sync with parent changes
-- Collapse stacks to prepare for final merge
-- Automatic fallback when parent branches are merged
+- Automatically rebase children onto main after parent branches are merged
 
 **Tips:**
 
 - Create separate PRs for each branch in the stack
 - Rebase after making changes to parent branches
-- Use `repos collapse` after a parent PR is approved to prepare child for merge
 - Use `repos cleanup` to remove merged stacked branches
 
 ## Troubleshooting
@@ -1406,7 +1343,6 @@ cat ~/.config/repos/config.json | grep updateBehavior
 | `repos restack [--only]`                      | Deprecated alias for `repos rebase`         |
 | `repos continue`                              | Continue rebase after resolving conflicts   |
 | `repos unstack`                               | Unstack branch onto default branch          |
-| `repos collapse`                              | Collapse parent into current stacked branch |
 | `repos squash [-m] [-f] [--dry-run]`          | Squash commits since base into one commit   |
 | `repos clean <branch> [repo]` / `-i <index>`  | Remove a worktree (--force for parents)     |
 | `repos rebase [branch] [repo]` / `-i <index>` | Rebase branch and children on their parents |

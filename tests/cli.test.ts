@@ -74,7 +74,6 @@ Commands:
   restack [options]                      Deprecated alias for rebase
   unstack                                Rebase current branch on default branch and remove stack relationship
   continue                               Continue a paused rebase and update fork point tracking
-  collapse                               Collapse parent branch into current stacked branch
   squash [options]                       Squash commits since base branch into a single commit
   clean [options] [branch] [repo-name]   Remove a worktree
   main [repo-name]                       Output main worktree path (for shell wrapper to cd)
@@ -118,6 +117,16 @@ describe('CLI help output', () => {
       stdout: REMOVE_HELP_OUTPUT,
       stderr: '',
       exitCode: 0,
+    });
+  });
+});
+
+describe('removed CLI commands', () => {
+  test('collapse is no longer available', async () => {
+    expect(await runCli(['collapse'])).toEqual({
+      stdout: '',
+      stderr: "error: unknown command 'collapse'\n",
+      exitCode: 1,
     });
   });
 });

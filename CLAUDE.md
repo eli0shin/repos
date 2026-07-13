@@ -53,7 +53,6 @@ type OperationResult<T = void> =
 | `repos restack [--only]`                          | Deprecated alias for `repos rebase`           |
 | `repos continue`                                  | Continue rebase after resolving conflicts     |
 | `repos unstack`                                   | Rebase onto default branch and remove stack   |
-| `repos collapse`                                  | Collapse parent into current stacked branch   |
 | `repos squash [-m] [-f] [--dry-run]`              | Squash commits since base into single commit  |
 | `repos clean <branch> [repo] [-t]` / `-i <index>` | Remove a worktree (--force for parent branch) |
 | `repos rebase [branch] [repo]` / `-i <index>`     | Rebase branch and children on their parents   |
