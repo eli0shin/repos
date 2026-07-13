@@ -1,5 +1,11 @@
 # repos
 
+## 1.4.3
+
+### Patch Changes
+
+- [#97](https://github.com/eli0shin/repos/pull/97) [`714ca09`](https://github.com/eli0shin/repos/commit/714ca0900b8aaaff6af2b5bb51887bc29454f35b) Thanks [@eli0shin](https://github.com/eli0shin)! - Preserve vertical tree lines beside multiline pull request details in `repos list` output.
+
 ## 1.4.2
 
 ### Patch Changes
