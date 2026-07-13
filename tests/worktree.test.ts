@@ -11,6 +11,7 @@ import {
   hasUncommittedChanges,
   getHeadCommit,
   getBaseRef,
+  getDefaultBranch,
 } from '../src/git/index.ts';
 import { workCommand } from '../src/commands/work.ts';
 import { stackCommand } from '../src/commands/stack.ts';
@@ -1503,6 +1504,57 @@ describe('repos rebase command', () => {
       'feature commit\nmain commit 2\nmain commit 1'
     );
   });
+
+  test('continue updates the fork point for a branch without a recorded parent', async () => {
+    const originalCwd = process.cwd();
+    const localDir = join(testDir, 'local');
+    await runGitCommand(['clone', remoteDir, localDir]);
+
+    await Bun.write(join(localDir, 'shared.txt'), 'base');
+    await runGitCommand(['add', '.'], localDir);
+    await runGitCommand(['commit', '-m', 'base'], localDir);
+    await runGitCommand(['push', '-u', 'origin', 'HEAD'], localDir);
+
+    const worktreePath = join(testDir, 'local-feature');
+    await runGitCommand(
+      ['worktree', 'add', '-b', 'feature', worktreePath],
+      localDir
+    );
+    await Bun.write(join(worktreePath, 'shared.txt'), 'feature');
+    await runGitCommand(['add', '.'], worktreePath);
+    await runGitCommand(['commit', '-m', 'feature'], worktreePath);
+
+    await Bun.write(join(localDir, 'shared.txt'), 'main');
+    await runGitCommand(['add', '.'], localDir);
+    await runGitCommand(['commit', '-m', 'main update'], localDir);
+    await runGitCommand(['push', 'origin', 'HEAD'], localDir);
+
+    await writeConfig(configPath, {
+      repos: [{ name: 'local', url: remoteDir, path: localDir }],
+    });
+
+    const ctx = { configPath };
+    const mockExit = mockProcessExit();
+    await expect(
+      rebaseCommand(ctx, 'feature', 'local', { only: true })
+    ).rejects.toThrow('process.exit(1)');
+    mockExit.mockRestore();
+
+    await Bun.write(join(worktreePath, 'shared.txt'), 'resolved');
+    await runGitCommand(['add', '.'], worktreePath);
+    process.chdir(worktreePath);
+    await continueCommand(ctx);
+    process.chdir(originalCwd);
+
+    const baseRef = await getBaseRef(localDir, 'feature');
+    const defaultBranch = await getDefaultBranch(localDir);
+    if (!defaultBranch.success) throw new Error(defaultBranch.error);
+    const defaultHead = await runGitCommand(
+      ['rev-parse', `origin/${defaultBranch.data}`],
+      localDir
+    );
+    expect(baseRef).toEqual({ success: true, data: defaultHead.stdout.trim() });
+  });
 });
 
 describe('worktree workflow integration', () => {
@@ -1938,7 +1990,7 @@ describe('repos restack command', () => {
     mockExit.mockRestore();
   });
 
-  test('restack recursively restacks children by default', async () => {
+  test('rebase recursively rebases children by default', async () => {
     // Test that restack propagates changes through entire stack
 
     // Clone as bare
@@ -1979,9 +2031,9 @@ describe('repos restack command', () => {
     await runGitCommand(['add', '.'], branchAPath);
     await runGitCommand(['commit', '-m', 'second commit in a'], branchAPath);
 
-    // Restack from branch-b (should also restack branch-c)
+    // Rebase from branch-b (should also rebase branch-c)
     process.chdir(branchBPath);
-    await restackCommand(ctx);
+    await rebaseCommand(ctx);
 
     // Verify branch-b has the new commit from a
     const logB = await runGitCommand(['log', '--oneline'], branchBPath);
@@ -3011,5 +3063,122 @@ describe('repos continue command', () => {
     expect(logC.stdout).toContain('update in a');
     expect(logC.stdout).toContain('commit in b');
     expect(logC.stdout).toContain('commit in c');
+  });
+
+  test('continue resumes remaining sibling branches after a child conflict', async () => {
+    const bareDir = join(testDir, 'bare.git');
+    await cloneBare(sourceDir, bareDir);
+    await writeConfig(configPath, {
+      repos: [{ name: 'bare', url: sourceDir, path: bareDir, bare: true }],
+    });
+
+    const ctx = { configPath };
+    await workCommand(ctx, 'branch-a', 'bare');
+    const branchAPath = join(testDir, 'bare.git-branch-a');
+    process.chdir(branchAPath);
+    await stackCommand(ctx, 'branch-b');
+    const branchBPath = join(testDir, 'bare.git-branch-b');
+
+    await Bun.write(join(branchBPath, 'shared.txt'), 'original');
+    await runGitCommand(['add', '.'], branchBPath);
+    await runGitCommand(['commit', '-m', 'original in b'], branchBPath);
+
+    process.chdir(branchBPath);
+    await stackCommand(ctx, 'branch-c');
+    const branchCPath = join(testDir, 'bare.git-branch-c');
+    await Bun.write(join(branchCPath, 'shared.txt'), 'change in c');
+    await runGitCommand(['add', '.'], branchCPath);
+    await runGitCommand(['commit', '-m', 'change in c'], branchCPath);
+
+    process.chdir(branchBPath);
+    await stackCommand(ctx, 'branch-d');
+    const branchDPath = join(testDir, 'bare.git-branch-d');
+    await Bun.write(join(branchDPath, 'branch-d.txt'), 'change in d');
+    await runGitCommand(['add', '.'], branchDPath);
+    await runGitCommand(['commit', '-m', 'change in d'], branchDPath);
+
+    await Bun.write(join(branchBPath, 'shared.txt'), 'update in b');
+    await runGitCommand(['add', '.'], branchBPath);
+    await runGitCommand(['commit', '-m', 'update in b'], branchBPath);
+
+    process.chdir(branchBPath);
+    const mockExit = mockProcessExit();
+    await expect(rebaseCommand(ctx)).rejects.toThrow('process.exit(1)');
+    mockExit.mockRestore();
+
+    await Bun.write(join(branchCPath, 'shared.txt'), 'resolved');
+    await runGitCommand(['add', '.'], branchCPath);
+    process.chdir(branchCPath);
+    await continueCommand(ctx);
+
+    const branchDLog = await runGitCommand(['log', '--format=%s'], branchDPath);
+    expect(branchDLog.stdout).toContain('update in b');
+    expect(branchDLog.stdout).toContain('change in d');
+  });
+
+  test('rebase --only remains limited to the current branch after conflicts', async () => {
+    const bareDir = join(testDir, 'bare.git');
+    await cloneBare(sourceDir, bareDir);
+    await writeConfig(configPath, {
+      repos: [{ name: 'bare', url: sourceDir, path: bareDir, bare: true }],
+    });
+
+    const ctx = { configPath };
+    await workCommand(ctx, 'branch-a', 'bare');
+    const branchAPath = join(testDir, 'bare.git-branch-a');
+    await Bun.write(join(branchAPath, 'shared.txt'), 'content from a');
+    await runGitCommand(['add', '.'], branchAPath);
+    await runGitCommand(['commit', '-m', 'commit in a'], branchAPath);
+
+    process.chdir(branchAPath);
+    await stackCommand(ctx, 'branch-b');
+    const branchBPath = join(testDir, 'bare.git-branch-b');
+    await Bun.write(join(branchBPath, 'shared.txt'), 'content from b');
+    await runGitCommand(['add', '.'], branchBPath);
+    await runGitCommand(['commit', '-m', 'commit in b'], branchBPath);
+
+    process.chdir(branchBPath);
+    await stackCommand(ctx, 'branch-c');
+    const branchCPath = join(testDir, 'bare.git-branch-c');
+    await Bun.write(join(branchCPath, 'file-c.txt'), 'content from c');
+    await runGitCommand(['add', '.'], branchCPath);
+    await runGitCommand(['commit', '-m', 'commit in c'], branchCPath);
+    const childHeadBefore = await runGitCommand(
+      ['rev-parse', 'HEAD'],
+      branchCPath
+    );
+
+    await Bun.write(join(branchAPath, 'shared.txt'), 'updated content from a');
+    await runGitCommand(['add', '.'], branchAPath);
+    await runGitCommand(['commit', '-m', 'update in a'], branchAPath);
+
+    process.chdir(branchBPath);
+    const mockExit = mockProcessExit();
+    await expect(
+      rebaseCommand(ctx, undefined, undefined, { only: true })
+    ).rejects.toThrow('process.exit(1)');
+    mockExit.mockRestore();
+
+    const gitDirResult = await runGitCommand(
+      ['rev-parse', '--absolute-git-dir'],
+      branchBPath
+    );
+    const onlyMarker = join(
+      gitDirResult.stdout.trim(),
+      'rebase-merge',
+      'repos-only'
+    );
+    expect(existsSync(onlyMarker)).toBe(true);
+
+    await Bun.write(join(branchBPath, 'shared.txt'), 'resolved content');
+    await runGitCommand(['add', '.'], branchBPath);
+    await continueCommand(ctx);
+
+    expect(existsSync(onlyMarker)).toBe(false);
+    const childHeadAfter = await runGitCommand(
+      ['rev-parse', 'HEAD'],
+      branchCPath
+    );
+    expect(childHeadAfter.stdout.trim()).toBe(childHeadBefore.stdout.trim());
   });
 });

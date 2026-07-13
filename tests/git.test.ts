@@ -21,6 +21,8 @@ import {
   rebaseOnBranch,
   rebaseOnRef,
   rebaseContinue,
+  markRebaseOnly,
+  shouldRebaseChildren,
   cloneBare,
   ensureRefspecConfig,
   localBranchExists,
@@ -1123,6 +1125,11 @@ describe('rebaseContinue', () => {
     // Attempt to rebase child on parent - should conflict
     const rebaseResult = await rebaseOnRef(childWorktreeDir, 'parent-branch');
     expect(rebaseResult.success).toBe(false);
+    expect(await markRebaseOnly(childWorktreeDir)).toEqual({
+      success: true,
+      data: undefined,
+    });
+    expect(await shouldRebaseChildren(childWorktreeDir)).toBe(false);
 
     // Resolve the conflict by accepting child's version
     await Bun.write(join(childWorktreeDir, 'file.txt'), 'resolved content');
@@ -1132,6 +1139,7 @@ describe('rebaseContinue', () => {
     // because git opens an editor for the commit message
     const result = await rebaseContinue(childWorktreeDir);
     expect(result).toEqual({ success: true, data: undefined });
+    expect(await shouldRebaseChildren(childWorktreeDir)).toBe(true);
 
     // Verify rebase completed - log should contain both commits
     const logResult = await runGitCommand(
@@ -1176,9 +1184,19 @@ describe('rebaseContinue', () => {
     await runGitCommand(['add', '.'], childWorktreeDir);
     await runGitCommand(['commit', '-m', 'child commit 2'], childWorktreeDir);
 
+    // Exercise marker cleanup with Git's alternate rebase state directory.
+    await runGitCommand(
+      ['config', 'rebase.backend', 'apply'],
+      childWorktreeDir
+    );
+
     // Attempt to rebase child on parent - should conflict on first commit
     const rebaseResult = await rebaseOnRef(childWorktreeDir, 'parent-branch');
     expect(rebaseResult.success).toBe(false);
+    expect(await markRebaseOnly(childWorktreeDir)).toEqual({
+      success: true,
+      data: undefined,
+    });
 
     // Resolve first conflict
     await Bun.write(join(childWorktreeDir, 'file.txt'), 'resolved v1');
@@ -1197,7 +1215,10 @@ describe('rebaseContinue', () => {
         'To abort: git rebase --abort',
     });
 
-    // Clean up: abort the rebase
+    expect(await shouldRebaseChildren(childWorktreeDir)).toBe(false);
+
+    // Aborting removes Git's rebase state and the repos marker with it.
     await runGitCommand(['rebase', '--abort'], childWorktreeDir);
+    expect(await shouldRebaseChildren(childWorktreeDir)).toBe(true);
   });
 });

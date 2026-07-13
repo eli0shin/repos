@@ -3,9 +3,14 @@ import {
   loadConfig,
   findRepoFromCwd,
   getParentBranch,
-  getChildBranches,
+  removeStackEntry,
+  saveStackUpdate,
 } from '../config.ts';
-import { restackTree, type RestackContext } from './restack.ts';
+import {
+  getRebaseOrder,
+  rebaseBranches,
+  type RestackContext,
+} from './restack.ts';
 import {
   listWorktrees,
   findWorktreeByDirectory,
@@ -18,6 +23,8 @@ import {
   getHeadCommit,
   runGitCommand,
   getDefaultBranch,
+  shouldRebaseChildren,
+  getRebaseRoot,
 } from '../git/index.ts';
 import { print, printError } from '../output.ts';
 
@@ -66,6 +73,9 @@ export async function continueCommand(ctx: CommandContext): Promise<void> {
     currentBranch = rebaseBranchResult.data;
   }
 
+  const includeChildren = await shouldRebaseChildren(currentWorktree.path);
+  const rebaseRoot = await getRebaseRoot(currentWorktree.path);
+
   print('Continuing rebase...');
 
   // Continue the rebase
@@ -75,7 +85,7 @@ export async function continueCommand(ctx: CommandContext): Promise<void> {
     process.exit(1);
   }
 
-  // Update the base ref if this is a stacked branch
+  // Update the base ref to the branch's effective parent.
   const parentBranch = getParentBranch(repo, currentBranch);
   if (parentBranch) {
     const parentWorktree = findWorktreeByBranch(
@@ -102,63 +112,114 @@ export async function continueCommand(ctx: CommandContext): Promise<void> {
       if (parentRefResult.exitCode === 0) {
         parentHead = parentRefResult.stdout.trim();
       } else {
-        // Parent branch is gone, delete the base ref
-        await deleteBaseRef(repo.path, currentBranch);
-        print('Parent branch no longer exists, removed fork point tracking.');
-        print('Rebase completed successfully.');
-        return;
+        // Parent branch is gone, remove the stale relationship and fork point.
+        const updatedRepo = removeStackEntry(repo, currentBranch);
+        const saveResult = await saveStackUpdate(
+          ctx.configPath,
+          config,
+          updatedRepo
+        );
+        if (!saveResult.success) {
+          printError('Error: Could not remove stale stack tracking.');
+          process.exit(1);
+        }
+        const deleteResult = await deleteBaseRef(repo.path, currentBranch);
+        if (!deleteResult.success) {
+          printError(
+            `Warning: Failed to remove fork point: ${deleteResult.error}`
+          );
+        }
+        print('Parent branch no longer exists, removed stack tracking.');
+        parentHead = '';
       }
     }
 
-    const setRefResult = await setBaseRef(repo.path, currentBranch, parentHead);
-    if (!setRefResult.success) {
-      printError(`Error: Failed to update fork point: ${setRefResult.error}`);
-      process.exit(1);
-    }
+    if (parentHead) {
+      const setRefResult = await setBaseRef(
+        repo.path,
+        currentBranch,
+        parentHead
+      );
+      if (!setRefResult.success) {
+        printError(`Error: Failed to update fork point: ${setRefResult.error}`);
+        process.exit(1);
+      }
 
-    print('Updated fork point reference.');
+      print('Updated fork point reference.');
+    }
+  } else {
+    const defaultBranchResult = await getDefaultBranch(repo.path);
+    if (defaultBranchResult.success) {
+      const targetRef = `origin/${defaultBranchResult.data}`;
+      const targetResult = await runGitCommand(
+        ['rev-parse', targetRef],
+        repo.path
+      );
+      if (targetResult.exitCode === 0) {
+        const setRefResult = await setBaseRef(
+          repo.path,
+          currentBranch,
+          targetResult.stdout.trim()
+        );
+        if (!setRefResult.success) {
+          printError(
+            `Error: Failed to update fork point: ${setRefResult.error}`
+          );
+          process.exit(1);
+        }
+        print('Updated fork point reference.');
+      }
+    }
   }
 
   print('Rebase completed successfully.');
 
-  // Check for children to restack recursively
-  const children = getChildBranches(repo, currentBranch);
-  if (children.length > 0) {
-    // Reload worktrees since the rebase may have changed things
-    const freshWorktreesResult = await listWorktrees(repo.path);
-    if (!freshWorktreesResult.success) {
-      printError(`Error: ${freshWorktreesResult.error}`);
-      process.exit(1);
-    }
+  if (!includeChildren) return;
 
-    // Check if any children have worktrees
-    const childrenWithWorktrees = children.filter((child) =>
-      findWorktreeByBranch(freshWorktreesResult.data, child)
+  const freshConfig = await loadConfig(ctx.configPath);
+  const freshRepo = freshConfig.repos.find((entry) => entry.path === repo.path);
+  if (!freshRepo) {
+    printError('Error: Repository configuration was modified during rebase.');
+    process.exit(1);
+  }
+
+  const freshWorktreesResult = await listWorktrees(repo.path);
+  if (!freshWorktreesResult.success) {
+    printError(`Error: ${freshWorktreesResult.error}`);
+    process.exit(1);
+  }
+
+  const rootBranch = rebaseRoot ?? currentBranch;
+  const rebaseOrder = getRebaseOrder(
+    freshRepo,
+    freshWorktreesResult.data,
+    rootBranch
+  );
+  const currentIndex = rebaseOrder.indexOf(currentBranch);
+  if (currentIndex < 0) {
+    printError(
+      `Error: Branch "${currentBranch}" is no longer in rebase tree "${rootBranch}".`
     );
+    process.exit(1);
+  }
+  const remainingBranches = rebaseOrder.slice(currentIndex + 1);
+  if (remainingBranches.length === 0) return;
 
-    if (childrenWithWorktrees.length > 0) {
-      print(`Restacking ${childrenWithWorktrees.length} child branch(es)...`);
+  print(`Rebasing ${remainingBranches.length} remaining branch(es)...`);
+  const defaultBranchResult = await getDefaultBranch(repo.path);
+  const defaultBranch = defaultBranchResult.success
+    ? defaultBranchResult.data
+    : undefined;
+  const rctx = {
+    ctx,
+    repo: freshRepo,
+    config: freshConfig,
+    worktrees: freshWorktreesResult.data,
+    defaultBranch,
+    rootBranch,
+  } satisfies RestackContext;
 
-      const defaultBranchResult = await getDefaultBranch(repo.path);
-      const defaultBranch = defaultBranchResult.success
-        ? defaultBranchResult.data
-        : undefined;
-
-      const rctx = {
-        ctx,
-        repo,
-        config,
-        worktrees: freshWorktreesResult.data,
-        defaultBranch,
-      } satisfies RestackContext;
-
-      for (const child of childrenWithWorktrees) {
-        const childSuccess = await restackTree(rctx, child);
-        if (!childSuccess) {
-          // Child has conflicts - user needs to resolve and continue again
-          process.exit(1);
-        }
-      }
-    }
+  if (!(await rebaseBranches(rctx, remainingBranches, rootBranch))) {
+    process.exit(1);
   }
 }

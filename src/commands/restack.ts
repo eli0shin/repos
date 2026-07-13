@@ -1,7 +1,7 @@
 import type { CommandContext } from '../cli.ts';
 import {
   loadConfig,
-  findRepoFromCwd,
+  resolveRepo,
   getParentBranch,
   getChildBranches,
   removeStackEntry,
@@ -11,7 +11,6 @@ import type { RepoEntry, ReposConfig } from '../types.ts';
 import {
   getDefaultBranch,
   listWorktrees,
-  findWorktreeByDirectory,
   findWorktreeByBranch,
   fetchOrigin,
   rebaseOnto,
@@ -22,12 +21,19 @@ import {
   computeForkPoint,
   refreshBaseRef,
   resolveRef,
+  resolveWorktree,
+  isRebaseInProgress,
+  markRebaseOnly,
+  markRebaseRoot,
+  runGitCommand,
   type WorktreeInfo,
 } from '../git/index.ts';
 import { print, printError } from '../output.ts';
+import { resolveWorktreeIndex } from '../worktree-index.ts';
 
-type RestackOptions = {
-  only: boolean;
+type RebaseStackOptions = {
+  only?: boolean;
+  index?: number;
 };
 
 export type RestackContext = {
@@ -35,8 +41,9 @@ export type RestackContext = {
   repo: RepoEntry;
   config: ReposConfig;
   worktrees: WorktreeInfo[];
-  /** Resolved once at the start of the restack run; undefined if resolution failed. */
+  /** Resolved once at the start of the rebase run; undefined if resolution failed. */
   defaultBranch: string | undefined;
+  rootBranch?: string;
 };
 
 /**
@@ -45,7 +52,8 @@ export type RestackContext = {
  */
 async function restackBranch(
   rctx: RestackContext,
-  branch: string
+  branch: string,
+  includeChildren = true
 ): Promise<boolean> {
   const { ctx, repo } = rctx;
   const { config, worktrees } = rctx;
@@ -57,27 +65,31 @@ async function restackBranch(
   }
 
   const parentBranch = getParentBranch(repo, branch);
-  if (!parentBranch) {
-    printError(
-      `Error: No parent branch recorded for "${branch}". Use "repos rebase" instead.`
-    );
-    return false;
-  }
 
   // Check if parent branch still exists (has an active worktree)
-  const parentWorktree = findWorktreeByBranch(worktrees, parentBranch);
+  const parentWorktree = parentBranch
+    ? findWorktreeByBranch(worktrees, parentBranch)
+    : undefined;
   const parentStillExists = parentWorktree !== undefined;
 
   // Check if parent is the default branch (may not have a worktree in bare repos).
   // defaultBranch is resolved once per restack run (in restackCommand) and passed
   // via RestackContext to avoid redundant git calls for every branch in the chain.
   const defaultBranch = rctx.defaultBranch;
-  const parentIsDefaultBranch = parentBranch === defaultBranch;
+  const parentIsDefaultBranch =
+    parentBranch === defaultBranch || parentBranch === undefined;
 
   // Determine target branch for rebase
   let targetRef: string;
 
-  if (parentStillExists) {
+  if (!parentBranch) {
+    if (!defaultBranch) {
+      printError('Error: Could not determine default branch');
+      return false;
+    }
+    targetRef = `origin/${defaultBranch}`;
+    print(`Rebasing "${branch}" on "${defaultBranch}"...`);
+  } else if (parentStillExists) {
     targetRef = parentBranch;
     print(`Rebasing "${branch}" on parent branch "${parentBranch}"...`);
   } else if (parentIsDefaultBranch) {
@@ -107,7 +119,11 @@ async function restackBranch(
   // Get fork point from base ref (refreshing if stale), or compute as fallback.
   // refreshBaseRef falls back to the stored ref when getMergeBase fails (e.g.,
   // parent branch is gone), so we can call it unconditionally.
-  const baseRefResult = await refreshBaseRef(repo.path, branch, parentBranch);
+  const baseRefResult = await refreshBaseRef(
+    repo.path,
+    branch,
+    parentBranch ?? targetRef
+  );
   if (baseRefResult.success && baseRefResult.message) {
     print(baseRefResult.message);
   }
@@ -120,7 +136,7 @@ async function restackBranch(
   if (baseRefResult.success) {
     forkPoint = baseRefResult.data;
     useForkPoint = true;
-  } else if (parentStillExists) {
+  } else if (parentStillExists && parentBranch) {
     // No base ref exists but parent is available - compute fork point
     // This handles migration from stacks created before fork point tracking
     print('Computing fork point (no base ref found)...');
@@ -151,6 +167,27 @@ async function restackBranch(
   }
 
   if (!rebaseResult.success) {
+    if (await isRebaseInProgress(worktree.path)) {
+      const markerResult = includeChildren
+        ? await markRebaseRoot(worktree.path, rctx.rootBranch ?? branch)
+        : await markRebaseOnly(worktree.path);
+      if (!markerResult.success) {
+        const abortResult = await runGitCommand(
+          ['rebase', '--abort'],
+          worktree.path
+        );
+        printError(
+          `Error: Failed to preserve rebase state: ${markerResult.error}`
+        );
+        if (abortResult.exitCode === 0) {
+          printError(
+            'The rebase was aborted to avoid losing continuation state.'
+          );
+        } else {
+          printError(`Failed to abort the rebase: ${abortResult.stderr}`);
+        }
+      }
+    }
     printError(`Error: ${rebaseResult.error}`);
     return false;
   }
@@ -166,41 +203,65 @@ async function restackBranch(
   if (parentWorktree) {
     const parentHeadResult = await getHeadCommit(parentWorktree.path);
     if (parentHeadResult.success) {
-      await setBaseRef(repo.path, branch, parentHeadResult.data);
+      const setResult = await setBaseRef(
+        repo.path,
+        branch,
+        parentHeadResult.data
+      );
+      if (!setResult.success) {
+        printError(`Warning: Failed to update fork point: ${setResult.error}`);
+      }
+    } else {
+      printError(
+        `Warning: Failed to resolve parent HEAD: ${parentHeadResult.error}`
+      );
     }
   } else if (parentIsDefaultBranch) {
     // Parent is the default branch but has no worktree - update base ref to origin/{default} HEAD
     const revResult = await resolveRef(worktree.path, targetRef);
     if (revResult.success) {
-      await setBaseRef(repo.path, branch, revResult.data);
+      const setResult = await setBaseRef(repo.path, branch, revResult.data);
+      if (!setResult.success) {
+        printError(`Warning: Failed to update fork point: ${setResult.error}`);
+      }
+    } else {
+      printError(`Warning: Failed to resolve ${targetRef}: ${revResult.error}`);
     }
   } else {
     // Parent is gone, delete the base ref since we're no longer stacked
-    await deleteBaseRef(repo.path, branch);
+    const deleteResult = await deleteBaseRef(repo.path, branch);
+    if (!deleteResult.success) {
+      printError(`Warning: Failed to remove fork point: ${deleteResult.error}`);
+    }
   }
 
   print(`Rebased "${branch}" on "${targetRef}"`);
   return true;
 }
 
-/**
- * Recursively restack a branch and all its children.
- */
-export async function restackTree(
-  rctx: RestackContext,
-  branch: string
-): Promise<boolean> {
-  // First, restack this branch
-  const success = await restackBranch(rctx, branch);
-  if (!success) {
-    return false;
+export function getRebaseOrder(
+  repo: RepoEntry,
+  worktrees: WorktreeInfo[],
+  rootBranch: string
+): string[] {
+  const branches: string[] = [];
+
+  function visit(branch: string): void {
+    branches.push(branch);
+    for (const child of getChildBranches(repo, branch)) {
+      if (findWorktreeByBranch(worktrees, child)) {
+        visit(child);
+      } else {
+        print(`Skipping "${child}" (no worktree)`);
+      }
+    }
   }
 
-  // Reload config and worktrees since they may have changed.
-  // Note: We mutate rctx in place intentionally. This is safe because:
-  // 1. This code only runs after restackBranch succeeds (early return on failure above)
-  // 2. If child recursion fails, we return false and exit - parent state doesn't matter
-  // 3. The mutation propagates updated worktree list to subsequent sibling branches
+  visit(rootBranch);
+  return branches;
+}
+
+async function refreshRestackContext(rctx: RestackContext): Promise<boolean> {
   rctx.config = await loadConfig(rctx.ctx.configPath);
   const worktreesResult = await listWorktrees(rctx.repo.path);
   if (!worktreesResult.success) {
@@ -209,72 +270,72 @@ export async function restackTree(
   }
   rctx.worktrees = worktreesResult.data;
 
-  // Find the updated repo entry
   const updatedRepo = rctx.config.repos.find((r) => r.path === rctx.repo.path);
   if (!updatedRepo) {
-    printError('Error: Repository configuration was modified during restack.');
+    printError('Error: Repository configuration was modified during rebase.');
     return false;
   }
   rctx.repo = updatedRepo;
-
-  // Get children of this branch and restack them
-  const children = getChildBranches(rctx.repo, branch);
-  for (const child of children) {
-    // Check if child has a worktree
-    const childWorktree = findWorktreeByBranch(rctx.worktrees, child);
-    if (!childWorktree) {
-      print(`Skipping "${child}" (no worktree)`);
-      continue;
-    }
-
-    const childSuccess = await restackTree(rctx, child);
-    if (!childSuccess) {
-      // Stop on first failure - user needs to resolve conflicts
-      return false;
-    }
-  }
-
   return true;
 }
 
-export async function restackCommand(
+export async function rebaseBranches(
+  rctx: RestackContext,
+  branches: string[],
+  rootBranch: string
+): Promise<boolean> {
+  rctx.rootBranch = rootBranch;
+  for (const branch of branches) {
+    if (!(await restackBranch(rctx, branch))) return false;
+    if (!(await refreshRestackContext(rctx))) return false;
+  }
+  return true;
+}
+
+/** Rebase a branch and its descendants in depth-first order. */
+export async function restackTree(
+  rctx: RestackContext,
+  branch: string
+): Promise<boolean> {
+  const branches = getRebaseOrder(rctx.repo, rctx.worktrees, branch);
+  return rebaseBranches(rctx, branches, branch);
+}
+
+export async function rebaseStackCommand(
   ctx: CommandContext,
-  options: RestackOptions = { only: false }
+  branch?: string,
+  repoName?: string,
+  options: RebaseStackOptions = {}
 ): Promise<void> {
   const config = await loadConfig(ctx.configPath);
+  const repo = await resolveRepo(config, repoName);
 
-  const repo = await findRepoFromCwd(config, process.cwd());
-  if (!repo) {
-    printError('Error: Not inside a tracked repo.');
+  if (options.index !== undefined && branch) {
+    printError('Error: cannot specify both branch and --index');
     process.exit(1);
   }
 
-  // List worktrees to find current branch
+  if (options.index !== undefined) {
+    const indexedResult = await resolveWorktreeIndex(repo, options.index);
+    if (!indexedResult.success) {
+      printError(indexedResult.error);
+      process.exit(1);
+    }
+    branch = indexedResult.data.branch;
+  }
+
+  const currentWorktree = await resolveWorktree(repo.path, branch);
+  if (!currentWorktree.branch) {
+    printError(
+      'Error: Cannot rebase in detached HEAD state. Check out a branch first.'
+    );
+    process.exit(1);
+  }
+  const currentBranch = currentWorktree.branch;
+
   const worktreesResult = await listWorktrees(repo.path);
   if (!worktreesResult.success) {
     printError(`Error: ${worktreesResult.error}`);
-    process.exit(1);
-  }
-
-  // Find the worktree we're currently in
-  const currentWorktree = findWorktreeByDirectory(
-    worktreesResult.data,
-    process.cwd()
-  );
-
-  if (!currentWorktree?.branch) {
-    printError('Error: Not inside a worktree. Run from inside a worktree.');
-    process.exit(1);
-  }
-
-  const currentBranch = currentWorktree.branch;
-
-  // Check if this branch has a parent (is stacked)
-  const parentBranch = getParentBranch(repo, currentBranch);
-  if (!parentBranch) {
-    printError(
-      `Error: No parent branch recorded for "${currentBranch}". Use "repos rebase" instead.`
-    );
     process.exit(1);
   }
 
@@ -301,14 +362,14 @@ export async function restackCommand(
 
   let success: boolean;
   if (options.only) {
-    // Only restack current branch
-    success = await restackBranch(rctx, currentBranch);
+    // Only rebase current branch
+    success = await restackBranch(rctx, currentBranch, false);
   } else {
     // Restack current branch and all children recursively
     const children = getChildBranches(repo, currentBranch);
     if (children.length > 0) {
       print(
-        `Will restack "${currentBranch}" and ${children.length} child branch(es)...`
+        `Will rebase "${currentBranch}" and ${children.length} child branch(es)...`
       );
     }
     success = await restackTree(rctx, currentBranch);
@@ -317,4 +378,12 @@ export async function restackCommand(
   if (!success) {
     process.exit(1);
   }
+}
+
+export async function restackCommand(
+  ctx: CommandContext,
+  options: RebaseStackOptions = {}
+): Promise<void> {
+  printError('Warning: "repos restack" is deprecated; use "repos rebase".');
+  await rebaseStackCommand(ctx, undefined, undefined, options);
 }

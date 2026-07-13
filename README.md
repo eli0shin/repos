@@ -30,13 +30,13 @@ curl -fsSL https://raw.githubusercontent.com/eli0shin/repos/main/install.sh | ba
 | `repos update`                                | Update repos CLI to latest version                   |
 | `repos work <branch> [repo]`                  | Create a worktree for a branch                       |
 | `repos stack <branch>`                        | Create a stacked worktree from current branch        |
-| `repos restack [--only]`                      | Rebase stacked branch(es) on parent (recursive)      |
-| `repos continue`                              | Continue restack after resolving conflicts           |
+| `repos restack [--only]`                      | Deprecated alias for `repos rebase`                  |
+| `repos continue`                              | Continue rebase after resolving conflicts            |
 | `repos unstack`                               | Rebase onto default branch and remove stack relation |
 | `repos collapse`                              | Collapse parent branch into current stacked branch   |
 | `repos squash [-m] [-f] [--dry-run]`          | Squash commits since base into single commit         |
 | `repos clean <branch> [repo]` / `-i <index>`  | Remove a worktree (--force for parent branches)      |
-| `repos rebase [branch] [repo]` / `-i <index>` | Rebase worktree branch on default branch             |
+| `repos rebase [branch] [repo]` / `-i <index>` | Rebase branch and children on their recorded parents |
 | `repos cleanup [--dry-run]`                   | Remove worktrees for merged/deleted branches         |
 | `repos init`                                  | Configure shell for work command                     |
 | `work <branch>`                               | Create worktree and cd into it (shell function)      |
