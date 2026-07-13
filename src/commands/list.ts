@@ -1,5 +1,10 @@
 import type { CommandContext } from '../cli.ts';
 import {
+  colorPullRequestStatus,
+  colorWorktreeIndex,
+  colorWorktreeName,
+} from '../color.ts';
+import {
   loadConfig,
   getParentBranch,
   getChildBranches,
@@ -20,8 +25,12 @@ type PrintRepoOptions = {
 type PrInfoByPath = Map<string, PullRequestInfo | undefined>;
 
 function formatPrLabel(prInfo: PullRequestInfo): string {
+  const statusLabel = colorPullRequestStatus(
+    `(PR ${prInfo.status})`,
+    prInfo.status
+  );
   const urlLabel = prInfo.url ? ` ${prInfo.url}` : '';
-  return `(PR ${prInfo.status})${urlLabel}`;
+  return `${statusLabel}${urlLabel}`;
 }
 
 function printWorktreeTree(
@@ -41,8 +50,9 @@ function printWorktreeTree(
   const stackedLabel = parentBranch ? ' (stacked)' : '';
   const prInfo = prInfoByPath?.get(wt.path);
   const index = indexByPath?.get(wt.path);
-  const indexLabel = index ? `[${index}] ` : '';
-  print(`${prefix}${indexLabel}${wt.branch}: ${wt.path}${stackedLabel}`);
+  const indexLabel = index ? `${colorWorktreeIndex(index)} ` : '';
+  const worktreeName = colorWorktreeName(wt.branch);
+  print(`${prefix}${indexLabel}${worktreeName}: ${wt.path}${stackedLabel}`);
   if (prInfo) {
     print(`${indent}${isLast ? '     ' : '│    '}${formatPrLabel(prInfo)}`);
   }

@@ -46,10 +46,16 @@ describe('repos list command - auto-detect repo', () => {
   const sourceDir2 = '/tmp/repos-test-list-cmd-source2';
   const configPath = '/tmp/repos-test-list-cmd-config/config.json';
   let originalCwd: string;
+  let originalForceColor: string | undefined;
+  let originalNoColor: string | undefined;
   let getPullRequestStatusSpy: Mock<typeof github.getPullRequestStatus>;
 
   beforeEach(async () => {
     originalCwd = process.cwd();
+    originalForceColor = process.env.FORCE_COLOR;
+    originalNoColor = process.env.NO_COLOR;
+    delete process.env.FORCE_COLOR;
+    process.env.NO_COLOR = '1';
     getPullRequestStatusSpy = spyOn(
       github,
       'getPullRequestStatus'
@@ -61,6 +67,16 @@ describe('repos list command - auto-detect repo', () => {
 
   afterEach(async () => {
     process.chdir(originalCwd);
+    if (originalForceColor === undefined) {
+      delete process.env.FORCE_COLOR;
+    } else {
+      process.env.FORCE_COLOR = originalForceColor;
+    }
+    if (originalNoColor === undefined) {
+      delete process.env.NO_COLOR;
+    } else {
+      process.env.NO_COLOR = originalNoColor;
+    }
     getPullRequestStatusSpy.mockRestore();
     await rm(testDir, { recursive: true, force: true });
     await rm(sourceDir1, { recursive: true, force: true });
@@ -184,7 +200,7 @@ describe('repos list command - auto-detect repo', () => {
     expect(output).toEqual(expectedOutput);
   });
 
-  test('shows PR status labels for worktrees', async () => {
+  test('colors worktree indexes, names, and PR status labels', async () => {
     const bareDir = join(testDir, 'bare.git');
     await cloneBare(sourceDir1, bareDir);
 
@@ -226,26 +242,27 @@ describe('repos list command - auto-detect repo', () => {
     } satisfies ReposConfig;
     await writeConfig(configPath, config);
 
-    process.chdir('/tmp');
+    process.chdir(openPath);
+    process.env.FORCE_COLOR = '1';
+    delete process.env.NO_COLOR;
     const capture = captureOutput();
     await listCommand({ configPath });
     capture.restore();
 
     const output = capture.output.join('');
+    const reset = '\u001B[0m';
     const expectedOutput = [
-      'Tracked repositories:',
-      '',
       `  repo (bare) ✓`,
       `    ${bareDir}`,
-      `      ├─ closed: ${await realpath(closedPath)}`,
-      `      │    (PR closed)`,
-      `      ├─ merged: ${await realpath(mergedPath)}`,
-      `      │    (PR merged)`,
-      `      ├─ no-pr: ${await realpath(noPrPath)}`,
-      `      ├─ open: ${await realpath(openPath)}`,
-      `      │    (PR open) https://github.com/example/repo/pull/1`,
-      `      └─ unknown: ${await realpath(unknownPath)}`,
-      `           (PR unknown)`,
+      `      ├─ \u001B[33m[1]${reset} \u001B[96mclosed${reset}: ${await realpath(closedPath)}`,
+      `      │    \u001B[31m(PR closed)${reset}`,
+      `      ├─ \u001B[33m[2]${reset} \u001B[96mmerged${reset}: ${await realpath(mergedPath)}`,
+      `      │    \u001B[35m(PR merged)${reset}`,
+      `      ├─ \u001B[33m[3]${reset} \u001B[96mno-pr${reset}: ${await realpath(noPrPath)}`,
+      `      ├─ \u001B[33m[4]${reset} \u001B[96mopen${reset}: ${await realpath(openPath)}`,
+      `      │    \u001B[32m(PR open)${reset} https://github.com/example/repo/pull/1`,
+      `      └─ \u001B[33m[5]${reset} \u001B[96munknown${reset}: ${await realpath(unknownPath)}`,
+      `           \u001B[33m(PR unknown)${reset}`,
       '',
     ].join('\n');
     expect(output).toEqual(expectedOutput);
