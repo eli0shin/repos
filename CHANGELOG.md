@@ -1,5 +1,11 @@
 # repos
 
+## 1.5.0
+
+### Minor Changes
+
+- [#102](https://github.com/eli0shin/repos/pull/102) [`df94d5c`](https://github.com/eli0shin/repos/commit/df94d5c9efa36381a5aa554aac296ddef682d5fa) Thanks [@eli0shin](https://github.com/eli0shin)! - Make `repos rebase` rebase branches onto their recorded parents and recursively rebase child branches. Add `--only` with conflict-safe continuation, and deprecate `repos restack` as an alias.
+
 ## 1.4.4
 
 ### Patch Changes
