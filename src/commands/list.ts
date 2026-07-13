@@ -44,7 +44,7 @@ function printWorktreeTree(
   const indexLabel = index ? `[${index}] ` : '';
   print(`${prefix}${indexLabel}${wt.branch}: ${wt.path}${stackedLabel}`);
   if (prInfo) {
-    print(`${indent}     ${formatPrLabel(prInfo)}`);
+    print(`${indent}${isLast ? '     ' : '│    '}${formatPrLabel(prInfo)}`);
   }
 
   const children = getChildBranches(repo, branch).filter((child) =>
