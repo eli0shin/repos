@@ -562,68 +562,15 @@ Prints the worktree path to stdout.
 
 ---
 
-#### `repos restack [--only]`
+#### `repos restack [--only]` (deprecated)
 
-Rebase stacked branches on their parent branches.
-
-```bash
-repos restack         # Restack current branch and all children (default)
-repos restack --only  # Restack only the current branch
-```
-
-**Prerequisites:**
-
-- Must be run from inside a worktree that was created with `repos stack`
-
-**Options:**
-
-- `--only` - Only restack the current branch, not its children
-
-**Behavior:**
-
-1. Looks up the parent branch from your config
-2. If parent worktree still exists: rebases on the local parent branch
-3. If parent is gone (merged/deleted): automatically falls back to default branch and removes the stale parent relationship from config
-4. By default, recursively restacks all child branches after the current branch
-
-**Fork point tracking:**
-When you create a stacked branch with `repos stack`, the CLI records the exact commit where the child branched off (stored as a git ref `refs/bases/<branch>`). This enables correct rebasing even when the parent branch is squashed or amended - only the child's unique commits are replayed.
-
-**Use case:**
-After making new commits on a parent branch (or squashing/amending it), sync child branches to include those changes.
-
-**Example:**
-
-```bash
-# Parent branch got new commits
-cd ~/code/my-project-feature-profile
-repos restack
-# feature-profile is now rebased on latest feature-auth
-# Any children of feature-profile are also rebased
-```
-
-**Restacking only the current branch:**
-
-```bash
-repos restack --only
-# Only restacks current branch, children are not affected
-```
-
-**On conflicts:**
-When conflicts occur, the restack pauses. Use `repos continue` after resolving conflicts to complete the restack (see below).
-
-**Auto-fallback:**
-When the parent branch no longer exists (worktree removed after merge), `restack` automatically:
-
-1. Detects the parent is gone
-2. Falls back to rebasing on `origin/<default-branch>`
-3. Removes the stale parent relationship from config
+Deprecated alias for `repos rebase`. It accepts the same `--only` option but prints a deprecation warning. Use `repos rebase` in new workflows.
 
 ---
 
 #### `repos continue`
 
-Continue a restack operation after resolving conflicts.
+Continue a `repos rebase` operation after resolving conflicts.
 
 ```bash
 repos continue    # Inside a worktree with a paused rebase
@@ -631,33 +578,33 @@ repos continue    # Inside a worktree with a paused rebase
 
 **Prerequisites:**
 
-- Must be run from inside a worktree where `repos restack` encountered conflicts
+- Must be run from inside a worktree where `repos rebase` encountered conflicts
 - All conflicts must be resolved and staged
 
 **Behavior:**
 
 1. Runs `git rebase --continue` to complete the rebase
 2. Updates the fork point ref to the new parent HEAD
-3. If recursive restacking was in progress, continues restacking child branches
+3. Unless the rebase used `--only`, continues rebasing child branches
 
 **Use case:**
-When `repos restack` encounters merge conflicts, it pauses and lets you resolve them. After resolving and staging the files, use `repos continue` to complete the operation.
+When `repos rebase` encounters merge conflicts, it pauses and lets you resolve them. After resolving and staging the files, use `repos continue` to complete the operation.
 
 **Example:**
 
 ```bash
 cd ~/code/my-project-feature-profile
-repos restack
+repos rebase
 # Error: Rebase conflicts in file.ts
 
 # Resolve conflicts in your editor
 git add file.ts
 repos continue
-# Restack completes, fork point is updated
+# Rebase completes, fork point is updated
 ```
 
 **Why not just `git rebase --continue`?**
-Using `repos continue` ensures the fork point ref is updated correctly. If you use raw `git rebase --continue`, the fork point will be stale and future restacks may not work correctly.
+Using `repos continue` ensures the fork point ref is updated correctly and child branches are rebased when needed. If you use raw `git rebase --continue`, that bookkeeping is skipped.
 
 ---
 
@@ -914,7 +861,7 @@ Error: Cannot remove worktree with uncommitted changes
 
 #### `repos rebase [branch] [repo-name]`
 
-Rebase a worktree branch on the default branch.
+Rebase a worktree branch on its recorded parent, then recursively rebase its children.
 
 ```bash
 repos rebase feature-x my-repo     # Specify branch and repo
@@ -922,6 +869,7 @@ repos rebase feature-x             # Inside repo, specify branch
 repos rebase -i 2                  # Use a worktree index from repos list
 repos rebase -i 2 my-repo          # Use an index for a specific repo
 repos rebase                       # Inside worktree, auto-detect
+repos rebase --only                # Rebase only the selected branch
 ```
 
 **Arguments:**
@@ -932,15 +880,16 @@ repos rebase                       # Inside worktree, auto-detect
 **Options:**
 
 - `-i, --index <index>` - Use a worktree index from `repos list` instead of a branch name
+- `--only` - Rebase only the selected branch, without rebasing its children
 
 **Behavior:**
 
 1. Fetches latest from origin
-2. Detects default branch (main, master, etc.)
-3. Rebases the specified branch onto default branch
+2. Rebases the selected branch onto its recorded parent, or the default branch if it has no recorded parent
+3. Recursively rebases child branches onto their updated parents unless `--only` is used
 
 **On conflicts:**
-Rebase is aborted and an error is reported. Resolve conflicts manually or use `git rebase --abort`.
+Resolve and stage the conflicts, then run `repos continue`. If the rebase started with `--only`, that choice is preserved until the rebase completes or is aborted.
 
 ---
 
@@ -1078,7 +1027,7 @@ If `XDG_CONFIG_HOME` is set, uses `$XDG_CONFIG_HOME/repos/config.json` instead.
 
 ### Stacks
 
-The `stacks` field inside each repo entry tracks parent-child relationships between stacked branches. It's automatically managed by `repos stack` and `repos restack` commands.
+The `stacks` field inside each repo entry tracks parent-child relationships between stacked branches. It's automatically managed by `repos stack` and `repos rebase` commands.
 
 ```json
 "stacks": [
@@ -1088,7 +1037,7 @@ The `stacks` field inside each repo entry tracks parent-child relationships betw
 ```
 
 - Created when you run `repos stack`
-- Used by `repos restack` to determine rebase target
+- Used by `repos rebase` to determine rebase target
 - Enables bidirectional lookups: find parent of a child, or find all children of a parent
 - Cleaned up when parent branch is gone or worktree is removed with `repos clean`
 
@@ -1102,8 +1051,8 @@ When you squash or amend commits on a parent branch, the original commits become
 **How it works:**
 
 1. When you run `repos stack child-branch`, repos stores the parent's current HEAD as `refs/bases/child-branch`
-2. When you run `repos restack`, repos uses `git rebase --onto <parent> <fork-point>` to replay only the child's unique commits
-3. After a successful restack, the fork point is updated to the parent's new HEAD
+2. When you run `repos rebase`, repos uses `git rebase --onto <parent> <fork-point>` to replay only the child's unique commits
+3. After a successful rebase, the fork point is updated to the parent's new HEAD
 
 **Inspecting fork points:**
 
@@ -1118,7 +1067,7 @@ git log -1 refs/bases/feature-profile
 **Fork points are:**
 
 - Created by `repos stack`
-- Updated by `repos restack` and `repos continue`
+- Updated by `repos rebase` and `repos continue`
 - Deleted by `repos clean`, `repos unstack`, and `repos collapse`
 - Stored in the git repository (not the config file), so they survive garbage collection
 
@@ -1303,7 +1252,7 @@ repos stack feature-profile
 
 # When auth gets new commits, sync profile
 cd ~/code/api-server-feature-profile
-repos restack
+repos rebase
 # profile is now rebased on latest auth
 
 # After auth PR is approved, collapse the stack
@@ -1315,7 +1264,7 @@ repos collapse
 
 ```bash
 # If auth is merged and its worktree is cleaned up
-repos restack
+repos rebase
 # Automatically detects auth is gone, rebases on main instead
 ```
 
@@ -1329,7 +1278,7 @@ repos restack
 **Tips:**
 
 - Create separate PRs for each branch in the stack
-- Restack after making changes to parent branches
+- Rebase after making changes to parent branches
 - Use `repos collapse` after a parent PR is approved to prepare child for merge
 - Use `repos cleanup` to remove merged stacked branches
 
@@ -1407,9 +1356,9 @@ git rebase --abort   # Cancel and return to previous state
 # or resolve conflicts manually
 ```
 
-### Restack conflicts
+### Rebase conflicts
 
-When `repos restack` fails due to conflicts:
+When `repos rebase` fails due to conflicts:
 
 ```bash
 cd ~/code/my-repo-feature-x
@@ -1418,13 +1367,13 @@ git status           # See conflicting files
 # Option 1: Resolve and continue
 # Edit conflicting files to resolve
 git add <resolved-files>
-repos continue       # Complete the restack (updates fork point)
+repos continue       # Complete the rebase (updates fork point)
 
 # Option 2: Abort
 git rebase --abort   # Cancel and return to previous state
 ```
 
-**Important:** Always use `repos continue` instead of `git rebase --continue` when restacking. This ensures the fork point ref is updated correctly for future restacks.
+**Important:** Always use `repos continue` instead of `git rebase --continue`. This ensures fork-point tracking and child rebases are handled correctly.
 
 ### Update check disabled
 
@@ -1454,13 +1403,13 @@ cat ~/.config/repos/config.json | grep updateBehavior
 | `repos init [--print] [--force]`              | Set up shell for work command               |
 | `repos work <branch> [repo]`                  | Create worktree for branch                  |
 | `repos stack <branch>`                        | Create stacked worktree from current branch |
-| `repos restack [--only]`                      | Rebase stacked branch(es) on parent         |
-| `repos continue`                              | Continue restack after resolving conflicts  |
+| `repos restack [--only]`                      | Deprecated alias for `repos rebase`         |
+| `repos continue`                              | Continue rebase after resolving conflicts   |
 | `repos unstack`                               | Unstack branch onto default branch          |
 | `repos collapse`                              | Collapse parent into current stacked branch |
 | `repos squash [-m] [-f] [--dry-run]`          | Squash commits since base into one commit   |
 | `repos clean <branch> [repo]` / `-i <index>`  | Remove a worktree (--force for parents)     |
-| `repos rebase [branch] [repo]` / `-i <index>` | Rebase worktree on default branch           |
+| `repos rebase [branch] [repo]` / `-i <index>` | Rebase branch and children on their parents |
 | `repos cleanup [--dry-run]`                   | Remove merged/deleted worktrees             |
 | `repos update`                                | Update CLI to latest version                |
 | `repos -v`                                    | Show version                                |

@@ -1,3 +1,4 @@
+import { access } from 'node:fs/promises';
 import { join } from 'node:path';
 import { printError } from '../output.ts';
 import type { OperationResult } from '../types.ts';
@@ -121,6 +122,96 @@ export async function fetchAndRebase(
   if (!rebaseResult.success) {
     printError(`Error: ${rebaseResult.error}`);
     process.exit(1);
+  }
+}
+
+const REPOS_ONLY_MARKER = 'repos-only';
+const REPOS_ROOT_MARKER = 'repos-root';
+
+async function getActiveRebaseStateDir(
+  repoDir: string
+): Promise<OperationResult<string>> {
+  const gitDirResult = await getGitDir(repoDir);
+  if (!gitDirResult.success) return gitDirResult;
+
+  for (const directory of ['rebase-merge', 'rebase-apply']) {
+    const path = join(gitDirResult.data, directory);
+    try {
+      await access(path);
+      return { success: true, data: path };
+    } catch {
+      // Try the other rebase backend.
+    }
+  }
+
+  return { success: false, error: 'No active rebase state directory found' };
+}
+
+/**
+ * Record --only inside Git's active rebase state. Git removes this marker when
+ * the rebase completes, is aborted, or is quit.
+ */
+export async function markRebaseOnly(
+  repoDir: string
+): Promise<OperationResult> {
+  const stateDirResult = await getActiveRebaseStateDir(repoDir);
+  if (!stateDirResult.success) return stateDirResult;
+
+  try {
+    await Bun.write(join(stateDirResult.data, REPOS_ONLY_MARKER), '');
+    return { success: true, data: undefined };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+export async function markRebaseRoot(
+  repoDir: string,
+  rootBranch: string
+): Promise<OperationResult> {
+  const stateDirResult = await getActiveRebaseStateDir(repoDir);
+  if (!stateDirResult.success) return stateDirResult;
+
+  try {
+    await Bun.write(join(stateDirResult.data, REPOS_ROOT_MARKER), rootBranch);
+    return { success: true, data: undefined };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+export async function getRebaseRoot(
+  repoDir: string
+): Promise<string | undefined> {
+  const stateDirResult = await getActiveRebaseStateDir(repoDir);
+  if (!stateDirResult.success) return undefined;
+
+  try {
+    const rootBranch = await Bun.file(
+      join(stateDirResult.data, REPOS_ROOT_MARKER)
+    ).text();
+    return rootBranch.trim() || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Defaults to recursive behavior for ordinary and older in-progress rebases. */
+export async function shouldRebaseChildren(repoDir: string): Promise<boolean> {
+  const stateDirResult = await getActiveRebaseStateDir(repoDir);
+  if (!stateDirResult.success) return true;
+
+  try {
+    await access(join(stateDirResult.data, REPOS_ONLY_MARKER));
+    return false;
+  } catch {
+    return true;
   }
 }
 

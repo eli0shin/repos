@@ -198,7 +198,7 @@ program
 
 program
   .command('restack')
-  .description('Rebase current branch and children on parent branch')
+  .description('Deprecated alias for rebase')
   .option('--only', 'Only restack current branch, skip children')
   .action(async (options) => {
     await restackCommand(getCommandContext(), { only: options.only ?? false });
@@ -292,7 +292,7 @@ program
 
 program
   .command('rebase')
-  .description('Rebase a worktree branch on the default branch')
+  .description('Rebase a branch and its children on their parents')
   .argument('[branch]', 'Branch name to rebase (optional if inside a worktree)')
   .argument('[repo-name]', 'Repo name (optional if inside a tracked repo)')
   .option(
@@ -300,6 +300,7 @@ program
     'Use a worktree index from repos list',
     parseWorktreeIndex
   )
+  .option('--only', 'Only rebase the selected branch, skip children')
   .action(async (branch, repoName, options) => {
     if (options.index !== undefined && branch && !repoName) {
       repoName = branch;
@@ -308,6 +309,7 @@ program
 
     await rebaseCommand(getCommandContext(), branch, repoName, {
       index: options.index,
+      only: options.only ?? false,
     });
   });
 

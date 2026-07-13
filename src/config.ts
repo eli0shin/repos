@@ -383,12 +383,13 @@ export async function saveStackUpdate(
   configPath: string,
   config: ReposConfig,
   repo: RepoEntry
-): Promise<void> {
+): Promise<OperationResult> {
   const updatedConfig = updateRepoInConfig(config, repo);
   const result = await writeConfig(configPath, updatedConfig);
   if (!result.success) {
     printError(`Warning: Failed to update config: ${result.error}`);
   }
+  return result;
 }
 
 // Record a stack relationship: set base ref and add config entry
