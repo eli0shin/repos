@@ -3,3 +3,5 @@ node_modules/
 repos
 *.log
 .DS_Store
+!/.repos/
+!/.repos/worktree.json
