@@ -144,6 +144,9 @@ repos list
 - Clone status: ✓ (cloned) or ✗ (missing)
 - `[bare]` indicator for bare repositories
 - Worktrees associated with the repository
+- Semantic colors for worktree indexes, branch names, and pull request statuses
+
+Colors are shown when output is connected to a terminal. Set `NO_COLOR=1` to disable them or `FORCE_COLOR=1` to preserve them when piping output.
 
 **Example output:**
 
