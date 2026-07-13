@@ -1,5 +1,11 @@
 # repos
 
+## 1.4.4
+
+### Patch Changes
+
+- [#99](https://github.com/eli0shin/repos/pull/99) [`507ba03`](https://github.com/eli0shin/repos/commit/507ba0376729cd297589921c176729f4a19ce101) Thanks [@eli0shin](https://github.com/eli0shin)! - Add semantic colors for worktree indexes, branch names, and pull request statuses in `repos list` output.
+
 ## 1.4.3
 
 ### Patch Changes
