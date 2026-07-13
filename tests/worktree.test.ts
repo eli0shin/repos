@@ -11,6 +11,7 @@ import {
   hasUncommittedChanges,
   getHeadCommit,
   getBaseRef,
+  getDefaultBranch,
 } from '../src/git/index.ts';
 import { workCommand } from '../src/commands/work.ts';
 import { stackCommand } from '../src/commands/stack.ts';
@@ -1546,11 +1547,13 @@ describe('repos rebase command', () => {
     process.chdir(originalCwd);
 
     const baseRef = await getBaseRef(localDir, 'feature');
-    const mainHead = await runGitCommand(
-      ['rev-parse', 'origin/main'],
+    const defaultBranch = await getDefaultBranch(localDir);
+    if (!defaultBranch.success) throw new Error(defaultBranch.error);
+    const defaultHead = await runGitCommand(
+      ['rev-parse', `origin/${defaultBranch.data}`],
       localDir
     );
-    expect(baseRef).toEqual({ success: true, data: mainHead.stdout.trim() });
+    expect(baseRef).toEqual({ success: true, data: defaultHead.stdout.trim() });
   });
 });
 
