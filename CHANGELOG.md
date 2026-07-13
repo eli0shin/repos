@@ -1,5 +1,11 @@
 # repos
 
+## 1.4.2
+
+### Patch Changes
+
+- [#95](https://github.com/eli0shin/repos/pull/95) [`3bab69e`](https://github.com/eli0shin/repos/commit/3bab69ea0727e926e8a3e50c4772db860488e2c6) Thanks [@eli0shin](https://github.com/eli0shin)! - Move worktree pull request details onto an indented second line in `repos list` output.
+
 ## 1.4.1
 
 ### Patch Changes
