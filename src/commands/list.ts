@@ -19,11 +19,9 @@ type PrintRepoOptions = {
 
 type PrInfoByPath = Map<string, PullRequestInfo | undefined>;
 
-function formatPrLabel(prInfo: PullRequestInfo | undefined): string {
-  if (!prInfo) return '';
-
-  const urlLabel = prInfo.url ? ` [${prInfo.url}]` : '';
-  return ` (PR ${prInfo.status})${urlLabel}`;
+function formatPrLabel(prInfo: PullRequestInfo): string {
+  const urlLabel = prInfo.url ? ` ${prInfo.url}` : '';
+  return `(PR ${prInfo.status})${urlLabel}`;
 }
 
 function printWorktreeTree(
@@ -41,12 +39,13 @@ function printWorktreeTree(
   const prefix = indent + (isLast ? '└─ ' : '├─ ');
   const parentBranch = getParentBranch(repo, branch);
   const stackedLabel = parentBranch ? ' (stacked)' : '';
-  const prLabel = formatPrLabel(prInfoByPath?.get(wt.path));
+  const prInfo = prInfoByPath?.get(wt.path);
   const index = indexByPath?.get(wt.path);
   const indexLabel = index ? `[${index}] ` : '';
-  print(
-    `${prefix}${indexLabel}${wt.branch}: ${wt.path}${stackedLabel}${prLabel}`
-  );
+  print(`${prefix}${indexLabel}${wt.branch}: ${wt.path}${stackedLabel}`);
+  if (prInfo) {
+    print(`${indent}     ${formatPrLabel(prInfo)}`);
+  }
 
   const children = getChildBranches(repo, branch).filter((child) =>
     worktrees.some((w) => w.branch === child)
