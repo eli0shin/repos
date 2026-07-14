@@ -24,7 +24,6 @@ import { stackCommand } from './commands/stack.ts';
 import { restackCommand } from './commands/restack.ts';
 import { unstackCommand } from './commands/unstack.ts';
 import { continueCommand } from './commands/continue.ts';
-import { collapseCommand } from './commands/collapse.ts';
 import { squashCommand } from './commands/squash.ts';
 import { cleanCommand } from './commands/clean.ts';
 import { mainCommand } from './commands/main.ts';
@@ -218,13 +217,6 @@ program
   .description('Continue a paused rebase and update fork point tracking')
   .action(async () => {
     await continueCommand(getCommandContext());
-  });
-
-program
-  .command('collapse')
-  .description('Collapse parent branch into current stacked branch')
-  .action(async () => {
-    await collapseCommand(getCommandContext());
   });
 
 program

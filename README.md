@@ -33,7 +33,6 @@ curl -fsSL https://raw.githubusercontent.com/eli0shin/repos/main/install.sh | ba
 | `repos restack [--only]`                      | Deprecated alias for `repos rebase`                  |
 | `repos continue`                              | Continue rebase after resolving conflicts            |
 | `repos unstack`                               | Rebase onto default branch and remove stack relation |
-| `repos collapse`                              | Collapse parent branch into current stacked branch   |
 | `repos squash [-m] [-f] [--dry-run]`          | Squash commits since base into single commit         |
 | `repos clean <branch> [repo]` / `-i <index>`  | Remove a worktree (--force for parent branches)      |
 | `repos rebase [branch] [repo]` / `-i <index>` | Rebase branch and children on their recorded parents |
