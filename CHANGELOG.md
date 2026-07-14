@@ -1,5 +1,11 @@
 # repos
 
+## 2.0.0
+
+### Major Changes
+
+- [#104](https://github.com/eli0shin/repos/pull/104) [`e63a66e`](https://github.com/eli0shin/repos/commit/e63a66e9043db208b3fd8ae71efbcc2e35aa17bb) Thanks [@eli0shin](https://github.com/eli0shin)! - Remove the `repos collapse` command and its ambiguous, potentially destructive stack behavior. After merging a parent branch, use `repos cleanup` to remove its worktree while preserving the child's fork point, then run `repos rebase` from the child to rebase it onto the default branch.
+
 ## 1.5.0
 
 ### Minor Changes
