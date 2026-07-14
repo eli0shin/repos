@@ -1202,7 +1202,10 @@ cd ~/code/api-server-feature-profile
 repos rebase
 # profile is now rebased on latest auth
 
-# After auth is merged and its worktree is cleaned up, sync profile
+# After auth is merged, remove its worktree while preserving profile's fork point
+repos cleanup
+
+# Then sync profile
 repos rebase
 # Automatically detects auth is gone, rebases profile on main
 ```
