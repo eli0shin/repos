@@ -3,20 +3,20 @@ import {
   loadConfig,
   resolveRepoWithConfig,
   getWorktreePath,
-  checkIsNewBranch,
-  recordStackOnDefaultBranch,
 } from '../config.ts';
 import {
   createWorktree,
   listWorktrees,
   ensureRefspecConfig,
   findWorktreeByBranch,
+  checkIsNewBranch,
 } from '../git/index.ts';
 import { print, printError, printStatus } from '../output.ts';
 import { openTmuxSession } from '../tmux.ts';
 import { loadRepoWorktreeConfig } from '../worktree-config.ts';
 import { printSetupWarnings, runWorktreeSetup } from '../worktree-setup.ts';
 import { resolveWorktreeIndex } from '../worktree-index.ts';
+import { recordBranchStackOnDefault } from '../branch-stack/index.ts';
 
 type WorkOptions = { tmux?: boolean; index?: number };
 
@@ -101,7 +101,15 @@ export async function workCommand(
 
     // Stack new branches on the default branch so restack/unstack work
     if (isNewBranch) {
-      await recordStackOnDefaultBranch(ctx.configPath, config, repo, branch);
+      const stackResult = await recordBranchStackOnDefault(
+        ctx.configPath,
+        config,
+        repo,
+        branch
+      );
+      for (const warning of stackResult.warnings) {
+        printError(warning);
+      }
     }
 
     const setupResult = await runWorktreeSetup(

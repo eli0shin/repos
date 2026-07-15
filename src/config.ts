@@ -4,11 +4,6 @@ import { basename, dirname, join } from 'node:path';
 import {
   listWorktrees,
   findWorktreeByDirectory,
-  setBaseRef,
-  localBranchExists,
-  getDefaultBranch,
-  resolveRef,
-  runGitCommand,
   getGitRepoRoot,
   getRemoteUrl,
   isLinkedWorktreeRoot,
@@ -314,58 +309,6 @@ export function getUpdateCheckInterval(config: ReposConfig): number {
   return config.config?.updateCheckIntervalHours ?? 24;
 }
 
-// Find parent of a child branch
-export function getParentBranch(
-  repo: RepoEntry,
-  branch: string
-): string | undefined {
-  return repo.stacks?.find((s) => s.child === branch)?.parent;
-}
-
-// Find all children of a parent branch
-export function getChildBranches(repo: RepoEntry, branch: string): string[] {
-  return (
-    repo.stacks?.filter((s) => s.parent === branch).map((s) => s.child) ?? []
-  );
-}
-
-// Add a stack relationship
-export function addStackEntry(
-  repo: RepoEntry,
-  parent: string,
-  child: string
-): RepoEntry {
-  return {
-    ...repo,
-    stacks: [...(repo.stacks ?? []), { parent, child }],
-  };
-}
-
-// Remove a stack relationship (by child)
-export function removeStackEntry(repo: RepoEntry, child: string): RepoEntry {
-  if (!repo.stacks) return repo;
-  const filtered = repo.stacks.filter((s) => s.child !== child);
-  if (filtered.length === 0) {
-    const { stacks: _, ...rest } = repo;
-    return rest;
-  }
-  return { ...repo, stacks: filtered };
-}
-
-// Remove all stack relationships where branch is the parent (children become independent)
-export function removeStackEntriesByParent(
-  repo: RepoEntry,
-  parent: string
-): RepoEntry {
-  if (!repo.stacks) return repo;
-  const filtered = repo.stacks.filter((s) => s.parent !== parent);
-  if (filtered.length === 0) {
-    const { stacks: _, ...rest } = repo;
-    return rest;
-  }
-  return { ...repo, stacks: filtered };
-}
-
 // Helper to update a repo in the config
 export function updateRepoInConfig(
   config: ReposConfig,
@@ -377,97 +320,4 @@ export function updateRepoInConfig(
       r.name === updatedRepo.name ? updatedRepo : r
     ),
   };
-}
-
-export async function saveStackUpdate(
-  configPath: string,
-  config: ReposConfig,
-  repo: RepoEntry
-): Promise<OperationResult> {
-  const updatedConfig = updateRepoInConfig(config, repo);
-  const result = await writeConfig(configPath, updatedConfig);
-  if (!result.success) {
-    printError(`Warning: Failed to update config: ${result.error}`);
-  }
-  return result;
-}
-
-// Record a stack relationship: set base ref and add config entry
-export async function recordStack(
-  repoPath: string,
-  configPath: string,
-  config: ReposConfig,
-  repo: RepoEntry,
-  parentBranch: string,
-  childBranch: string,
-  parentCommit: string
-): Promise<void> {
-  const baseRefResult = await setBaseRef(repoPath, childBranch, parentCommit);
-  if (!baseRefResult.success) {
-    printError(`Warning: Failed to create base ref: ${baseRefResult.error}`);
-    // Continue anyway - restack will compute fork point as fallback
-  }
-
-  const updatedRepo = addStackEntry(repo, parentBranch, childBranch);
-  await saveStackUpdate(configPath, config, updatedRepo);
-}
-
-// Check if a branch is new (doesn't exist locally or remotely).
-// If ls-remote fails (e.g., network unavailable), returns false so we don't
-// accidentally create stale stack entries for branches that may already exist.
-export async function checkIsNewBranch(
-  repoPath: string,
-  branch: string
-): Promise<boolean> {
-  const localExists = await localBranchExists(repoPath, branch);
-  if (localExists) return false;
-
-  const remoteBranchResult = await runGitCommand(
-    ['ls-remote', '--heads', 'origin', branch],
-    repoPath
-  );
-  // If ls-remote fails (network unavailable), treat as existing to avoid
-  // false-positive stacking of branches that may already exist on the remote.
-  if (remoteBranchResult.exitCode !== 0) return false;
-
-  // Parse line-by-line to match exact ref names. Using a tab-anchored check
-  // (e.g. `\trefs/heads/feature`) would still match `refs/heads/feature-v2`
-  // as a prefix, so we compare the full refname from each tab-separated line.
-  const remoteExists = remoteBranchResult.stdout
-    .split('\n')
-    .some((line) => line.split('\t')[1]?.trim() === `refs/heads/${branch}`);
-  return !remoteExists;
-}
-
-// Stack a new branch on the default branch if it has no parent yet.
-// Called after worktree creation for branches created via work/session.
-export async function recordStackOnDefaultBranch(
-  configPath: string,
-  config: ReposConfig,
-  repo: RepoEntry,
-  branch: string
-): Promise<void> {
-  if (getParentBranch(repo, branch)) return;
-
-  const defaultBranchResult = await getDefaultBranch(repo.path);
-  if (!defaultBranchResult.success) return;
-
-  const defaultBranch = defaultBranchResult.data;
-  const headResult = await resolveRef(repo.path, `origin/${defaultBranch}`);
-  if (!headResult.success) {
-    printError(
-      `Warning: Could not resolve origin/${defaultBranch} — stack entry not recorded. ` +
-        `Run "repos stack" manually, or fetch and retry.`
-    );
-    return;
-  }
-  await recordStack(
-    repo.path,
-    configPath,
-    config,
-    repo,
-    defaultBranch,
-    branch,
-    headResult.data
-  );
 }

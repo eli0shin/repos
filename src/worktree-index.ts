@@ -1,4 +1,4 @@
-import { getChildBranches, getParentBranch } from './config.ts';
+import { getChildBranches, getParentBranch } from './branch-stack/index.ts';
 import { listWorktrees } from './git/index.ts';
 import type { WorktreeInfo } from './git/index.ts';
 import type { OperationResult, RepoEntry } from './types.ts';

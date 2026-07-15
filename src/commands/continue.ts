@@ -1,11 +1,5 @@
 import type { CommandContext } from '../cli.ts';
-import {
-  loadConfig,
-  findRepoFromCwd,
-  getParentBranch,
-  removeStackEntry,
-  saveStackUpdate,
-} from '../config.ts';
+import { loadConfig, findRepoFromCwd } from '../config.ts';
 import {
   getRebaseOrder,
   rebaseBranches,
@@ -18,8 +12,6 @@ import {
   isRebaseInProgress,
   getRebaseBranch,
   rebaseContinue,
-  setBaseRef,
-  deleteBaseRef,
   getHeadCommit,
   runGitCommand,
   getDefaultBranch,
@@ -27,6 +19,12 @@ import {
   getRebaseRoot,
 } from '../git/index.ts';
 import { print, printError } from '../output.ts';
+import {
+  completeBranchRebase,
+  getParentBranch,
+  removeBranchStackParent,
+  removeObsoleteForkPoint,
+} from '../branch-stack/index.ts';
 
 export async function continueCommand(ctx: CommandContext): Promise<void> {
   const config = await loadConfig(ctx.configPath);
@@ -113,17 +111,23 @@ export async function continueCommand(ctx: CommandContext): Promise<void> {
         parentHead = parentRefResult.stdout.trim();
       } else {
         // Parent branch is gone, remove the stale relationship and fork point.
-        const updatedRepo = removeStackEntry(repo, currentBranch);
-        const saveResult = await saveStackUpdate(
+        const removal = await removeBranchStackParent(
           ctx.configPath,
           config,
-          updatedRepo
+          repo,
+          currentBranch
         );
-        if (!saveResult.success) {
+        for (const warning of removal.warnings) {
+          printError(warning);
+        }
+        if (!removal.persistence.success) {
           printError('Error: Could not remove stale stack tracking.');
           process.exit(1);
         }
-        const deleteResult = await deleteBaseRef(repo.path, currentBranch);
+        const deleteResult = await removeObsoleteForkPoint(
+          repo.path,
+          currentBranch
+        );
         if (!deleteResult.success) {
           printError(
             `Warning: Failed to remove fork point: ${deleteResult.error}`
@@ -135,7 +139,7 @@ export async function continueCommand(ctx: CommandContext): Promise<void> {
     }
 
     if (parentHead) {
-      const setRefResult = await setBaseRef(
+      const setRefResult = await completeBranchRebase(
         repo.path,
         currentBranch,
         parentHead
@@ -156,7 +160,7 @@ export async function continueCommand(ctx: CommandContext): Promise<void> {
         repo.path
       );
       if (targetResult.exitCode === 0) {
-        const setRefResult = await setBaseRef(
+        const setRefResult = await completeBranchRebase(
           repo.path,
           currentBranch,
           targetResult.stdout.trim()

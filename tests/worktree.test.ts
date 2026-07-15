@@ -10,9 +10,9 @@ import {
   getCurrentBranch,
   hasUncommittedChanges,
   getHeadCommit,
-  getBaseRef,
   getDefaultBranch,
 } from '../src/git/index.ts';
+import { getForkPoint } from '../src/branch-stack/index.ts';
 import { workCommand } from '../src/commands/work.ts';
 import { stackCommand } from '../src/commands/stack.ts';
 import { restackCommand } from '../src/commands/restack.ts';
@@ -181,7 +181,7 @@ describe('repos work command', () => {
     const worktreePath = join(testDir, 'repo-feature');
     const featureCommit = await getHeadCommit(worktreePath);
     expect(featureCommit).toEqual(latestMainCommit);
-    const baseRef = await getBaseRef(repoDir, 'feature');
+    const baseRef = await getForkPoint(repoDir, 'feature');
     expect(baseRef).toEqual(latestMainCommit);
   });
 
@@ -1546,7 +1546,7 @@ describe('repos rebase command', () => {
     await continueCommand(ctx);
     process.chdir(originalCwd);
 
-    const baseRef = await getBaseRef(localDir, 'feature');
+    const baseRef = await getForkPoint(localDir, 'feature');
     const defaultBranch = await getDefaultBranch(localDir);
     if (!defaultBranch.success) throw new Error(defaultBranch.error);
     const defaultHead = await runGitCommand(
@@ -1733,7 +1733,7 @@ describe('repos stack command', () => {
     const childCommit = await getHeadCommit(childWorktreePath);
     expect(childCommit).toEqual(latestMainCommit);
 
-    const baseRef = await getBaseRef(repoDir, 'child-branch');
+    const baseRef = await getForkPoint(repoDir, 'child-branch');
     expect(baseRef).toEqual(latestMainCommit);
   });
 
@@ -1768,7 +1768,7 @@ describe('repos stack command', () => {
     const childCommit = await getHeadCommit(childWorktreePath);
     expect(childCommit).toEqual(parentCommit);
 
-    const baseRef = await getBaseRef(bareDir, 'child-branch');
+    const baseRef = await getForkPoint(bareDir, 'child-branch');
     expect(baseRef).toEqual(parentCommit);
   });
 
