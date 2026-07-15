@@ -1,5 +1,11 @@
 # repos
 
+## 2.0.1
+
+### Patch Changes
+
+- [#106](https://github.com/eli0shin/repos/pull/106) [`1a93b13`](https://github.com/eli0shin/repos/commit/1a93b1312b69ae07abb08de620bf3d81a17820bf) Thanks [@eli0shin](https://github.com/eli0shin)! - Consolidate branch stack bookkeeping behind a dedicated module without changing command behavior.
+
 ## 2.0.0
 
 ### Major Changes
