@@ -4,12 +4,7 @@ import {
   colorWorktreeIndex,
   colorWorktreeName,
 } from '../color.ts';
-import {
-  loadConfig,
-  getParentBranch,
-  getChildBranches,
-  findRepoFromCwd,
-} from '../config.ts';
+import { loadConfig, findRepoFromCwd } from '../config.ts';
 import { isGitRepoOrBare, listWorktrees } from '../git/index.ts';
 import type { WorktreeInfo } from '../git/index.ts';
 import type { PullRequestInfo } from '../github.ts';
@@ -17,6 +12,7 @@ import * as github from '../github.ts';
 import type { RepoEntry } from '../types.ts';
 import { print } from '../output.ts';
 import { getIndexedWorktrees, getRootWorktrees } from '../worktree-index.ts';
+import { getChildBranches, getParentBranch } from '../branch-stack/index.ts';
 
 type PrintRepoOptions = {
   showIndexes: boolean;

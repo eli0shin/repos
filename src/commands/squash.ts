@@ -1,5 +1,5 @@
 import type { CommandContext } from '../cli.ts';
-import { loadConfig, findRepoFromCwd, getParentBranch } from '../config.ts';
+import { loadConfig, findRepoFromCwd } from '../config.ts';
 import {
   hasUncommittedChanges,
   getDefaultBranch,
@@ -18,6 +18,7 @@ import {
 } from '../git/index.ts';
 import { print, printError, printStatus } from '../output.ts';
 import type { OperationResult } from '../types.ts';
+import { getParentBranch } from '../branch-stack/index.ts';
 
 type SquashOptions = {
   message?: string;

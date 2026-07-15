@@ -1,12 +1,5 @@
 import type { CommandContext } from '../cli.ts';
-import {
-  loadConfig,
-  resolveRepo,
-  getParentBranch,
-  getChildBranches,
-  removeStackEntry,
-  saveStackUpdate,
-} from '../config.ts';
+import { loadConfig, resolveRepo } from '../config.ts';
 import type { RepoEntry, ReposConfig } from '../types.ts';
 import {
   getDefaultBranch,
@@ -15,11 +8,7 @@ import {
   fetchOrigin,
   rebaseOnto,
   rebaseOnRef,
-  setBaseRef,
-  deleteBaseRef,
   getHeadCommit,
-  computeForkPoint,
-  refreshBaseRef,
   resolveRef,
   resolveWorktree,
   isRebaseInProgress,
@@ -30,6 +19,15 @@ import {
 } from '../git/index.ts';
 import { print, printError } from '../output.ts';
 import { resolveWorktreeIndex } from '../worktree-index.ts';
+import {
+  completeBranchRebase,
+  getChildBranches,
+  getParentBranch,
+  recoverForkPoint,
+  removeBranchStackParent,
+  removeObsoleteForkPoint,
+  resolveForkPoint,
+} from '../branch-stack/index.ts';
 
 type RebaseStackOptions = {
   only?: boolean;
@@ -105,8 +103,15 @@ async function restackBranch(
     targetRef = `origin/${defaultBranch}`;
 
     // Remove the stale parent relationship
-    const updatedRepo = removeStackEntry(repo, branch);
-    await saveStackUpdate(ctx.configPath, config, updatedRepo);
+    const removal = await removeBranchStackParent(
+      ctx.configPath,
+      config,
+      repo,
+      branch
+    );
+    for (const warning of removal.warnings) {
+      printError(warning);
+    }
     // Update context with new config
     const newConfig = await loadConfig(ctx.configPath);
     rctx.config = newConfig;
@@ -119,7 +124,7 @@ async function restackBranch(
   // Get fork point from base ref (refreshing if stale), or compute as fallback.
   // refreshBaseRef falls back to the stored ref when getMergeBase fails (e.g.,
   // parent branch is gone), so we can call it unconditionally.
-  const baseRefResult = await refreshBaseRef(
+  const baseRefResult = await resolveForkPoint(
     repo.path,
     branch,
     parentBranch ?? targetRef
@@ -143,7 +148,8 @@ async function restackBranch(
     print(
       'Note: If parent was recently rebased, the computed fork point may be incorrect.'
     );
-    const computedResult = await computeForkPoint(
+    const computedResult = await recoverForkPoint(
+      repo,
       worktree.path,
       branch,
       parentBranch
@@ -151,10 +157,8 @@ async function restackBranch(
     if (computedResult.success) {
       forkPoint = computedResult.data;
       useForkPoint = true;
-      // Save the computed fork point for future restacks
-      // This is important because computeForkPoint will give incorrect results
-      // if the parent is later rebased/amended
-      await setBaseRef(repo.path, branch, forkPoint);
+      // The recovered Fork Point is persisted for future rebases because it
+      // may no longer be recoverable after the parent is rebased or amended.
     }
   }
 
@@ -203,7 +207,7 @@ async function restackBranch(
   if (parentWorktree) {
     const parentHeadResult = await getHeadCommit(parentWorktree.path);
     if (parentHeadResult.success) {
-      const setResult = await setBaseRef(
+      const setResult = await completeBranchRebase(
         repo.path,
         branch,
         parentHeadResult.data
@@ -220,7 +224,11 @@ async function restackBranch(
     // Parent is the default branch but has no worktree - update base ref to origin/{default} HEAD
     const revResult = await resolveRef(worktree.path, targetRef);
     if (revResult.success) {
-      const setResult = await setBaseRef(repo.path, branch, revResult.data);
+      const setResult = await completeBranchRebase(
+        repo.path,
+        branch,
+        revResult.data
+      );
       if (!setResult.success) {
         printError(`Warning: Failed to update fork point: ${setResult.error}`);
       }
@@ -229,7 +237,7 @@ async function restackBranch(
     }
   } else {
     // Parent is gone, delete the base ref since we're no longer stacked
-    const deleteResult = await deleteBaseRef(repo.path, branch);
+    const deleteResult = await removeObsoleteForkPoint(repo.path, branch);
     if (!deleteResult.success) {
       printError(`Warning: Failed to remove fork point: ${deleteResult.error}`);
     }

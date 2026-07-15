@@ -11,13 +11,17 @@ import {
   addRepoToConfig,
   removeRepoFromConfig,
   findRepo,
-  getParentBranch,
-  getChildBranches,
-  addStackEntry,
-  removeStackEntry,
   updateRepoInConfig,
   resolveRepoFromCwd,
 } from '../src/config.ts';
+import {
+  getChildBranches,
+  getParentBranch,
+} from '../src/branch-stack/index.ts';
+import {
+  addStackEntry,
+  removeStackEntry,
+} from '../src/branch-stack/topology.ts';
 import type { ReposConfig, RepoEntry } from '../src/types.ts';
 import { createTestRepo, objectContaining } from './helpers.ts';
 import { runGitCommand } from '../src/git/index.ts';

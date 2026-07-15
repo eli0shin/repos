@@ -1,8 +1,8 @@
 import type { OperationResult } from '../types.ts';
-import { runGitCommand } from './core.ts';
-import { getMergeBase } from './commit.ts';
+import { runGitCommand } from '../git/core.ts';
+import { getMergeBase } from '../git/commit.ts';
 
-export type RefreshBaseRefResult =
+export type ResolveForkPointResult =
   | { success: true; data: string; message?: string; warning?: string }
   | { success: false; error: string };
 
@@ -10,7 +10,7 @@ export type RefreshBaseRefResult =
 // These refs store the commit hash of the parent branch at the time of stacking
 // to enable correct rebase --onto behavior after parent is rebased/squashed
 
-export async function getBaseRef(
+export async function getForkPoint(
   repoDir: string,
   branch: string
 ): Promise<OperationResult<string>> {
@@ -29,7 +29,7 @@ export async function getBaseRef(
   return { success: true, data: result.stdout.trim() };
 }
 
-export async function setBaseRef(
+export async function recordForkPoint(
   repoDir: string,
   branch: string,
   commit: string
@@ -49,7 +49,7 @@ export async function setBaseRef(
   return { success: true, data: undefined };
 }
 
-export async function deleteBaseRef(
+export async function discardForkPoint(
   repoDir: string,
   branch: string
 ): Promise<OperationResult> {
@@ -147,12 +147,12 @@ async function isAncestor(
  * Spawns up to 3 git child processes: getMergeBase + up to 2 isAncestor calls.
  * In the common case (no staleness) the cost is getMergeBase + 1 isAncestor.
  */
-export async function refreshBaseRef(
+export async function resolveForkPoint(
   repoDir: string,
   childBranch: string,
   parentBranch: string
-): Promise<RefreshBaseRefResult> {
-  const storedResult = await getBaseRef(repoDir, childBranch);
+): Promise<ResolveForkPointResult> {
+  const storedResult = await getForkPoint(repoDir, childBranch);
   if (!storedResult.success) {
     return storedResult;
   }
@@ -182,7 +182,7 @@ export async function refreshBaseRef(
   // the stored ref is now too far back.
   const mergeBaseIsNewer = await isAncestor(repoDir, storedRef, mergeBase);
   if (mergeBaseIsNewer) {
-    const setResult = await setBaseRef(repoDir, childBranch, mergeBase);
+    const setResult = await recordForkPoint(repoDir, childBranch, mergeBase);
     return {
       success: true,
       data: mergeBase,
@@ -196,7 +196,7 @@ export async function refreshBaseRef(
   // Check if stored ref is not an ancestor of child at all (orphaned)
   const storedIsValid = await isAncestor(repoDir, storedRef, childBranch);
   if (!storedIsValid) {
-    const setResult = await setBaseRef(repoDir, childBranch, mergeBase);
+    const setResult = await recordForkPoint(repoDir, childBranch, mergeBase);
     return {
       success: true,
       data: mergeBase,

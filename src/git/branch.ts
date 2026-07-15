@@ -138,6 +138,27 @@ export async function isBranchContentMerged(
   return { success: true, data: !hasUnappliedCommits };
 }
 
+// Check if a branch is new (doesn't exist locally or remotely).
+// If ls-remote fails (e.g., network unavailable), returns false so callers do
+// not accidentally treat an existing remote branch as new.
+export async function checkIsNewBranch(
+  repoPath: string,
+  branch: string
+): Promise<boolean> {
+  const localExists = await localBranchExists(repoPath, branch);
+  if (localExists) return false;
+
+  const remoteBranchResult = await runGitCommand(
+    ['ls-remote', '--heads', 'origin', branch],
+    repoPath
+  );
+  if (remoteBranchResult.exitCode !== 0) return false;
+
+  return !remoteBranchResult.stdout
+    .split('\n')
+    .some((line) => line.split('\t')[1]?.trim() === `refs/heads/${branch}`);
+}
+
 export async function getBranchesContaining(
   repoDir: string,
   commitRef: string

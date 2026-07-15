@@ -1,10 +1,5 @@
 import type { CommandContext } from '../cli.ts';
-import {
-  loadConfig,
-  resolveRepoFromCwd,
-  getWorktreePath,
-  recordStack,
-} from '../config.ts';
+import { loadConfig, resolveRepoFromCwd, getWorktreePath } from '../config.ts';
 import {
   createWorktreeFromBranch,
   fetchOrigin,
@@ -20,6 +15,7 @@ import { print, printError, printStatus } from '../output.ts';
 import { openTmuxSession } from '../tmux.ts';
 import { loadRepoWorktreeConfig } from '../worktree-config.ts';
 import { printSetupWarnings, runWorktreeSetup } from '../worktree-setup.ts';
+import { recordBranchStack } from '../branch-stack/index.ts';
 
 export async function stackCommand(
   ctx: CommandContext,
@@ -126,7 +122,7 @@ export async function stackCommand(
   }
 
   // Record stack relationship: base ref + config entry
-  await recordStack(
+  const stackResult = await recordBranchStack(
     repo.path,
     ctx.configPath,
     config,
@@ -135,6 +131,9 @@ export async function stackCommand(
     newBranch,
     parentCommit
   );
+  for (const warning of stackResult.warnings) {
+    printError(warning);
+  }
 
   const setupResult = await runWorktreeSetup(
     worktreeConfigResult.data.mainWorktreePath,

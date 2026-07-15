@@ -1,20 +1,11 @@
 import type { CommandContext } from '../cli.ts';
-import {
-  loadConfig,
-  resolveRepo,
-  removeStackEntry,
-  removeStackEntriesByParent,
-  getChildBranches,
-  getParentBranch,
-  saveStackUpdate,
-} from '../config.ts';
+import { loadConfig, resolveRepo } from '../config.ts';
 import {
   removeWorktree,
   hasUncommittedChanges,
   resolveWorktree,
   listWorktrees,
   findWorktreeByBranch,
-  deleteBaseRef,
   getDefaultBranch,
 } from '../git/index.ts';
 import { print, printError, printStatus } from '../output.ts';
@@ -26,6 +17,11 @@ import {
   tmuxKillSession,
 } from '../tmux.ts';
 import { resolveWorktreeIndex } from '../worktree-index.ts';
+import {
+  getChildBranches,
+  getParentBranch,
+  removeBranchStack,
+} from '../branch-stack/index.ts';
 
 function resolveCleanOutputPath(
   repoPath: string,
@@ -133,21 +129,14 @@ export async function cleanCommand(
       process.exit(1);
     }
 
-    // Clean up stack entries for this branch
-    // 1. Remove entries where this branch is the child (its own parent relationship)
-    // 2. Remove entries where this branch is the parent (children become independent)
-    let updatedRepo = removeStackEntry(repo, worktree.branch);
-    updatedRepo = removeStackEntriesByParent(updatedRepo, worktree.branch);
-    if (updatedRepo !== repo) {
-      await saveStackUpdate(ctx.configPath, config, updatedRepo);
-    }
-
-    // Delete base ref for fork point tracking
-    await deleteBaseRef(repo.path, worktree.branch);
-
-    // Also delete base refs for any children (they're now independent)
-    for (const child of childBranches) {
-      await deleteBaseRef(repo.path, child);
+    const stackResult = await removeBranchStack(
+      ctx.configPath,
+      config,
+      repo,
+      worktree.branch
+    );
+    for (const warning of stackResult.warnings) {
+      printError(warning);
     }
   }
 

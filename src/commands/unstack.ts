@@ -1,11 +1,5 @@
 import type { CommandContext } from '../cli.ts';
-import {
-  loadConfig,
-  findRepoFromCwd,
-  getParentBranch,
-  removeStackEntry,
-  saveStackUpdate,
-} from '../config.ts';
+import { loadConfig, findRepoFromCwd } from '../config.ts';
 import {
   getDefaultBranch,
   listWorktrees,
@@ -13,12 +7,16 @@ import {
   fetchOrigin,
   rebaseOnto,
   rebaseOnRef,
-  refreshBaseRef,
-  deleteBaseRef,
-  setBaseRef,
   runGitCommand,
 } from '../git/index.ts';
 import { print, printError } from '../output.ts';
+import {
+  completeBranchRebase,
+  getParentBranch,
+  removeBranchStackParent,
+  removeObsoleteForkPoint,
+  resolveForkPoint,
+} from '../branch-stack/index.ts';
 
 export async function unstackCommand(ctx: CommandContext): Promise<void> {
   const config = await loadConfig(ctx.configPath);
@@ -81,7 +79,7 @@ export async function unstackCommand(ctx: CommandContext): Promise<void> {
 
   // Use fork point for rebase to handle squash/rebase merges correctly
   // refreshBaseRef validates the stored ref and resyncs if stale
-  const baseRefResult = await refreshBaseRef(
+  const baseRefResult = await resolveForkPoint(
     repo.path,
     currentBranch,
     parentBranch
@@ -111,13 +109,20 @@ export async function unstackCommand(ctx: CommandContext): Promise<void> {
   }
 
   // Remove the stack relationship
-  const updatedRepo = removeStackEntry(repo, currentBranch);
-  await saveStackUpdate(ctx.configPath, config, updatedRepo);
+  const removal = await removeBranchStackParent(
+    ctx.configPath,
+    config,
+    repo,
+    currentBranch
+  );
+  for (const warning of removal.warnings) {
+    printError(warning);
+  }
 
   // Update base ref to track origin/main as the new parent for future rebases
   const targetCommit = await runGitCommand(['rev-parse', targetRef], repo.path);
   if (targetCommit.exitCode === 0) {
-    const setResult = await setBaseRef(
+    const setResult = await completeBranchRebase(
       repo.path,
       currentBranch,
       targetCommit.stdout.trim()
@@ -127,7 +132,7 @@ export async function unstackCommand(ctx: CommandContext): Promise<void> {
     }
   } else {
     // If we can't resolve the target, clean up the stale base ref
-    await deleteBaseRef(repo.path, currentBranch);
+    await removeObsoleteForkPoint(repo.path, currentBranch);
   }
 
   print(`Unstacked "${currentBranch}" - now independent on "${defaultBranch}"`);
