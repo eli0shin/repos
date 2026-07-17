@@ -472,8 +472,14 @@ Slashes in branch names are converted to dashes:
 - `feature/auth` → `my-repo-feature-auth`
 - `bugfix/login-issue` → `my-repo-bugfix-login-issue`
 
+**Tmux options:**
+
+- `--tmux` creates or reuses the worktree's tmux session and attaches or switches to it.
+- `--no-tmux` disables tmux session management.
+- `--no-focus` creates or reuses the tmux session without attaching or switching, including when run outside tmux. It prints the worktree path to stdout and cannot be combined with `--no-tmux`.
+
 **Output:**
-Prints the worktree path to stdout. Use with the `work` shell function to automatically `cd` into it.
+Prints the worktree path to stdout when tmux is disabled or `--no-focus` is used. Use with the `work` shell function to automatically `cd` into it.
 
 **Repo-local setup:**
 If `.repos/worktree.json` is present for the repo, `repos work` copies any configured files and runs the setup command before printing the path. Setup only runs when creating a new worktree, not when reusing an existing one. If setup fails, the worktree is left in place for manual recovery and no stdout path is printed.
@@ -558,7 +564,9 @@ repos stack feature-profile    # Stack profile feature on top of auth
 ```
 
 **Output:**
-Prints the worktree path to stdout.
+Prints the worktree path to stdout when tmux is disabled or `--no-focus` is used.
+
+Use `--no-focus` to create or reuse the new worktree's tmux session without attaching or switching the current client. This works inside and outside tmux and cannot be combined with `--no-tmux`.
 
 ---
 
@@ -774,6 +782,8 @@ repos clean parent --force         # Force remove parent with stacked children
 
 - `-i, --index <index>` - Use a worktree index from `repos list` instead of a branch name
 - `--force` - Force removal even if the branch has stacked children
+- `--no-focus` - Kill the worktree's tmux session without attaching or switching to another session; prints the logical destination path
+- `--no-tmux` - Disable tmux session management entirely
 
 **Safety checks:**
 
@@ -801,8 +811,10 @@ Error: Cannot remove worktree with uncommitted changes
 **Output behavior:**
 
 - Human-readable status is written to stderr
-- On successful non-dry-run cleanup, stdout prints a logical destination path for `work-clean`
+- On successful non-dry-run cleanup without tmux focus, stdout prints a logical destination path for `work-clean`
   (stack parent worktree when available, otherwise main worktree or bare repo directory)
+- With `--no-focus`, cleanup is rejected before removing the worktree when the target session is the caller's active tmux session
+- `--no-focus` works inside and outside tmux and cannot be combined with `--no-tmux`
 
 ---
 
@@ -1341,13 +1353,13 @@ cat ~/.config/repos/config.json | grep updateBehavior
 | `repos adopt`                                 | Add existing repos to config                |
 | `repos sync`                                  | Adopt + clone missing repos                 |
 | `repos init [--print] [--force]`              | Set up shell for work command               |
-| `repos work <branch> [repo]`                  | Create worktree for branch                  |
-| `repos stack <branch>`                        | Create stacked worktree from current branch |
+| `repos work <branch> [repo] [--no-focus]`     | Create worktree for branch                  |
+| `repos stack <branch> [--no-focus]`           | Create stacked worktree from current branch |
 | `repos restack [--only]`                      | Deprecated alias for `repos rebase`         |
 | `repos continue`                              | Continue rebase after resolving conflicts   |
 | `repos unstack`                               | Unstack branch onto default branch          |
 | `repos squash [-m] [-f] [--dry-run]`          | Squash commits since base into one commit   |
-| `repos clean <branch> [repo]` / `-i <index>`  | Remove a worktree (--force for parents)     |
+| `repos clean <branch> [repo]` / `-i <index>`  | Remove a worktree (`--no-focus` supported)  |
 | `repos rebase [branch] [repo]` / `-i <index>` | Rebase branch and children on their parents |
 | `repos cleanup [--dry-run]`                   | Remove merged/deleted worktrees             |
 | `repos update`                                | Update CLI to latest version                |

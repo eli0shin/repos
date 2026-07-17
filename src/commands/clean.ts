@@ -10,9 +10,11 @@ import {
 } from '../git/index.ts';
 import { print, printError, printStatus } from '../output.ts';
 import {
+  findSessionForWorktree,
   getSessionName,
   isInsideTmux,
   openTmuxSession,
+  tmuxCurrentSession,
   tmuxHasSession,
   tmuxKillSession,
 } from '../tmux.ts';
@@ -46,6 +48,7 @@ type CleanOptions = {
   force: boolean;
   dryRun: boolean;
   tmux: boolean;
+  focus?: boolean;
   index?: number;
 };
 
@@ -117,6 +120,34 @@ export async function cleanCommand(
     process.exit(1);
   }
 
+  let noFocusSessionName: string | undefined;
+  if (options.tmux && options.focus === false && !options.dryRun) {
+    const sessionResult = await findSessionForWorktree(
+      repo.name,
+      worktree.branch,
+      worktree.path
+    );
+    if (!sessionResult.success) {
+      printError(`Error: ${sessionResult.error}`);
+      process.exit(1);
+    }
+    noFocusSessionName = sessionResult.data ?? undefined;
+
+    if (isInsideTmux() && noFocusSessionName) {
+      const currentSessionResult = await tmuxCurrentSession();
+      if (!currentSessionResult.success) {
+        printError(`Error: ${currentSessionResult.error}`);
+        process.exit(1);
+      }
+      if (currentSessionResult.data === noFocusSessionName) {
+        printError(
+          `Error: Cannot clean the active tmux session "${currentSessionResult.data}" with --no-focus.`
+        );
+        process.exit(1);
+      }
+    }
+  }
+
   const prefix = options.dryRun ? 'Would remove' : 'Removed';
   const worktreeName = `${repo.name}-${worktree.branch}`;
 
@@ -146,6 +177,28 @@ export async function cleanCommand(
     return;
   }
 
+  const killWorktreeSession = async (
+    name = getSessionName(repo.name, worktree.branch)
+  ): Promise<void> => {
+    const hasSession = await tmuxHasSession(name);
+    if (!hasSession.success || !hasSession.data) return;
+    const killResult = await tmuxKillSession(name);
+    if (!killResult.success) {
+      printError(`Warning: ${killResult.error}`);
+    }
+  };
+
+  if (options.tmux && options.focus === false) {
+    // The cwd may have been the worktree we just removed; move somewhere
+    // valid so tmux can resolve its cwd without changing client focus.
+    process.chdir(outputPath);
+    if (noFocusSessionName) {
+      await killWorktreeSession(noFocusSessionName);
+    }
+    print(outputPath);
+    return;
+  }
+
   if (options.tmux) {
     const defaultBranchResult = await getDefaultBranch(repo.path);
     if (!defaultBranchResult.success) {
@@ -162,17 +215,6 @@ export async function cleanCommand(
     // The cwd may have been the worktree we just removed; move somewhere
     // valid so subsequent subprocess spawns (tmux) can resolve their cwd.
     process.chdir(mainPath);
-
-    const sessionName = getSessionName(repo.name, worktree.branch);
-
-    const killWorktreeSession = async (): Promise<void> => {
-      const hasSession = await tmuxHasSession(sessionName);
-      if (!hasSession.success || !hasSession.data) return;
-      const killResult = await tmuxKillSession(sessionName);
-      if (!killResult.success) {
-        printError(`Warning: ${killResult.error}`);
-      }
-    };
 
     // Inside tmux we must move the client to the main session BEFORE
     // killing the worktree session — killing the session we're attached

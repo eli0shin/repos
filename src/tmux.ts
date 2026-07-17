@@ -218,11 +218,13 @@ export async function findSessionForWorktree(
   };
 }
 
-export async function openTmuxSession(
+type EnsuredTmuxSession = { name: string; existed: boolean };
+
+export async function ensureTmuxSession(
   repoName: string,
   branch: string,
   worktreePath: string
-): Promise<void> {
+): Promise<EnsuredTmuxSession> {
   const findResult = await findSessionForWorktree(
     repoName,
     branch,
@@ -242,10 +244,12 @@ export async function openTmuxSession(
       process.exit(1);
     }
     printStatus(`Created tmux session "${sessionName}"`);
-  } else {
-    printStatus(`Attaching to existing session "${sessionName}"`);
   }
 
+  return { name: sessionName, existed: findResult.data !== null };
+}
+
+export async function focusTmuxSession(sessionName: string): Promise<void> {
   if (isInsideTmux()) {
     const switchResult = await tmuxSwitchClient(sessionName);
     if (!switchResult.success) {
@@ -259,4 +263,16 @@ export async function openTmuxSession(
       process.exit(1);
     }
   }
+}
+
+export async function openTmuxSession(
+  repoName: string,
+  branch: string,
+  worktreePath: string
+): Promise<void> {
+  const session = await ensureTmuxSession(repoName, branch, worktreePath);
+  if (session.existed) {
+    printStatus(`Attaching to existing session "${session.name}"`);
+  }
+  await focusTmuxSession(session.name);
 }

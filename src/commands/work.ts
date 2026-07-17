@@ -12,13 +12,13 @@ import {
   checkIsNewBranch,
 } from '../git/index.ts';
 import { print, printError, printStatus } from '../output.ts';
-import { openTmuxSession } from '../tmux.ts';
+import { ensureTmuxSession, openTmuxSession } from '../tmux.ts';
 import { loadRepoWorktreeConfig } from '../worktree-config.ts';
 import { printSetupWarnings, runWorktreeSetup } from '../worktree-setup.ts';
 import { resolveWorktreeIndex } from '../worktree-index.ts';
 import { recordBranchStackOnDefault } from '../branch-stack/index.ts';
 
-type WorkOptions = { tmux?: boolean; index?: number };
+type WorkOptions = { tmux?: boolean; focus?: boolean; index?: number };
 
 export async function workCommand(
   ctx: CommandContext,
@@ -47,11 +47,20 @@ export async function workCommand(
     }
 
     if (options?.tmux) {
-      await openTmuxSession(
-        repo.name,
-        indexedResult.data.branch,
-        indexedResult.data.path
-      );
+      if (options.focus === false) {
+        await ensureTmuxSession(
+          repo.name,
+          indexedResult.data.branch,
+          indexedResult.data.path
+        );
+        print(indexedResult.data.path);
+      } else {
+        await openTmuxSession(
+          repo.name,
+          indexedResult.data.branch,
+          indexedResult.data.path
+        );
+      }
     } else {
       print(indexedResult.data.path);
     }
@@ -126,9 +135,12 @@ export async function workCommand(
     );
   }
 
-  if (options?.tmux) {
+  if (options?.tmux && options.focus !== false) {
     await openTmuxSession(repo.name, branch, worktreePath);
   } else {
+    if (options?.tmux) {
+      await ensureTmuxSession(repo.name, branch, worktreePath);
+    }
     // Output path to stdout for shell wrapper to cd into
     print(worktreePath);
   }

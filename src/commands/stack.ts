@@ -12,7 +12,7 @@ import {
   resolveRef,
 } from '../git/index.ts';
 import { print, printError, printStatus } from '../output.ts';
-import { openTmuxSession } from '../tmux.ts';
+import { ensureTmuxSession, openTmuxSession } from '../tmux.ts';
 import { loadRepoWorktreeConfig } from '../worktree-config.ts';
 import { printSetupWarnings, runWorktreeSetup } from '../worktree-setup.ts';
 import { recordBranchStack } from '../branch-stack/index.ts';
@@ -20,7 +20,7 @@ import { recordBranchStack } from '../branch-stack/index.ts';
 export async function stackCommand(
   ctx: CommandContext,
   newBranch: string,
-  options?: { tmux?: boolean }
+  options?: { tmux?: boolean; focus?: boolean }
 ): Promise<void> {
   const initialConfig = await loadConfig(ctx.configPath);
 
@@ -148,9 +148,12 @@ export async function stackCommand(
     `Created stacked worktree "${repo.name}-${newBranch.replace(/\//g, '-')}"`
   );
 
-  if (options?.tmux) {
+  if (options?.tmux && options.focus !== false) {
     await openTmuxSession(repo.name, newBranch, worktreePath);
   } else {
+    if (options?.tmux) {
+      await ensureTmuxSession(repo.name, newBranch, worktreePath);
+    }
     // Output path to stdout for shell wrapper to cd into
     print(worktreePath);
   }
