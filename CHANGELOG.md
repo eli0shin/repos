@@ -1,5 +1,11 @@
 # repos
 
+## 2.1.0
+
+### Minor Changes
+
+- [#108](https://github.com/eli0shin/repos/pull/108) [`7293b1b`](https://github.com/eli0shin/repos/commit/7293b1bda98ccb1b591f147eca3a16e80dde67be) Thanks [@eli0shin](https://github.com/eli0shin)! - Add `--no-focus` to `repos work`, `repos stack`, and `repos clean` so automation can manage tmux sessions without attaching or switching clients.
+
 ## 2.0.1
 
 ### Patch Changes
