@@ -52,6 +52,18 @@ function getCommandContext(): CommandContext {
   };
 }
 
+function resolveTmuxOptions(
+  tmux: boolean,
+  focus: boolean
+): { tmux: boolean; focus: boolean } {
+  if (!focus && process.argv.slice(2).includes('--no-tmux')) {
+    printError('Error: --no-focus cannot be combined with --no-tmux');
+    process.exit(1);
+  }
+
+  return { tmux: !focus || tmux, focus };
+}
+
 function parseWorktreeIndex(value: string): number {
   const index = Number(value);
   if (!Number.isInteger(index) || index < 1) {
@@ -163,18 +175,24 @@ program
   )
   .option('--no-tmux', 'Do not use tmux, even inside a tmux session')
   .option(
+    '--no-focus',
+    'Create or reuse tmux session without attaching or switching'
+  )
+  .option(
     '-i, --index <index>',
     'Use a worktree index from repos list',
     parseWorktreeIndex
   )
   .action(async (branch, repoName, options) => {
+    const tmuxOptions = resolveTmuxOptions(options.tmux, options.focus);
+
     if (options.index !== undefined && branch && !repoName) {
       repoName = branch;
       branch = undefined;
     }
 
     await workCommand(getCommandContext(), branch, repoName, {
-      tmux: options.tmux,
+      ...tmuxOptions,
       index: options.index,
     });
   });
@@ -189,10 +207,13 @@ program
     )
   )
   .option('--no-tmux', 'Do not use tmux, even inside a tmux session')
+  .option(
+    '--no-focus',
+    'Create or reuse tmux session without attaching or switching'
+  )
   .action(async (branch, options) => {
-    await stackCommand(getCommandContext(), branch, {
-      tmux: options.tmux,
-    });
+    const tmuxOptions = resolveTmuxOptions(options.tmux, options.focus);
+    await stackCommand(getCommandContext(), branch, tmuxOptions);
   });
 
 program
@@ -255,7 +276,10 @@ program
     ).default(isInsideTmux())
   )
   .option('--no-tmux', 'Do not use tmux, even inside a tmux session')
+  .option('--no-focus', 'Kill tmux session without attaching or switching')
   .action(async (branch, repoName, options) => {
+    const tmuxOptions = resolveTmuxOptions(options.tmux, options.focus);
+
     if (options.index !== undefined && branch && !repoName) {
       repoName = branch;
       branch = undefined;
@@ -264,7 +288,7 @@ program
     await cleanCommand(getCommandContext(), branch, repoName, {
       force: options.force ?? false,
       dryRun: options.dryRun ?? false,
-      tmux: options.tmux,
+      ...tmuxOptions,
       index: options.index,
     });
   });

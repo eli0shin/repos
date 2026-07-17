@@ -3,14 +3,19 @@ import { mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { version } from '../package.json';
 import { cloneBare, runGitCommand } from '../src/git/index.ts';
-import { tmuxKillSession, tmuxNewSession } from '../src/tmux.ts';
+import {
+  tmuxHasSession,
+  tmuxKillSession,
+  tmuxNewSession,
+} from '../src/tmux.ts';
 import { writeConfig } from '../src/config.ts';
 import type { ReposConfig } from '../src/types.ts';
 
 // Helper to run CLI and capture output
 async function runCli(
   args: string[],
-  env: Record<string, string | undefined> = {}
+  env: Record<string, string | undefined> = {},
+  cwd = import.meta.dir.replace('/tests', '')
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
   const processEnv = Object.fromEntries(
     Object.entries({ ...process.env, ...env }).filter(
@@ -18,10 +23,11 @@ async function runCli(
     )
   );
 
-  const proc = Bun.spawn(['bun', 'run', 'src/cli.ts', ...args], {
+  const cliPath = join(import.meta.dir.replace('/tests', ''), 'src/cli.ts');
+  const proc = Bun.spawn(['bun', 'run', cliPath, ...args], {
     stdout: 'pipe',
     stderr: 'pipe',
-    cwd: import.meta.dir.replace('/tests', ''),
+    cwd,
     env: processEnv,
   });
 
@@ -83,6 +89,56 @@ Commands:
   help [command]                         display help for command
 `;
 
+const WORK_HELP_OUTPUT = `Usage: repos work [options] [branch] [repo-name]
+
+Create a worktree for a branch
+
+Arguments:
+  branch               Branch name for the worktree
+  repo-name            Repo name (optional if inside a tracked repo)
+
+Options:
+  -t, --tmux           Open a tmux session in the worktree (default: false)
+  --no-tmux            Do not use tmux, even inside a tmux session
+  --no-focus           Create or reuse tmux session without attaching or
+                       switching
+  -i, --index <index>  Use a worktree index from repos list
+  -h, --help           display help for command
+`;
+
+const STACK_HELP_OUTPUT = `Usage: repos stack [options] <branch>
+
+Create a stacked worktree from current branch
+
+Arguments:
+  branch      New branch name
+
+Options:
+  -t, --tmux  Open a tmux session in the worktree (default: false)
+  --no-tmux   Do not use tmux, even inside a tmux session
+  --no-focus  Create or reuse tmux session without attaching or switching
+  -h, --help  display help for command
+`;
+
+const CLEAN_HELP_OUTPUT = `Usage: repos clean [options] [branch] [repo-name]
+
+Remove a worktree
+
+Arguments:
+  branch               Branch name (optional if inside a worktree)
+  repo-name            Repo name (optional if inside a tracked repo)
+
+Options:
+  --force              Force removal even if branch has stacked children
+  --dry-run            Show what would be removed without removing
+  -i, --index <index>  Use a worktree index from repos list
+  -t, --tmux           Kill the worktree tmux session and switch to the main
+                       worktree session (default: false)
+  --no-tmux            Do not use tmux, even inside a tmux session
+  --no-focus           Kill tmux session without attaching or switching
+  -h, --help           display help for command
+`;
+
 const REMOVE_HELP_OUTPUT = `Usage: repos remove [options] <name>
 
 Remove a repo from tracking
@@ -110,6 +166,20 @@ describe('CLI help output', () => {
       stderr: '',
       exitCode: 0,
     });
+  });
+
+  test('work, stack, and clean help document --no-focus', async () => {
+    expect(
+      await Promise.all(
+        ['work', 'stack', 'clean'].map((command) =>
+          runCli([command, '--help'], { TMUX: undefined })
+        )
+      )
+    ).toEqual([
+      { stdout: WORK_HELP_OUTPUT, stderr: '', exitCode: 0 },
+      { stdout: STACK_HELP_OUTPUT, stderr: '', exitCode: 0 },
+      { stdout: CLEAN_HELP_OUTPUT, stderr: '', exitCode: 0 },
+    ]);
   });
 
   test('remove --help shows -d and --delete options', async () => {
@@ -152,6 +222,25 @@ describe('CLI remove command', () => {
 });
 
 describe('CLI work command', () => {
+  test('work, stack, and clean reject --no-focus with --no-tmux', async () => {
+    const error = {
+      stdout: '',
+      stderr: 'Error: --no-focus cannot be combined with --no-tmux\n',
+      exitCode: 1,
+    };
+    const commands = ['work', 'stack', 'clean'];
+    const invocations = commands.flatMap((command) => [
+      [command, '--no-focus', '--no-tmux', 'feature'],
+      [command, '--no-focus', '--no-tmux', '--tmux', 'feature'],
+      [command, '--no-tmux', '--tmux', '--no-focus', 'feature'],
+    ]);
+    expect(
+      await Promise.all(
+        invocations.map((args) => runCli(args, { TMUX: undefined }))
+      )
+    ).toEqual(invocations.map(() => error));
+  });
+
   test('errors when index option value is missing', async () => {
     expect(await runCli(['work', '--index'])).toEqual({
       stdout: '',
@@ -245,6 +334,85 @@ describe('CLI index options', () => {
       stdout: '',
       stderr: 'Would remove worktree "cli-clean-index-feature"\n',
       exitCode: 0,
+    });
+  });
+});
+
+describe('CLI --no-focus workflow', () => {
+  const testDir = '/tmp/repos-test-cli-no-focus';
+  const sourceDir = '/tmp/repos-test-cli-no-focus-source';
+  const configHome = '/tmp/repos-test-cli-no-focus-config';
+  const repoName = 'cli-no-focus';
+  const parentSession = `${repoName}@parent`;
+  const childSession = `${repoName}@child`;
+
+  afterEach(async () => {
+    await tmuxKillSession(parentSession);
+    await tmuxKillSession(childSession);
+    await rm(testDir, { recursive: true, force: true });
+    await rm(sourceDir, { recursive: true, force: true });
+    await rm(configHome, { recursive: true, force: true });
+  });
+
+  test('work, stack, and clean manage sessions outside tmux without focusing and print paths', async () => {
+    await mkdir(sourceDir, { recursive: true });
+    await runGitCommand(['init', '-b', 'main'], sourceDir);
+    await Bun.write(join(sourceDir, 'test.txt'), 'test');
+    await runGitCommand(['add', '.'], sourceDir);
+    await runGitCommand(['commit', '-m', 'initial'], sourceDir);
+
+    const bareDir = join(testDir, `${repoName}.git`);
+    await mkdir(testDir, { recursive: true });
+    await cloneBare(sourceDir, bareDir);
+    await writeConfig(join(configHome, 'repos', 'config.json'), {
+      repos: [{ name: repoName, url: sourceDir, path: bareDir, bare: true }],
+    });
+    const env = { XDG_CONFIG_HOME: configHome, TMUX: undefined };
+    const parentPath = join(testDir, `${repoName}.git-parent`);
+    const childPath = join(testDir, `${repoName}.git-child`);
+
+    expect(
+      await runCli(['work', '--no-focus', 'parent', repoName], env)
+    ).toEqual({
+      stdout: `${parentPath}\n`,
+      stderr: `Creating worktree for "parent"...\nCreated worktree "${repoName}-parent"\nCreated tmux session "${parentSession}"\n`,
+      exitCode: 0,
+    });
+    expect(await tmuxHasSession(parentSession)).toEqual({
+      success: true,
+      data: true,
+    });
+
+    expect(
+      await runCli(['work', '--no-focus', 'parent', repoName], env)
+    ).toEqual({
+      stdout: `${parentPath}\n`,
+      stderr: '',
+      exitCode: 0,
+    });
+
+    expect(
+      await runCli(['stack', '--no-focus', 'child'], env, parentPath)
+    ).toEqual({
+      stdout: `${childPath}\n`,
+      stderr: `Creating stacked branch "child" from "parent"...\nCreated stacked worktree "${repoName}-child"\nCreated tmux session "${childSession}"\n`,
+      exitCode: 0,
+    });
+    expect(await tmuxHasSession(childSession)).toEqual({
+      success: true,
+      data: true,
+    });
+
+    expect(
+      await runCli(['clean', '--no-focus', 'child', repoName], env, childPath)
+    ).toEqual({
+      stdout: `${parentPath}\n`,
+      stderr: `Removing worktree for "child"...\nRemoved worktree "${repoName}-child"\n`,
+      exitCode: 0,
+    });
+    expect(await tmuxHasSession(childSession)).toEqual({
+      success: true,
+      data: false,
     });
   });
 });

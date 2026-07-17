@@ -18,6 +18,7 @@ import { workCommand } from '../src/commands/work.ts';
 import { stackCommand } from '../src/commands/stack.ts';
 import { cleanCommand } from '../src/commands/clean.ts';
 import { cleanupCommand } from '../src/commands/cleanup.ts';
+import { mockProcessExit } from './utils.ts';
 
 async function createTestRepo(dir: string): Promise<void> {
   await mkdir(dir, { recursive: true });
@@ -33,6 +34,7 @@ describe('--tmux flag', () => {
   const configPath = '/tmp/repos-test-tmux-flag-config/config.json';
   let originalCwd: string;
   let openTmuxSessionSpy: Mock<typeof tmux.openTmuxSession>;
+  let ensureTmuxSessionSpy: Mock<typeof tmux.ensureTmuxSession>;
   // Unique repo name for tests that create real tmux sessions,
   // so session names (repo@branch) won't collide with the user's real sessions.
   const REAL_TMUX_REPO = 'repos-test-tmux-flag';
@@ -43,6 +45,10 @@ describe('--tmux flag', () => {
     openTmuxSessionSpy = spyOn(tmux, 'openTmuxSession').mockResolvedValue(
       undefined
     );
+    ensureTmuxSessionSpy = spyOn(tmux, 'ensureTmuxSession').mockResolvedValue({
+      name: 'bare@feature',
+      existed: false,
+    });
     await mkdir(testDir, { recursive: true });
     await createTestRepo(sourceDir);
   });
@@ -50,6 +56,7 @@ describe('--tmux flag', () => {
   afterEach(async () => {
     process.chdir(originalCwd);
     openTmuxSessionSpy.mockRestore();
+    ensureTmuxSessionSpy.mockRestore();
     for (const name of realTmuxSessionNames.splice(0)) {
       await tmux.tmuxKillSession(name);
     }
@@ -110,6 +117,27 @@ describe('--tmux flag', () => {
     );
     // No path printed to stdout when --tmux is used
     expect(output).toEqual([]);
+  });
+
+  test('work with tmux and focus disabled ensures a session and prints the worktree path', async () => {
+    await setupBareRepo();
+    const { output, restore } = captureStdout();
+
+    await workCommand({ configPath }, 'feature', 'bare', {
+      tmux: true,
+      focus: false,
+    });
+    restore();
+
+    const worktreePath = join(testDir, 'bare.git-feature');
+    expect(ensureTmuxSessionSpy).toHaveBeenCalledTimes(1);
+    expect(ensureTmuxSessionSpy).toHaveBeenCalledWith(
+      'bare',
+      'feature',
+      worktreePath
+    );
+    expect(openTmuxSessionSpy).toHaveBeenCalledTimes(0);
+    expect(output).toEqual([worktreePath + '\n']);
   });
 
   test('work --tmux on existing worktree calls openTmuxSession with existing path', async () => {
@@ -292,6 +320,33 @@ describe('--tmux flag', () => {
     expect(output).toEqual([]);
   });
 
+  test('stack with tmux and focus disabled ensures a session and prints the worktree path', async () => {
+    const { bareDir } = await setupBareRepo();
+    const parentPath = join(testDir, 'bare.git-parent');
+    await runGitCommand(
+      ['worktree', 'add', '-b', 'parent', parentPath],
+      bareDir
+    );
+    process.chdir(parentPath);
+    const { output, restore } = captureStdout();
+
+    await stackCommand({ configPath }, 'child', {
+      tmux: true,
+      focus: false,
+    });
+    restore();
+
+    const childPath = join(testDir, 'bare.git-child');
+    expect(ensureTmuxSessionSpy).toHaveBeenCalledTimes(1);
+    expect(ensureTmuxSessionSpy).toHaveBeenCalledWith(
+      'bare',
+      'child',
+      childPath
+    );
+    expect(openTmuxSessionSpy).toHaveBeenCalledTimes(0);
+    expect(output).toEqual([childPath + '\n']);
+  });
+
   test('clean --tmux kills worktree session and opens main session', async () => {
     const { bareDir } = await setupBareRepo(REAL_TMUX_REPO);
 
@@ -327,6 +382,36 @@ describe('--tmux flag', () => {
     );
     // No path printed to stdout when --tmux is used
     expect(output).toEqual([]);
+  });
+
+  test('clean with tmux and focus disabled kills the worktree session without opening another session and prints the destination', async () => {
+    const { bareDir } = await setupBareRepo(REAL_TMUX_REPO);
+    const worktreePath = join(testDir, `${REAL_TMUX_REPO}.git-feature`);
+    await runGitCommand(
+      ['worktree', 'add', '-b', 'feature', worktreePath],
+      bareDir
+    );
+    const mainPath = join(testDir, `${REAL_TMUX_REPO}.git-main`);
+    await runGitCommand(['worktree', 'add', mainPath, 'main'], bareDir);
+    const sessionName = `${REAL_TMUX_REPO}@feature`;
+    await startRealTmuxSession(sessionName, worktreePath);
+    const { output, restore } = captureStdout();
+
+    await cleanCommand({ configPath }, 'feature', REAL_TMUX_REPO, {
+      force: false,
+      dryRun: false,
+      tmux: true,
+      focus: false,
+    });
+    restore();
+
+    expect(await isGitRepo(worktreePath)).toBe(false);
+    expect(await tmux.tmuxHasSession(sessionName)).toEqual({
+      success: true,
+      data: false,
+    });
+    expect(openTmuxSessionSpy).toHaveBeenCalledTimes(0);
+    expect(output).toEqual([realpathSync(bareDir) + '\n']);
   });
 
   test('clean --tmux opens main session even when no worktree session exists', async () => {
@@ -499,6 +584,79 @@ describe('--tmux flag', () => {
       } else {
         process.env.TMUX = originalTmuxEnv;
       }
+    });
+
+    test('clean with focus disabled rejects the active worktree session before removing anything', async () => {
+      const { bareDir } = await setupBareRepo(REAL_TMUX_REPO);
+      const worktreePath = join(testDir, `${REAL_TMUX_REPO}.git-feature`);
+      await runGitCommand(
+        ['worktree', 'add', '-b', 'feature', worktreePath],
+        bareDir
+      );
+      const sessionName = `${REAL_TMUX_REPO}@feature`;
+      await startRealTmuxSession(sessionName, worktreePath);
+      const currentSessionSpy = track(
+        spyOn(tmux, 'tmuxCurrentSession').mockResolvedValue({
+          success: true,
+          data: sessionName,
+        })
+      );
+      const killSpy = track(spyOn(tmux, 'tmuxKillSession'));
+      track(mockProcessExit());
+      process.chdir(worktreePath);
+
+      await expect(
+        cleanCommand({ configPath }, 'feature', REAL_TMUX_REPO, {
+          force: false,
+          dryRun: false,
+          tmux: true,
+          focus: false,
+        })
+      ).rejects.toThrow('process.exit(1)');
+
+      expect(await isGitRepo(worktreePath)).toBe(true);
+      expect(currentSessionSpy).toHaveBeenCalledTimes(1);
+      expect(currentSessionSpy).toHaveBeenCalledWith();
+      expect(killSpy).toHaveBeenCalledTimes(0);
+      expect(openTmuxSessionSpy).toHaveBeenCalledTimes(0);
+    });
+
+    test('clean with focus disabled kills a non-active session without switching clients', async () => {
+      const { bareDir } = await setupBareRepo(REAL_TMUX_REPO);
+      const worktreePath = join(testDir, `${REAL_TMUX_REPO}.git-feature`);
+      await runGitCommand(
+        ['worktree', 'add', '-b', 'feature', worktreePath],
+        bareDir
+      );
+      const sessionName = `${REAL_TMUX_REPO}@feature`;
+      await startRealTmuxSession(sessionName, worktreePath);
+      const currentSessionSpy = track(
+        spyOn(tmux, 'tmuxCurrentSession').mockResolvedValue({
+          success: true,
+          data: 'unrelated-session',
+        })
+      );
+      const switchSpy = track(spyOn(tmux, 'tmuxSwitchClient'));
+      const attachSpy = track(spyOn(tmux, 'tmuxAttachSession'));
+      const killSpy = track(spyOn(tmux, 'tmuxKillSession'));
+      const { output, restore } = captureStdout();
+
+      await cleanCommand({ configPath }, 'feature', REAL_TMUX_REPO, {
+        force: false,
+        dryRun: false,
+        tmux: true,
+        focus: false,
+      });
+      restore();
+
+      expect(await isGitRepo(worktreePath)).toBe(false);
+      expect(currentSessionSpy).toHaveBeenCalledTimes(1);
+      expect(killSpy).toHaveBeenCalledTimes(1);
+      expect(killSpy).toHaveBeenCalledWith(sessionName);
+      expect(switchSpy).toHaveBeenCalledTimes(0);
+      expect(attachSpy).toHaveBeenCalledTimes(0);
+      expect(openTmuxSessionSpy).toHaveBeenCalledTimes(0);
+      expect(output).toEqual([realpathSync(bareDir) + '\n']);
     });
 
     test('clean --tmux opens main session before killing the worktree session', async () => {
