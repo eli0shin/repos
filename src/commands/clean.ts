@@ -177,6 +177,28 @@ export async function cleanCommand(
     return;
   }
 
+  const killWorktreeSession = async (
+    name = getSessionName(repo.name, worktree.branch)
+  ): Promise<void> => {
+    const hasSession = await tmuxHasSession(name);
+    if (!hasSession.success || !hasSession.data) return;
+    const killResult = await tmuxKillSession(name);
+    if (!killResult.success) {
+      printError(`Warning: ${killResult.error}`);
+    }
+  };
+
+  if (options.tmux && options.focus === false) {
+    // The cwd may have been the worktree we just removed; move somewhere
+    // valid so tmux can resolve its cwd without changing client focus.
+    process.chdir(outputPath);
+    if (noFocusSessionName) {
+      await killWorktreeSession(noFocusSessionName);
+    }
+    print(outputPath);
+    return;
+  }
+
   if (options.tmux) {
     const defaultBranchResult = await getDefaultBranch(repo.path);
     if (!defaultBranchResult.success) {
@@ -193,25 +215,6 @@ export async function cleanCommand(
     // The cwd may have been the worktree we just removed; move somewhere
     // valid so subsequent subprocess spawns (tmux) can resolve their cwd.
     process.chdir(mainPath);
-
-    const sessionName = getSessionName(repo.name, worktree.branch);
-
-    const killWorktreeSession = async (name = sessionName): Promise<void> => {
-      const hasSession = await tmuxHasSession(name);
-      if (!hasSession.success || !hasSession.data) return;
-      const killResult = await tmuxKillSession(name);
-      if (!killResult.success) {
-        printError(`Warning: ${killResult.error}`);
-      }
-    };
-
-    if (options.focus === false) {
-      if (noFocusSessionName) {
-        await killWorktreeSession(noFocusSessionName);
-      }
-      print(outputPath);
-      return;
-    }
 
     // Inside tmux we must move the client to the main session BEFORE
     // killing the worktree session — killing the session we're attached

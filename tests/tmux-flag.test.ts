@@ -35,6 +35,7 @@ describe('--tmux flag', () => {
   let originalCwd: string;
   let openTmuxSessionSpy: Mock<typeof tmux.openTmuxSession>;
   let ensureTmuxSessionSpy: Mock<typeof tmux.ensureTmuxSession>;
+  let processExitSpy: ReturnType<typeof mockProcessExit> | undefined;
   // Unique repo name for tests that create real tmux sessions,
   // so session names (repo@branch) won't collide with the user's real sessions.
   const REAL_TMUX_REPO = 'repos-test-tmux-flag';
@@ -57,6 +58,8 @@ describe('--tmux flag', () => {
     process.chdir(originalCwd);
     openTmuxSessionSpy.mockRestore();
     ensureTmuxSessionSpy.mockRestore();
+    processExitSpy?.mockRestore();
+    processExitSpy = undefined;
     for (const name of realTmuxSessionNames.splice(0)) {
       await tmux.tmuxKillSession(name);
     }
@@ -411,6 +414,44 @@ describe('--tmux flag', () => {
       data: false,
     });
     expect(openTmuxSessionSpy).toHaveBeenCalledTimes(0);
+    expect(output).toEqual([realpathSync(bareDir) + '\n']);
+  });
+
+  test('clean with focus disabled does not require a default branch after removal', async () => {
+    const { bareDir } = await setupBareRepo(REAL_TMUX_REPO);
+    const worktreePath = join(testDir, `${REAL_TMUX_REPO}.git-feature`);
+    await runGitCommand(
+      ['worktree', 'add', '-b', 'feature', worktreePath],
+      bareDir
+    );
+    const sessionName = `${REAL_TMUX_REPO}@feature`;
+    await startRealTmuxSession(sessionName, worktreePath);
+    const mainCommit = await runGitCommand(['rev-parse', 'main'], bareDir);
+    expect(mainCommit.exitCode).toBe(0);
+    await runGitCommand(
+      ['update-ref', '--no-deref', 'HEAD', mainCommit.stdout],
+      bareDir
+    );
+    await runGitCommand(
+      ['symbolic-ref', '--delete', 'refs/remotes/origin/HEAD'],
+      bareDir
+    );
+    processExitSpy = mockProcessExit();
+    const { output, restore } = captureStdout();
+
+    await cleanCommand({ configPath }, 'feature', REAL_TMUX_REPO, {
+      force: false,
+      dryRun: false,
+      tmux: true,
+      focus: false,
+    });
+    restore();
+
+    expect(await isGitRepo(worktreePath)).toBe(false);
+    expect(await tmux.tmuxHasSession(sessionName)).toEqual({
+      success: true,
+      data: false,
+    });
     expect(output).toEqual([realpathSync(bareDir) + '\n']);
   });
 
