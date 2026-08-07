@@ -11,6 +11,10 @@ export type ClosureFocusIntent =
   | { kind: 'destination'; target: ManagedWorkspaceTarget }
   | { kind: 'automatic'; candidates: ManagedWorkspaceTarget[] };
 
+export type ClosurePlanOptions = {
+  mode?: 'execute' | 'preview';
+};
+
 export type ManagedWorkspaceClosurePlan = {
   preview(): Promise<void>;
   execute(): Promise<void>;

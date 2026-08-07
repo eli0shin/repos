@@ -16,6 +16,14 @@ const sessions = [
   `${repoName}@main`,
 ];
 
+async function getSessionId(name: string): Promise<string> {
+  const sessions = await tmux.tmuxListSessionPaths();
+  if (!sessions.success) throw new Error(sessions.error);
+  const session = sessions.data.find((candidate) => candidate.name === name);
+  if (!session?.id) throw new Error(`Session not found: ${name}`);
+  return session.id;
+}
+
 function captureStdout(): { output: string[]; restore: () => void } {
   const output: string[] = [];
   const originalWrite = process.stdout.write.bind(process.stdout);
@@ -36,6 +44,7 @@ function captureStdout(): { output: string[]; restore: () => void } {
 describe('Workspace Manager', () => {
   let target: ManagedWorkspaceTarget;
   let safePath: string;
+  let transientSessions: string[];
 
   beforeEach(async () => {
     await rm(testDir, { recursive: true, force: true });
@@ -44,16 +53,22 @@ describe('Workspace Manager', () => {
     await mkdir(safePath, { recursive: true });
     await mkdir(worktreePath, { recursive: true });
     target = { repoName, branch: 'feature', worktreePath };
+    transientSessions = [];
     for (const session of sessions) await tmux.tmuxKillSession(session);
   });
 
   afterEach(async () => {
     process.chdir('/tmp');
-    for (const session of sessions) await tmux.tmuxKillSession(session);
+    for (const session of [...sessions, ...transientSessions]) {
+      await tmux.tmuxKillSession(session);
+    }
     await rm(testDir, { recursive: true, force: true });
   });
 
-  test('opens and reuses a Managed Workspace without changing focus', async () => {
+  test('opens and reuses a Managed Workspace while preserving focus', async () => {
+    const switchSpy = spyOn(tmux, 'tmuxSwitchClient');
+    const attachSpy = spyOn(tmux, 'tmuxAttachSession');
+
     await openManagedWorkspace(target, { focus: false });
     await openManagedWorkspace(target, { focus: false });
 
@@ -61,6 +76,10 @@ describe('Workspace Manager', () => {
       success: true,
       data: true,
     });
+    expect(switchSpy).not.toHaveBeenCalled();
+    expect(attachSpy).not.toHaveBeenCalled();
+    attachSpy.mockRestore();
+    switchSpy.mockRestore();
   });
 
   test('previews and executes a captured closure after its worktree is removed', async () => {
@@ -116,6 +135,300 @@ describe('Workspace Manager', () => {
       success: true,
       data: false,
     });
+  });
+
+  test('selects a candidate before active automatic closure', async () => {
+    await openManagedWorkspace(target, { focus: false });
+    const candidate = {
+      repoName,
+      branch: 'main',
+      worktreePath: safePath,
+    };
+    await openManagedWorkspace(candidate, { focus: false });
+    const candidateSessionId = await getSessionId(`${repoName}@main`);
+    const insideSpy = spyOn(tmux, 'isInsideTmux').mockReturnValue(true);
+    const currentSpy = spyOn(tmux, 'tmuxCurrentSession').mockResolvedValue({
+      success: true,
+      data: `${repoName}@feature`,
+    });
+    const switchSpy = spyOn(tmux, 'tmuxSwitchClient').mockResolvedValue({
+      success: true,
+      data: undefined,
+    });
+    const killSpy = spyOn(tmux, 'tmuxKillSession');
+    const plan = await planManagedWorkspaceClosure([target], {
+      kind: 'automatic',
+      candidates: [candidate],
+    });
+
+    await plan.execute();
+
+    expect(switchSpy).toHaveBeenCalledWith(candidateSessionId);
+    expect(switchSpy.mock.invocationCallOrder[0]).toBeLessThan(
+      killSpy.mock.invocationCallOrder[0]
+    );
+    expect(await tmux.tmuxHasSession(`${repoName}@feature`)).toEqual({
+      success: true,
+      data: false,
+    });
+    expect(await tmux.tmuxHasSession(`${repoName}@main`)).toEqual({
+      success: true,
+      data: true,
+    });
+    killSpy.mockRestore();
+    switchSpy.mockRestore();
+    currentSpy.mockRestore();
+    insideSpy.mockRestore();
+  });
+
+  test('rechecks focus before active automatic closure', async () => {
+    await openManagedWorkspace(target, { focus: false });
+    const candidate = {
+      repoName,
+      branch: 'main',
+      worktreePath: safePath,
+    };
+    await openManagedWorkspace(candidate, { focus: false });
+    const candidateSessionId = await getSessionId(`${repoName}@main`);
+    const insideSpy = spyOn(tmux, 'isInsideTmux').mockReturnValue(true);
+    const currentSpy = spyOn(tmux, 'tmuxCurrentSession')
+      .mockResolvedValueOnce({
+        success: true,
+        data: `${repoName}@main`,
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        data: `${repoName}@feature`,
+      });
+    const switchSpy = spyOn(tmux, 'tmuxSwitchClient').mockResolvedValue({
+      success: true,
+      data: undefined,
+    });
+    const killSpy = spyOn(tmux, 'tmuxKillSession');
+    const plan = await planManagedWorkspaceClosure([target], {
+      kind: 'automatic',
+      candidates: [candidate],
+    });
+
+    await plan.execute();
+
+    expect(currentSpy).toHaveBeenCalledTimes(2);
+    expect(switchSpy).toHaveBeenCalledWith(candidateSessionId);
+    expect(switchSpy.mock.invocationCallOrder[0]).toBeLessThan(
+      killSpy.mock.invocationCallOrder[0]
+    );
+    killSpy.mockRestore();
+    switchSpy.mockRestore();
+    currentSpy.mockRestore();
+    insideSpy.mockRestore();
+  });
+
+  test('does not close workspaces when focus cannot be rechecked', async () => {
+    await openManagedWorkspace(target, { focus: false });
+    const insideSpy = spyOn(tmux, 'isInsideTmux').mockReturnValue(true);
+    const currentSpy = spyOn(tmux, 'tmuxCurrentSession')
+      .mockResolvedValueOnce({
+        success: true,
+        data: `${repoName}@feature`,
+      })
+      .mockResolvedValueOnce({
+        success: false,
+        error: 'cannot recheck current session',
+      });
+    const killSpy = spyOn(tmux, 'tmuxKillSession');
+    const plan = await planManagedWorkspaceClosure([target], {
+      kind: 'automatic',
+      candidates: [],
+    });
+
+    await plan.execute();
+
+    expect(currentSpy).toHaveBeenCalledTimes(2);
+    expect(killSpy).not.toHaveBeenCalled();
+    expect(await tmux.tmuxHasSession(`${repoName}@feature`)).toEqual({
+      success: true,
+      data: true,
+    });
+    killSpy.mockRestore();
+    currentSpy.mockRestore();
+    insideSpy.mockRestore();
+  });
+
+  test('uses a validated safe last session before automatic closure', async () => {
+    await openManagedWorkspace(target, { focus: false });
+    const safeLast = {
+      repoName,
+      branch: 'main',
+      worktreePath: safePath,
+    };
+    await openManagedWorkspace(safeLast, { focus: false });
+    const safeLastId = await getSessionId(`${repoName}@main`);
+    const insideSpy = spyOn(tmux, 'isInsideTmux').mockReturnValue(true);
+    const currentSpy = spyOn(tmux, 'tmuxCurrentSession').mockResolvedValue({
+      success: true,
+      data: `${repoName}@feature`,
+    });
+    const lastSessionSpy = spyOn(tmux, 'tmuxLastSession').mockResolvedValue({
+      success: true,
+      data: `${repoName}@main`,
+    });
+    const switchSpy = spyOn(tmux, 'tmuxSwitchClient').mockResolvedValue({
+      success: true,
+      data: undefined,
+    });
+    const killSpy = spyOn(tmux, 'tmuxKillSession');
+    const plan = await planManagedWorkspaceClosure([target], {
+      kind: 'automatic',
+      candidates: [],
+    });
+
+    await plan.execute();
+
+    expect(lastSessionSpy).toHaveBeenCalledTimes(1);
+    expect(switchSpy).toHaveBeenCalledWith(safeLastId);
+    expect(switchSpy.mock.invocationCallOrder[0]).toBeLessThan(
+      killSpy.mock.invocationCallOrder[0]
+    );
+    killSpy.mockRestore();
+    switchSpy.mockRestore();
+    lastSessionSpy.mockRestore();
+    currentSpy.mockRestore();
+    insideSpy.mockRestore();
+  });
+
+  test('creates a fresh session when the last session is also closing', async () => {
+    const other = {
+      repoName,
+      branch: 'other',
+      worktreePath: join(testDir, 'other'),
+    };
+    await mkdir(other.worktreePath);
+    await openManagedWorkspace(target, { focus: false });
+    await openManagedWorkspace(other, { focus: false });
+    const insideSpy = spyOn(tmux, 'isInsideTmux').mockReturnValue(true);
+    const currentSpy = spyOn(tmux, 'tmuxCurrentSession').mockResolvedValue({
+      success: true,
+      data: `${repoName}@feature`,
+    });
+    const lastSessionSpy = spyOn(tmux, 'tmuxLastSession').mockResolvedValue({
+      success: true,
+      data: `${repoName}@other`,
+    });
+    const switchLastSpy = spyOn(tmux, 'tmuxSwitchClientLast').mockResolvedValue(
+      { success: true, data: undefined }
+    );
+    const freshSession = `${repoName}@fresh`;
+    transientSessions.push(freshSession);
+    const freshSpy = spyOn(tmux, 'tmuxNewSessionDefault').mockImplementation(
+      async () => {
+        const created = await tmux.tmuxNewSession(freshSession, safePath);
+        if (!created.success) return created;
+        return { success: true, data: freshSession };
+      }
+    );
+    const switchSpy = spyOn(tmux, 'tmuxSwitchClient').mockResolvedValue({
+      success: true,
+      data: undefined,
+    });
+    const killSpy = spyOn(tmux, 'tmuxKillSession');
+    const plan = await planManagedWorkspaceClosure([target, other], {
+      kind: 'automatic',
+      candidates: [],
+    });
+
+    await plan.execute();
+
+    const freshSessionId = await getSessionId(freshSession);
+    expect(switchLastSpy).not.toHaveBeenCalled();
+    expect(freshSpy).toHaveBeenCalledTimes(1);
+    expect(switchSpy).toHaveBeenCalledWith(freshSessionId);
+    expect(switchSpy.mock.invocationCallOrder[0]).toBeLessThan(
+      killSpy.mock.invocationCallOrder[0]
+    );
+    killSpy.mockRestore();
+    switchSpy.mockRestore();
+    freshSpy.mockRestore();
+    switchLastSpy.mockRestore();
+    lastSessionSpy.mockRestore();
+    currentSpy.mockRestore();
+    insideSpy.mockRestore();
+  });
+
+  test('does not close a replacement session that reuses a planned name', async () => {
+    await openManagedWorkspace(target, { focus: false });
+    const sessionName = `${repoName}@feature`;
+    const plan = await planManagedWorkspaceClosure([target], {
+      kind: 'preserve',
+      destination: { path: safePath },
+    });
+    await tmux.tmuxKillSession(sessionName);
+    await tmux.tmuxNewSession(sessionName, safePath);
+    const killSpy = spyOn(tmux, 'tmuxKillSession');
+
+    await plan.execute();
+
+    expect(killSpy).not.toHaveBeenCalled();
+    expect(await tmux.tmuxHasSession(sessionName)).toEqual({
+      success: true,
+      data: true,
+    });
+    killSpy.mockRestore();
+  });
+
+  test('does not close a fresh session that reuses a planned name', async () => {
+    await openManagedWorkspace(target, { focus: false });
+    const other = {
+      repoName,
+      branch: 'other',
+      worktreePath: join(testDir, 'other'),
+    };
+    await mkdir(other.worktreePath);
+    const initialSession = await tmux.tmuxNewSessionDefault(other.worktreePath);
+    if (!initialSession.success) throw new Error(initialSession.error);
+    const reusedName = initialSession.data;
+    transientSessions.push(reusedName);
+    const insideSpy = spyOn(tmux, 'isInsideTmux').mockReturnValue(true);
+    const currentSpy = spyOn(tmux, 'tmuxCurrentSession').mockResolvedValue({
+      success: true,
+      data: `${repoName}@feature`,
+    });
+    const lastSessionSpy = spyOn(tmux, 'tmuxLastSession').mockResolvedValue({
+      success: true,
+      data: reusedName,
+    });
+    const plan = await planManagedWorkspaceClosure([target, other], {
+      kind: 'automatic',
+      candidates: [],
+    });
+    await tmux.tmuxKillSession(reusedName);
+    const freshSpy = spyOn(tmux, 'tmuxNewSessionDefault').mockImplementation(
+      async () => {
+        const created = await tmux.tmuxNewSession(reusedName, safePath);
+        if (!created.success) return created;
+        return { success: true, data: reusedName };
+      }
+    );
+    const switchSpy = spyOn(tmux, 'tmuxSwitchClient').mockResolvedValue({
+      success: true,
+      data: undefined,
+    });
+    const killSpy = spyOn(tmux, 'tmuxKillSession');
+
+    await plan.execute();
+
+    const freshSessionId = await getSessionId(reusedName);
+    expect(switchSpy).toHaveBeenCalledWith(freshSessionId);
+    expect(killSpy).toHaveBeenCalledTimes(1);
+    expect(await tmux.tmuxHasSession(reusedName)).toEqual({
+      success: true,
+      data: true,
+    });
+    killSpy.mockRestore();
+    switchSpy.mockRestore();
+    freshSpy.mockRestore();
+    lastSessionSpy.mockRestore();
+    currentSpy.mockRestore();
+    insideSpy.mockRestore();
   });
 
   test('moves focus to a destination before closing the active workspace', async () => {

@@ -204,7 +204,8 @@ export async function cleanupCommand(
               repoContext.repo.path,
           };
         }),
-      }
+      },
+      { mode: options.dryRun ? 'preview' : 'execute' }
     );
   }
 

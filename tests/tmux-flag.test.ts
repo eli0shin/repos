@@ -80,6 +80,14 @@ describe('--tmux flag', () => {
     if (!result.success) throw new Error(result.error);
   }
 
+  async function getSessionId(name: string): Promise<string> {
+    const sessions = await tmux.tmuxListSessionPaths();
+    if (!sessions.success) throw new Error(sessions.error);
+    const session = sessions.data.find((candidate) => candidate.name === name);
+    if (!session?.id) throw new Error(`Session not found: ${name}`);
+    return session.id;
+  }
+
   async function setupBareRepo(
     name = 'bare'
   ): Promise<{ bareDir: string; config: ReposConfig }> {
@@ -670,11 +678,13 @@ describe('--tmux flag', () => {
         bareDir
       );
       const sessionName = `${REAL_TMUX_REPO}@feature`;
+      const unrelatedSession = `${REAL_TMUX_REPO}@unrelated`;
       await startRealTmuxSession(sessionName, worktreePath);
+      await startRealTmuxSession(unrelatedSession, bareDir);
       const currentSessionSpy = track(
         spyOn(tmux, 'tmuxCurrentSession').mockResolvedValue({
           success: true,
-          data: 'unrelated-session',
+          data: unrelatedSession,
         })
       );
       const switchSpy = track(spyOn(tmux, 'tmuxSwitchClient'));
@@ -693,7 +703,6 @@ describe('--tmux flag', () => {
       expect(await isGitRepo(worktreePath)).toBe(false);
       expect(currentSessionSpy).toHaveBeenCalledTimes(1);
       expect(killSpy).toHaveBeenCalledTimes(1);
-      expect(killSpy).toHaveBeenCalledWith(sessionName);
       expect(switchSpy).toHaveBeenCalledTimes(0);
       expect(attachSpy).toHaveBeenCalledTimes(0);
       expect(openTmuxSessionSpy).toHaveBeenCalledTimes(0);
@@ -726,10 +735,102 @@ describe('--tmux flag', () => {
       restore();
 
       expect(openTmuxSessionSpy).toHaveBeenCalledTimes(1);
-      expect(killSpy).toHaveBeenCalledWith(featureSession);
+      expect(killSpy).toHaveBeenCalledTimes(1);
       const openOrder = openTmuxSessionSpy.mock.invocationCallOrder[0];
       const killOrder = killSpy.mock.invocationCallOrder[0];
       expect(openOrder).toBeLessThan(killOrder);
+    });
+
+    test('cleanup --tmux stops before Git mutation when the current session cannot be identified', async () => {
+      const { worktreePath } = await setupStaleWorktree(
+        REAL_TMUX_REPO,
+        'feature'
+      );
+      await startRealTmuxSession(`${REAL_TMUX_REPO}@feature`, worktreePath);
+      track(
+        spyOn(tmux, 'tmuxCurrentSession').mockResolvedValue({
+          success: false,
+          error: 'cannot identify current session',
+        })
+      );
+      const killSpy = track(spyOn(tmux, 'tmuxKillSession'));
+      track(mockProcessExit());
+
+      await expect(
+        cleanupCommand({ configPath }, { dryRun: false, tmux: true })
+      ).rejects.toThrow('process.exit(1)');
+
+      expect(await isGitRepo(worktreePath)).toBe(true);
+      expect(killSpy).not.toHaveBeenCalled();
+    });
+
+    test('cleanup --tmux stops before Git mutation when workspace discovery fails', async () => {
+      const { worktreePath } = await setupStaleWorktree(
+        REAL_TMUX_REPO,
+        'feature'
+      );
+      track(
+        spyOn(tmux, 'tmuxListSessionPaths').mockResolvedValue({
+          success: false,
+          error: 'cannot discover tmux sessions',
+        })
+      );
+      const killSpy = track(spyOn(tmux, 'tmuxKillSession'));
+      track(mockProcessExit());
+
+      await expect(
+        cleanupCommand({ configPath }, { dryRun: false, tmux: true })
+      ).rejects.toThrow('process.exit(1)');
+
+      expect(await isGitRepo(worktreePath)).toBe(true);
+      expect(killSpy).not.toHaveBeenCalled();
+    });
+
+    test('cleanup --tmux --dry-run previews when the current session cannot be identified', async () => {
+      const { worktreePath } = await setupStaleWorktree(
+        REAL_TMUX_REPO,
+        'feature'
+      );
+      const sessionName = `${REAL_TMUX_REPO}@feature`;
+      await startRealTmuxSession(sessionName, worktreePath);
+      const currentSpy = track(
+        spyOn(tmux, 'tmuxCurrentSession').mockResolvedValue({
+          success: false,
+          error: 'cannot identify current session',
+        })
+      );
+      track(mockProcessExit());
+      const { output, restore } = captureStdout();
+
+      await cleanupCommand({ configPath }, { dryRun: true, tmux: true });
+      restore();
+
+      expect(await isGitRepo(worktreePath)).toBe(true);
+      expect(currentSpy).not.toHaveBeenCalled();
+      expect(output).toEqual([
+        `Would remove ${REAL_TMUX_REPO}/feature (upstream deleted)\n`,
+        `\nWould remove 1 worktree(s) (1 upstream deleted)\n`,
+        `Would kill tmux session "${sessionName}"\n`,
+      ]);
+    });
+
+    test('cleanup --tmux does not require focus discovery when no workspace will close', async () => {
+      const { worktreePath } = await setupStaleWorktree(
+        REAL_TMUX_REPO,
+        'feature'
+      );
+      const currentSpy = track(
+        spyOn(tmux, 'tmuxCurrentSession').mockResolvedValue({
+          success: false,
+          error: 'cannot identify current session',
+        })
+      );
+      track(mockProcessExit());
+
+      await cleanupCommand({ configPath }, { dryRun: false, tmux: true });
+
+      expect(await isGitRepo(worktreePath)).toBe(false);
+      expect(currentSpy).not.toHaveBeenCalled();
     });
 
     test('cleanup --tmux switches to main-worktree session before killing current session', async () => {
@@ -744,6 +845,7 @@ describe('--tmux flag', () => {
       const mainSession = `${REAL_TMUX_REPO}@main`;
       await startRealTmuxSession(featureSession, worktreePath);
       await startRealTmuxSession(mainSession, mainPath);
+      const mainSessionId = await getSessionId(mainSession);
 
       track(
         spyOn(tmux, 'tmuxCurrentSession').mockResolvedValue({
@@ -764,21 +866,24 @@ describe('--tmux flag', () => {
       await cleanupCommand({ configPath }, { dryRun: false, tmux: true });
       restore();
 
-      expect(switchSpy).toHaveBeenCalledWith(mainSession);
+      expect(switchSpy).toHaveBeenCalledWith(mainSessionId);
       expect(switchLastSpy).not.toHaveBeenCalled();
-      expect(killSpy).toHaveBeenCalledWith(featureSession);
+      expect(killSpy).toHaveBeenCalledTimes(1);
       expect(switchSpy.mock.invocationCallOrder[0]).toBeLessThan(
         killSpy.mock.invocationCallOrder[0]
       );
     });
 
-    test('cleanup --tmux falls back to switch-client -l when no main session exists', async () => {
-      const { worktreePath } = await setupStaleWorktree(
+    test('cleanup --tmux switches to the validated last session when no main session exists', async () => {
+      const { worktreePath, bareDir } = await setupStaleWorktree(
         REAL_TMUX_REPO,
         'feature'
       );
       const featureSession = `${REAL_TMUX_REPO}@feature`;
+      const safeSession = `${REAL_TMUX_REPO}@safe`;
       await startRealTmuxSession(featureSession, worktreePath);
+      await startRealTmuxSession(safeSession, bareDir);
+      const safeSessionId = await getSessionId(safeSession);
 
       track(
         spyOn(tmux, 'tmuxCurrentSession').mockResolvedValue({
@@ -790,6 +895,12 @@ describe('--tmux flag', () => {
         spyOn(tmux, 'tmuxSwitchClient').mockResolvedValue({
           success: true,
           data: undefined,
+        })
+      );
+      track(
+        spyOn(tmux, 'tmuxLastSession').mockResolvedValue({
+          success: true,
+          data: safeSession,
         })
       );
       const switchLastSpy = track(
@@ -804,10 +915,10 @@ describe('--tmux flag', () => {
       await cleanupCommand({ configPath }, { dryRun: false, tmux: true });
       restore();
 
-      expect(switchSpy).not.toHaveBeenCalled();
-      expect(switchLastSpy).toHaveBeenCalledTimes(1);
-      expect(killSpy).toHaveBeenCalledWith(featureSession);
-      expect(switchLastSpy.mock.invocationCallOrder[0]).toBeLessThan(
+      expect(switchSpy).toHaveBeenCalledWith(safeSessionId);
+      expect(switchLastSpy).not.toHaveBeenCalled();
+      expect(killSpy).toHaveBeenCalledTimes(1);
+      expect(switchSpy.mock.invocationCallOrder[0]).toBeLessThan(
         killSpy.mock.invocationCallOrder[0]
       );
     });
@@ -833,15 +944,17 @@ describe('--tmux flag', () => {
         })
       );
       track(
-        spyOn(tmux, 'tmuxSwitchClientLast').mockResolvedValue({
+        spyOn(tmux, 'tmuxLastSession').mockResolvedValue({
           success: false,
           error: 'no last session',
         })
       );
+      const switchLastSpy = track(spyOn(tmux, 'tmuxSwitchClientLast'));
+      const freshSession = `${REAL_TMUX_REPO}@fresh`;
       const newSessionSpy = track(
-        spyOn(tmux, 'tmuxNewSessionDefault').mockResolvedValue({
-          success: true,
-          data: '42',
+        spyOn(tmux, 'tmuxNewSessionDefault').mockImplementation(async () => {
+          await startRealTmuxSession(freshSession, worktreePath);
+          return { success: true, data: freshSession };
         })
       );
       const killSpy = track(spyOn(tmux, 'tmuxKillSession'));
@@ -850,26 +963,29 @@ describe('--tmux flag', () => {
       await cleanupCommand({ configPath }, { dryRun: false, tmux: true });
       restore();
 
+      expect(switchLastSpy).not.toHaveBeenCalled();
       expect(newSessionSpy).toHaveBeenCalledTimes(1);
-      expect(switchSpy).toHaveBeenCalledWith('42');
-      expect(killSpy).toHaveBeenCalledWith(featureSession);
+      expect(switchSpy).toHaveBeenCalledTimes(1);
+      expect(killSpy).toHaveBeenCalledTimes(1);
       expect(switchSpy.mock.invocationCallOrder[0]).toBeLessThan(
         killSpy.mock.invocationCallOrder[0]
       );
     });
 
     test('cleanup --tmux does not switch when current session is not in the kill list', async () => {
-      const { worktreePath } = await setupStaleWorktree(
+      const { worktreePath, bareDir } = await setupStaleWorktree(
         REAL_TMUX_REPO,
         'feature'
       );
       const featureSession = `${REAL_TMUX_REPO}@feature`;
+      const unrelatedSession = `${REAL_TMUX_REPO}@unrelated`;
       await startRealTmuxSession(featureSession, worktreePath);
+      await startRealTmuxSession(unrelatedSession, bareDir);
 
       track(
         spyOn(tmux, 'tmuxCurrentSession').mockResolvedValue({
           success: true,
-          data: 'some-unrelated-session',
+          data: unrelatedSession,
         })
       );
       const switchSpy = track(spyOn(tmux, 'tmuxSwitchClient'));
