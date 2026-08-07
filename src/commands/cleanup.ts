@@ -4,6 +4,7 @@ import type { RepoEntry } from '../types.ts';
 import type { WorktreeInfo } from '../git/index.ts';
 import {
   listWorktrees,
+  findWorktreeByBranch,
   fetchWithPrune,
   getDefaultBranch,
   getBranchUpstreamStatus,
@@ -15,15 +16,9 @@ import {
 } from '../git/index.ts';
 import { print, printError } from '../output.ts';
 import {
-  getSessionName,
-  isInsideTmux,
-  tmuxCurrentSession,
-  tmuxHasSession,
-  tmuxKillSession,
-  tmuxNewSessionDefault,
-  tmuxSwitchClient,
-  tmuxSwitchClientLast,
-} from '../tmux.ts';
+  planManagedWorkspaceClosure,
+  type ManagedWorkspaceClosurePlan,
+} from '../workspace-manager/index.ts';
 
 export type CleanupOptions = {
   dryRun: boolean;
@@ -88,8 +83,7 @@ async function prepareRepo(repo: RepoEntry): Promise<RepoContext | null> {
 
 async function processWorktree(
   repoContext: RepoContext,
-  worktree: WorktreeInfo,
-  options: CleanupOptions
+  worktree: WorktreeInfo
 ): Promise<CleanupResult | null> {
   const { repo, defaultBranch } = repoContext;
 
@@ -137,18 +131,6 @@ async function processWorktree(
     };
   }
 
-  // Remove worktree unless dry-run
-  if (!options.dryRun) {
-    const removeResult = await removeWorktree(repo.path, worktree.path, {
-      force: true,
-    });
-    if (!removeResult.success) {
-      printError(
-        `Error removing worktree ${worktree.branch}: ${removeResult.error}`
-      );
-    }
-  }
-
   return {
     repo: repo.name,
     branch: worktree.branch,
@@ -176,7 +158,7 @@ export async function cleanupCommand(
     if (!repoContext) continue;
 
     for (const worktree of repoContext.worktrees) {
-      const result = await processWorktree(repoContext, worktree, options);
+      const result = await processWorktree(repoContext, worktree);
       if (result) {
         results.push(result);
       }
@@ -187,6 +169,62 @@ export async function cleanupCommand(
   if (results.length === 0) {
     print('No worktrees to clean up');
     return;
+  }
+
+  const removed = results.filter((r) => !r.skipped);
+  const skipped = results.filter((r) => r.skipped);
+  const liveContexts = repoContexts.filter(
+    (repoContext): repoContext is RepoContext => repoContext !== null
+  );
+
+  let workspaceClosure: ManagedWorkspaceClosurePlan | undefined;
+  if (options.tmux && removed.length > 0) {
+    workspaceClosure = await planManagedWorkspaceClosure(
+      removed.map((result) => ({
+        repoName: result.repo,
+        branch: result.branch,
+        worktreePath: result.path,
+      })),
+      {
+        kind: 'automatic',
+        candidates: liveContexts.map((repoContext) => {
+          const mainWorktree = repoContext.worktrees.find(
+            (worktree) => worktree.isMain
+          );
+          const defaultWorktree = findWorktreeByBranch(
+            repoContext.worktrees,
+            repoContext.defaultBranch
+          );
+          return {
+            repoName: repoContext.repo.name,
+            branch: repoContext.defaultBranch,
+            worktreePath:
+              defaultWorktree?.path ??
+              mainWorktree?.path ??
+              repoContext.repo.path,
+          };
+        }),
+      }
+    );
+  }
+
+  if (!options.dryRun) {
+    for (const result of removed) {
+      const repoContext = liveContexts.find(
+        (candidate) => candidate.repo.name === result.repo
+      );
+      if (!repoContext) continue;
+      const removeResult = await removeWorktree(
+        repoContext.repo.path,
+        result.path,
+        { force: true }
+      );
+      if (!removeResult.success) {
+        printError(
+          `Error removing worktree ${result.branch}: ${removeResult.error}`
+        );
+      }
+    }
   }
 
   const prefix = options.dryRun ? 'Would remove' : 'Removed';
@@ -204,9 +242,6 @@ export async function cleanupCommand(
   }
 
   // Summary
-  const removed = results.filter((r) => !r.skipped);
-  const skipped = results.filter((r) => r.skipped);
-
   if (removed.length > 0) {
     const merged = removed.filter((r) => r.reason === 'merged').length;
     const upstreamGone = removed.filter(
@@ -225,82 +260,11 @@ export async function cleanupCommand(
     print(`Skipped ${skipped.length} worktree(s) with uncommitted changes`);
   }
 
-  if (options.tmux) {
-    // The cwd may have been a worktree we just removed; move somewhere
-    // valid so subsequent subprocess spawns (tmux) can resolve their cwd.
-    const liveContexts = repoContexts.filter(
-      (ctx): ctx is RepoContext => ctx !== null
-    );
-    const safeDir = liveContexts[0]?.repo.path;
-    if (safeDir) process.chdir(safeDir);
-
-    const killingSessions = new Set(
-      removed.map((r) => getSessionName(r.repo, r.branch))
-    );
-
-    // If we're inside tmux and about to kill the session hosting this
-    // command, switch the client away first — otherwise killing the
-    // current session disconnects the client from the tmux server.
-    let skipCurrentSession: string | null = null;
-    if (!options.dryRun && isInsideTmux()) {
-      const currentResult = await tmuxCurrentSession();
-      if (currentResult.success && killingSessions.has(currentResult.data)) {
-        const switched = await switchClientAwayFromCurrentSession(
-          currentResult.data,
-          killingSessions,
-          liveContexts
-        );
-        if (!switched) {
-          printError(
-            `Warning: cannot kill current tmux session "${currentResult.data}" — no safe session to switch to`
-          );
-          skipCurrentSession = currentResult.data;
-        }
-      }
-    }
-
-    const killPrefix = options.dryRun ? 'Would kill' : 'Killed';
-    for (const result of removed) {
-      const sessionName = getSessionName(result.repo, result.branch);
-      if (sessionName === skipCurrentSession) continue;
-      const hasSession = await tmuxHasSession(sessionName);
-      if (!hasSession.success || !hasSession.data) continue;
-
-      if (!options.dryRun) {
-        const killResult = await tmuxKillSession(sessionName);
-        if (!killResult.success) {
-          printError(`Warning: ${killResult.error}`);
-          continue;
-        }
-      }
-      print(`${killPrefix} tmux session "${sessionName}"`);
+  if (workspaceClosure) {
+    if (options.dryRun) {
+      await workspaceClosure.preview();
+    } else {
+      await workspaceClosure.execute();
     }
   }
-}
-
-async function switchClientAwayFromCurrentSession(
-  currentSession: string,
-  killingSessions: Set<string>,
-  repoContexts: RepoContext[]
-): Promise<boolean> {
-  // 1. Prefer an existing main-worktree session for a repo we're processing
-  for (const ctx of repoContexts) {
-    const candidate = getSessionName(ctx.repo.name, ctx.defaultBranch);
-    if (candidate === currentSession || killingSessions.has(candidate))
-      continue;
-    const has = await tmuxHasSession(candidate);
-    if (!has.success || !has.data) continue;
-    const sw = await tmuxSwitchClient(candidate);
-    if (sw.success) return true;
-  }
-
-  // 2. Fall back to the last-visited session (mirrors user's tmux keybind)
-  const last = await tmuxSwitchClientLast();
-  if (last.success) return true;
-
-  // 3. Last resort: create a fresh unnamed session and switch to it
-  const fresh = await tmuxNewSessionDefault();
-  if (!fresh.success) return false;
-  const sw = await tmuxSwitchClient(fresh.data);
-  return sw.success;
 }
