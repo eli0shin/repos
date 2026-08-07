@@ -455,20 +455,29 @@ async function matchWorkspace(
     (workspace) => !excludedWorkspaceIds.has(workspace.workspace_id)
   );
   const name = getManagedWorkspaceName(target.repoName, target.branch);
-  const named = availableWorkspaces.find(
+  const targetPath = await canonicalPath(target.worktreePath);
+  const namedWorkspaces = availableWorkspaces.filter(
     (workspace) => workspace.label === name
   );
-  if (named) return { success: true, data: named };
 
-  const targetPath = await canonicalPath(target.worktreePath);
+  for (const workspace of namedWorkspaces) {
+    if (
+      workspace.worktree &&
+      (await canonicalPath(workspace.worktree.checkout_path)) === targetPath
+    ) {
+      return { success: true, data: workspace };
+    }
+  }
+
   const worktreeResult = await listWorktrees(context, target.worktreePath);
   if (!worktreeResult.success) return worktreeResult;
 
+  let targetWorktree: HerdrWorktree | undefined;
   for (const worktree of worktreeResult.data.worktrees) {
-    if (
-      worktree.open_workspace_id &&
-      (await canonicalPath(worktree.path)) === targetPath
-    ) {
+    if ((await canonicalPath(worktree.path)) !== targetPath) continue;
+
+    targetWorktree = worktree;
+    if (worktree.open_workspace_id) {
       const matched = availableWorkspaces.find(
         (workspace) => workspace.workspace_id === worktree.open_workspace_id
       );
@@ -485,7 +494,10 @@ async function matchWorkspace(
     }
   }
 
-  return { success: true, data: null };
+  const namedBareWorkspace = targetWorktree?.is_bare
+    ? namedWorkspaces.find((workspace) => !workspace.worktree)
+    : undefined;
+  return { success: true, data: namedBareWorkspace ?? null };
 }
 
 async function ensureWorkspace(

@@ -176,13 +176,45 @@ describe.serial('Herdr Workspace Manager adapter', () => {
     });
   });
 
-  test('matches the canonical label before another workspace at the target path', async () => {
+  test('uses the worktree path to disambiguate normalized label collisions', async () => {
     const initial = await createFakeHerdr(fakeDir, {
       nextId: 3,
       workspaces: [
         workspace('w1', 'repo@feature-one', otherPath),
-        workspace('w2', 'other', targetPath),
+        workspace('w2', 'repo@feature-one', targetPath),
       ],
+    });
+    statePath = initial.statePath;
+    adapterEnvironment().FAKE_HERDR_STATE = statePath;
+
+    await openManagedWorkspace(target, { focus: true, provider: 'herdr' });
+
+    const state = await readFakeHerdrState(statePath);
+    expect(state.workspaces).toEqual([
+      workspace('w1', 'repo@feature-one', otherPath),
+      { ...workspace('w2', 'repo@feature-one', targetPath), focused: true },
+    ]);
+    expect(state.calls.map((call) => call.args)).toEqual([
+      ['workspace', 'list'],
+      ['workspace', 'focus', 'w2'],
+    ]);
+
+    const plan = await planManagedWorkspaceClosure(
+      [target],
+      { kind: 'preserve', destination: { path: otherPath } },
+      { provider: 'herdr' }
+    );
+    await plan.execute();
+
+    expect((await readFakeHerdrState(statePath)).workspaces).toEqual([
+      workspace('w1', 'repo@feature-one', otherPath),
+    ]);
+  });
+
+  test('opens a worktree instead of reusing a colliding normalized label', async () => {
+    const initial = await createFakeHerdr(fakeDir, {
+      nextId: 2,
+      workspaces: [workspace('w1', 'repo@feature-one', otherPath)],
     });
     statePath = initial.statePath;
     adapterEnvironment().FAKE_HERDR_STATE = statePath;
@@ -192,10 +224,51 @@ describe.serial('Herdr Workspace Manager adapter', () => {
     const state = await readFakeHerdrState(statePath);
     expect(state.workspaces).toEqual([
       workspace('w1', 'repo@feature-one', otherPath),
-      workspace('w2', 'other', targetPath),
+      workspace('w2', 'repo@feature-one', targetPath, targetPath),
     ]);
     expect(state.calls.map((call) => call.args)).toEqual([
       ['workspace', 'list'],
+      ['worktree', 'list', '--cwd', targetPath],
+      ['worktree', 'list', '--cwd', targetPath],
+      [
+        'worktree',
+        'open',
+        '--cwd',
+        targetPath,
+        '--path',
+        targetPath,
+        '--label',
+        'repo@feature-one',
+        '--no-focus',
+      ],
+    ]);
+  });
+
+  test('does not close an unassociated workspace with a colliding label', async () => {
+    const colliding = workspace('w1', 'repo@feature-one', otherPath);
+    delete colliding.worktree;
+    const initial = await createFakeHerdr(fakeDir, {
+      nextId: 2,
+      workspaces: [colliding],
+    });
+    statePath = initial.statePath;
+    adapterEnvironment().FAKE_HERDR_STATE = statePath;
+
+    const plan = await planManagedWorkspaceClosure(
+      [target],
+      { kind: 'preserve', destination: { path: otherPath } },
+      { provider: 'herdr' }
+    );
+    await plan.execute();
+
+    const state = await readFakeHerdrState(statePath);
+    expect(state.workspaces).toEqual([colliding]);
+    expect(state.calls.map((call) => call.args)).toEqual([
+      ['workspace', 'list'],
+      ['status', 'server', '--json'],
+      ['workspace', 'list'],
+      ['worktree', 'list', '--cwd', targetPath],
+      ['status', 'server', '--json'],
     ]);
   });
 

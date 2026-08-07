@@ -3,8 +3,10 @@ import { mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import * as tmux from '../src/tmux.ts';
 import {
-  openManagedWorkspace,
-  planManagedWorkspaceClosure,
+  openManagedWorkspace as openWorkspace,
+  planManagedWorkspaceClosure as planClosure,
+  type ClosureFocusIntent,
+  type ClosurePlanOptions,
   type ManagedWorkspaceTarget,
 } from '../src/workspace-manager/index.ts';
 
@@ -15,6 +17,21 @@ const sessions = [
   `${repoName}@other`,
   `${repoName}@main`,
 ];
+
+async function openManagedWorkspace(
+  target: ManagedWorkspaceTarget,
+  options: { focus: boolean }
+): Promise<void> {
+  await openWorkspace(target, { ...options, provider: 'tmux' });
+}
+
+async function planManagedWorkspaceClosure(
+  targets: ManagedWorkspaceTarget[],
+  focus: ClosureFocusIntent,
+  options: ClosurePlanOptions = {}
+) {
+  return planClosure(targets, focus, { ...options, provider: 'tmux' });
+}
 
 async function getSessionId(name: string): Promise<string> {
   const sessions = await tmux.tmuxListSessionPaths();

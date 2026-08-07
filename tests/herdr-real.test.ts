@@ -220,6 +220,10 @@ describe.serial('real Herdr integration', () => {
         focus: false,
         provider: 'herdr',
       });
+      await openManagedWorkspace(target, {
+        focus: false,
+        provider: 'herdr',
+      });
 
       expect(
         await runGitCommand(['worktree', 'list', '--porcelain'], barePath)
