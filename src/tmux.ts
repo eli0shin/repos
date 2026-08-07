@@ -70,6 +70,33 @@ export async function tmuxKillSession(name: string): Promise<OperationResult> {
   return { success: true, data: undefined };
 }
 
+export async function tmuxKillSessionIfIdentity(
+  id: string,
+  serverPid: string
+): Promise<OperationResult<boolean>> {
+  const mismatchMarker = 'repos-identity-mismatch';
+  const matchesIdentity = `#{&&:#{==:#{pid},${serverPid}},#{==:#{session_id},${id}}}`;
+  const result = await runTmuxCommand([
+    'if-shell',
+    '-F',
+    '-t',
+    id,
+    matchesIdentity,
+    `kill-session -t ${id}`,
+    `display-message -p ${mismatchMarker}`,
+  ]);
+  if (result.exitCode === 1) {
+    return { success: true, data: false };
+  }
+  if (result.exitCode !== 0) {
+    return {
+      success: false,
+      error: result.stderr || 'Failed to kill tmux session safely',
+    };
+  }
+  return { success: true, data: result.stdout !== mismatchMarker };
+}
+
 export async function tmuxSwitchClient(name: string): Promise<OperationResult> {
   const result = await runTmuxCommand(['switch-client', '-t', name]);
   if (result.exitCode !== 0) {
@@ -166,7 +193,12 @@ export function getSessionName(repoName: string, branch: string): string {
   return `${repoName}@${branch.replace(/\//g, '-')}`;
 }
 
-export type SessionInfo = { id?: string; name: string; path: string };
+export type SessionInfo = {
+  id?: string;
+  serverPid?: string;
+  name: string;
+  path: string;
+};
 
 export async function tmuxListSessionPaths(): Promise<
   OperationResult<SessionInfo[]>
@@ -174,7 +206,7 @@ export async function tmuxListSessionPaths(): Promise<
   const result = await runTmuxCommand([
     'list-sessions',
     '-F',
-    '#{session_id}\t#{session_name}\t#{pane_current_path}',
+    '#{pid}\t#{session_id}\t#{session_name}\t#{pane_current_path}',
   ]);
   if (result.exitCode === 1) {
     return { success: true, data: [] };
@@ -189,8 +221,8 @@ export async function tmuxListSessionPaths(): Promise<
     .split('\n')
     .filter((line) => line.includes('\t'))
     .map((line) => {
-      const [id, name, path] = line.split('\t');
-      return { id, name, path };
+      const [serverPid, id, name, path] = line.split('\t');
+      return { serverPid, id, name, path };
     });
   return { success: true, data: sessions };
 }

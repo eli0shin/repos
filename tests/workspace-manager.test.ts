@@ -155,7 +155,7 @@ describe('Workspace Manager', () => {
       success: true,
       data: undefined,
     });
-    const killSpy = spyOn(tmux, 'tmuxKillSession');
+    const killSpy = spyOn(tmux, 'tmuxKillSessionIfIdentity');
     const plan = await planManagedWorkspaceClosure([target], {
       kind: 'automatic',
       candidates: [candidate],
@@ -204,7 +204,7 @@ describe('Workspace Manager', () => {
       success: true,
       data: undefined,
     });
-    const killSpy = spyOn(tmux, 'tmuxKillSession');
+    const killSpy = spyOn(tmux, 'tmuxKillSessionIfIdentity');
     const plan = await planManagedWorkspaceClosure([target], {
       kind: 'automatic',
       candidates: [candidate],
@@ -235,7 +235,7 @@ describe('Workspace Manager', () => {
         success: false,
         error: 'cannot recheck current session',
       });
-    const killSpy = spyOn(tmux, 'tmuxKillSession');
+    const killSpy = spyOn(tmux, 'tmuxKillSessionIfIdentity');
     const plan = await planManagedWorkspaceClosure([target], {
       kind: 'automatic',
       candidates: [],
@@ -276,7 +276,7 @@ describe('Workspace Manager', () => {
       success: true,
       data: undefined,
     });
-    const killSpy = spyOn(tmux, 'tmuxKillSession');
+    const killSpy = spyOn(tmux, 'tmuxKillSessionIfIdentity');
     const plan = await planManagedWorkspaceClosure([target], {
       kind: 'automatic',
       candidates: [],
@@ -330,7 +330,7 @@ describe('Workspace Manager', () => {
       success: true,
       data: undefined,
     });
-    const killSpy = spyOn(tmux, 'tmuxKillSession');
+    const killSpy = spyOn(tmux, 'tmuxKillSessionIfIdentity');
     const plan = await planManagedWorkspaceClosure([target, other], {
       kind: 'automatic',
       candidates: [],
@@ -363,11 +363,11 @@ describe('Workspace Manager', () => {
     });
     await tmux.tmuxKillSession(sessionName);
     await tmux.tmuxNewSession(sessionName, safePath);
-    const killSpy = spyOn(tmux, 'tmuxKillSession');
+    const killSpy = spyOn(tmux, 'tmuxKillSessionIfIdentity');
 
     await plan.execute();
 
-    expect(killSpy).not.toHaveBeenCalled();
+    expect(killSpy).toHaveBeenCalledTimes(1);
     expect(await tmux.tmuxHasSession(sessionName)).toEqual({
       success: true,
       data: true,
@@ -412,13 +412,13 @@ describe('Workspace Manager', () => {
       success: true,
       data: undefined,
     });
-    const killSpy = spyOn(tmux, 'tmuxKillSession');
+    const killSpy = spyOn(tmux, 'tmuxKillSessionIfIdentity');
 
     await plan.execute();
 
     const freshSessionId = await getSessionId(reusedName);
     expect(switchSpy).toHaveBeenCalledWith(freshSessionId);
-    expect(killSpy).toHaveBeenCalledTimes(1);
+    expect(killSpy).toHaveBeenCalledTimes(2);
     expect(await tmux.tmuxHasSession(reusedName)).toEqual({
       success: true,
       data: true,
@@ -440,7 +440,7 @@ describe('Workspace Manager', () => {
     };
     const insideSpy = spyOn(tmux, 'isInsideTmux').mockReturnValue(true);
     const openSpy = spyOn(tmux, 'openTmuxSession').mockResolvedValue();
-    const killSpy = spyOn(tmux, 'tmuxKillSession');
+    const killSpy = spyOn(tmux, 'tmuxKillSessionIfIdentity');
     const plan = await planManagedWorkspaceClosure([target], {
       kind: 'destination',
       target: destination,

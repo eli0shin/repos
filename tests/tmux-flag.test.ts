@@ -650,7 +650,7 @@ describe('--tmux flag', () => {
           data: sessionName,
         })
       );
-      const killSpy = track(spyOn(tmux, 'tmuxKillSession'));
+      const killSpy = track(spyOn(tmux, 'tmuxKillSessionIfIdentity'));
       track(mockProcessExit());
       process.chdir(worktreePath);
 
@@ -689,7 +689,7 @@ describe('--tmux flag', () => {
       );
       const switchSpy = track(spyOn(tmux, 'tmuxSwitchClient'));
       const attachSpy = track(spyOn(tmux, 'tmuxAttachSession'));
-      const killSpy = track(spyOn(tmux, 'tmuxKillSession'));
+      const killSpy = track(spyOn(tmux, 'tmuxKillSessionIfIdentity'));
       const { output, restore } = captureStdout();
 
       await cleanCommand({ configPath }, 'feature', REAL_TMUX_REPO, {
@@ -723,7 +723,7 @@ describe('--tmux flag', () => {
       const featureSession = `${REAL_TMUX_REPO}@feature`;
       await startRealTmuxSession(featureSession, worktreePath);
 
-      const killSpy = track(spyOn(tmux, 'tmuxKillSession'));
+      const killSpy = track(spyOn(tmux, 'tmuxKillSessionIfIdentity'));
 
       process.chdir(worktreePath);
       const { restore } = captureStdout();
@@ -753,7 +753,7 @@ describe('--tmux flag', () => {
           error: 'cannot identify current session',
         })
       );
-      const killSpy = track(spyOn(tmux, 'tmuxKillSession'));
+      const killSpy = track(spyOn(tmux, 'tmuxKillSessionIfIdentity'));
       track(mockProcessExit());
 
       await expect(
@@ -775,7 +775,7 @@ describe('--tmux flag', () => {
           error: 'cannot discover tmux sessions',
         })
       );
-      const killSpy = track(spyOn(tmux, 'tmuxKillSession'));
+      const killSpy = track(spyOn(tmux, 'tmuxKillSessionIfIdentity'));
       track(mockProcessExit());
 
       await expect(
@@ -860,7 +860,7 @@ describe('--tmux flag', () => {
         })
       );
       const switchLastSpy = track(spyOn(tmux, 'tmuxSwitchClientLast'));
-      const killSpy = track(spyOn(tmux, 'tmuxKillSession'));
+      const killSpy = track(spyOn(tmux, 'tmuxKillSessionIfIdentity'));
 
       const { restore } = captureStdout();
       await cleanupCommand({ configPath }, { dryRun: false, tmux: true });
@@ -909,7 +909,7 @@ describe('--tmux flag', () => {
           data: undefined,
         })
       );
-      const killSpy = track(spyOn(tmux, 'tmuxKillSession'));
+      const killSpy = track(spyOn(tmux, 'tmuxKillSessionIfIdentity'));
 
       const { restore } = captureStdout();
       await cleanupCommand({ configPath }, { dryRun: false, tmux: true });
@@ -957,7 +957,7 @@ describe('--tmux flag', () => {
           return { success: true, data: freshSession };
         })
       );
-      const killSpy = track(spyOn(tmux, 'tmuxKillSession'));
+      const killSpy = track(spyOn(tmux, 'tmuxKillSessionIfIdentity'));
 
       const { restore } = captureStdout();
       await cleanupCommand({ configPath }, { dryRun: false, tmux: true });

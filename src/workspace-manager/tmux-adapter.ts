@@ -10,10 +10,17 @@ import type {
 type PlannedClosure = {
   target: ManagedWorkspaceTarget;
   sessionId: string | null;
+  sessionIdentity: string | null;
   sessionName: string | null;
+  serverPid: string | null;
 };
 
-type FocusedSession = { id: string; name: string };
+type FocusedSession = { id: string; identity: string; name: string };
+
+function sessionIdentity(session: tmux.SessionInfo): string | null {
+  if (!session.id || !session.serverPid) return null;
+  return `${session.serverPid}:${session.id}`;
+}
 
 function fail(message: string): never {
   printError(message);
@@ -33,7 +40,9 @@ function resolveSessionNames(
     return {
       target,
       sessionId: session?.id ?? session?.name ?? null,
+      sessionIdentity: session ? sessionIdentity(session) : null,
       sessionName: session?.name ?? null,
+      serverPid: session?.serverPid ?? null,
     };
   });
 }
@@ -56,7 +65,8 @@ async function readCurrentSession(
   const identity = availableSessions.find(
     (session) => session.name === current.data
   );
-  if (!identity?.id) {
+  const resolvedIdentity = identity ? sessionIdentity(identity) : null;
+  if (!identity?.id || !resolvedIdentity) {
     return {
       success: false,
       error: `Current tmux session "${current.data}" was not found`,
@@ -64,23 +74,21 @@ async function readCurrentSession(
   }
   return {
     success: true,
-    data: { id: identity.id, name: identity.name },
+    data: {
+      id: identity.id,
+      identity: resolvedIdentity,
+      name: identity.name,
+    },
   };
 }
 
-async function killSession(id: string): Promise<boolean> {
-  const hasSession = await tmux.tmuxHasSession(id);
-  if (!hasSession.success) {
-    printError(`Warning: ${hasSession.error}`);
-    return false;
-  }
-  if (!hasSession.data) return false;
-  const result = await tmux.tmuxKillSession(id);
+async function killSession(id: string, serverPid: string): Promise<boolean> {
+  const result = await tmux.tmuxKillSessionIfIdentity(id, serverPid);
   if (!result.success) {
     printError(`Warning: ${result.error}`);
     return false;
   }
-  return true;
+  return result.data;
 }
 
 async function focusDestination(target: ManagedWorkspaceTarget): Promise<void> {
@@ -93,14 +101,15 @@ async function focusDestination(target: ManagedWorkspaceTarget): Promise<void> {
 
 async function selectAutomaticDestination(
   currentSession: FocusedSession,
-  killingSessionIds: Set<string>,
+  killingSessionIdentities: Set<string>,
   candidates: PlannedClosure[]
 ): Promise<boolean> {
   for (const candidate of candidates) {
     if (
       !candidate.sessionId ||
-      candidate.sessionId === currentSession.id ||
-      killingSessionIds.has(candidate.sessionId)
+      !candidate.sessionIdentity ||
+      candidate.sessionIdentity === currentSession.identity ||
+      killingSessionIdentities.has(candidate.sessionIdentity)
     ) {
       continue;
     }
@@ -114,10 +123,12 @@ async function selectAutomaticDestination(
     const identity = listed.success
       ? listed.data.find((session) => session.name === lastSession.data)
       : undefined;
+    const resolvedIdentity = identity ? sessionIdentity(identity) : null;
     if (
       identity?.id &&
-      identity.id !== currentSession.id &&
-      !killingSessionIds.has(identity.id)
+      resolvedIdentity &&
+      resolvedIdentity !== currentSession.identity &&
+      !killingSessionIdentities.has(resolvedIdentity)
     ) {
       const switched = await tmux.tmuxSwitchClient(identity.id);
       if (switched.success) return true;
@@ -131,9 +142,14 @@ async function selectAutomaticDestination(
     ? listed.data.find((session) => session.name === fresh.data)
     : undefined;
   if (freshIdentity?.id) {
-    killingSessionIds.delete(freshIdentity.id);
+    const identity = sessionIdentity(freshIdentity);
+    if (identity) {
+      killingSessionIdentities.delete(identity);
+    } else {
+      killingSessionIdentities.clear();
+    }
   } else {
-    killingSessionIds.clear();
+    killingSessionIdentities.clear();
   }
   const switched = await tmux.tmuxSwitchClient(freshIdentity?.id ?? fresh.data);
   return switched.success;
@@ -175,15 +191,15 @@ export async function planTmuxClosure(
   const sessions = listResult.success ? listResult.data : [];
 
   const closures = resolveSessionNames(targets, sessions);
-  const killingSessionIds = new Set(
+  const killingSessionIdentities = new Set(
     closures.flatMap((closure) =>
-      closure.sessionId ? [closure.sessionId] : []
+      closure.sessionIdentity ? [closure.sessionIdentity] : []
     )
   );
 
   let currentSession: FocusedSession | null = null;
   if (
-    killingSessionIds.size > 0 &&
+    killingSessionIdentities.size > 0 &&
     tmux.isInsideTmux() &&
     options.mode !== 'preview'
   ) {
@@ -197,7 +213,7 @@ export async function planTmuxClosure(
   if (
     focus.kind === 'preserve' &&
     currentSession &&
-    killingSessionIds.has(currentSession.id)
+    killingSessionIdentities.has(currentSession.identity)
   ) {
     fail(
       `Error: Cannot clean the active tmux session "${currentSession.name}" with --no-focus.`
@@ -233,7 +249,7 @@ export async function planTmuxClosure(
 
       if (
         focus.kind === 'automatic' &&
-        killingSessionIds.size > 0 &&
+        killingSessionIdentities.size > 0 &&
         tmux.isInsideTmux()
       ) {
         const currentResult = await readCurrentSession();
@@ -244,17 +260,17 @@ export async function planTmuxClosure(
           return;
         }
         const executingCurrentSession = currentResult.data;
-        if (killingSessionIds.has(executingCurrentSession.id)) {
+        if (killingSessionIdentities.has(executingCurrentSession.identity)) {
           const switched = await selectAutomaticDestination(
             executingCurrentSession,
-            killingSessionIds,
+            killingSessionIdentities,
             candidateClosures
           );
           if (!switched) {
             printError(
               `Warning: cannot kill current tmux session "${executingCurrentSession.name}" — no safe session to switch to`
             );
-            killingSessionIds.delete(executingCurrentSession.id);
+            killingSessionIdentities.delete(executingCurrentSession.identity);
           }
         }
       }
@@ -264,9 +280,22 @@ export async function planTmuxClosure(
       }
 
       for (const closure of closures) {
-        const { sessionId, sessionName: name } = closure;
-        if (!sessionId || !name || !killingSessionIds.has(sessionId)) continue;
-        const killed = await killSession(sessionId);
+        const {
+          sessionId,
+          sessionIdentity: identity,
+          sessionName: name,
+          serverPid,
+        } = closure;
+        if (
+          !sessionId ||
+          !identity ||
+          !name ||
+          !serverPid ||
+          !killingSessionIdentities.has(identity)
+        ) {
+          continue;
+        }
+        const killed = await killSession(sessionId, serverPid);
         if (killed && focus.kind === 'automatic') {
           print(`Killed tmux session "${name}"`);
         }
