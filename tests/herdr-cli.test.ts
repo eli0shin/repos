@@ -63,6 +63,10 @@ describe.serial('Herdr CLI worktree workflow', () => {
     await createTestRepo(seedPath);
     await runGitCommand(['branch', '-M', 'main'], seedPath);
     await runGitCommand(['init', '--bare', remotePath], testDir);
+    await runGitCommand(
+      ['symbolic-ref', 'HEAD', 'refs/heads/main'],
+      remotePath
+    );
     await runGitCommand(['remote', 'add', 'origin', remotePath], seedPath);
     await runGitCommand(['push', '-u', 'origin', 'main'], seedPath);
     const cloned = await cloneRepo(remotePath, repoPath);
