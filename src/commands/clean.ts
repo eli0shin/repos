@@ -124,10 +124,14 @@ export async function cleanCommand(
     };
 
     if (options.focus === false) {
-      workspaceClosure = await planManagedWorkspaceClosure([target], {
-        kind: 'preserve',
-        destination: { path: outputPath },
-      });
+      workspaceClosure = await planManagedWorkspaceClosure(
+        [target],
+        {
+          kind: 'preserve',
+          destination: { path: outputPath },
+        },
+        { provider: config.config?.workspaceManager }
+      );
     } else {
       const defaultBranchResult = await getDefaultBranch(repo.path);
       if (!defaultBranchResult.success) {
@@ -135,19 +139,26 @@ export async function cleanCommand(
         process.exit(1);
       }
       const defaultBranch = defaultBranchResult.data;
+      const defaultWorktree = findWorktreeByBranch(
+        worktreesResult.data,
+        defaultBranch
+      );
       const mainWorktree = worktreesResult.data.find((wt) => wt.isMain);
-      const mainPath =
-        findWorktreeByBranch(worktreesResult.data, defaultBranch)?.path ??
-        mainWorktree?.path ??
-        repo.path;
-      workspaceClosure = await planManagedWorkspaceClosure([target], {
-        kind: 'destination',
-        target: {
-          repoName: repo.name,
-          branch: defaultBranch,
-          worktreePath: mainPath,
+      const destinationWorktree = [defaultWorktree, mainWorktree].find(
+        (candidate) => candidate && candidate.path !== worktree.path
+      );
+      workspaceClosure = await planManagedWorkspaceClosure(
+        [target],
+        {
+          kind: 'destination',
+          target: {
+            repoName: repo.name,
+            branch: destinationWorktree?.branch || defaultBranch,
+            worktreePath: destinationWorktree?.path ?? repo.path,
+          },
         },
-      });
+        { provider: config.config?.workspaceManager }
+      );
     }
   }
 

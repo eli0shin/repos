@@ -399,6 +399,32 @@ describe('config file operations', () => {
       });
     });
 
+    test('accepts tmux, Herdr, and an absent Workspace Manager setting', async () => {
+      for (const workspaceManager of [undefined, 'tmux', 'herdr'] as const) {
+        const config = {
+          repos: [],
+          config: workspaceManager === undefined ? {} : { workspaceManager },
+        } satisfies ReposConfig;
+        await Bun.write(testConfigPath, JSON.stringify(config));
+        expect(await readConfig(testConfigPath)).toEqual({
+          success: true,
+          data: config,
+        });
+      }
+    });
+
+    test('rejects an unsupported Workspace Manager setting', async () => {
+      await Bun.write(
+        testConfigPath,
+        JSON.stringify({ repos: [], config: { workspaceManager: 'zellij' } })
+      );
+
+      expect(await readConfig(testConfigPath)).toEqual({
+        success: false,
+        error: 'Invalid config file format',
+      });
+    });
+
     test('returns error for invalid JSON', async () => {
       await Bun.write(testConfigPath, 'not valid json');
 

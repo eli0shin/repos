@@ -53,7 +53,10 @@ export async function workCommand(
           branch: indexedResult.data.branch,
           worktreePath: indexedResult.data.path,
         },
-        { focus: options.focus !== false }
+        {
+          focus: options.focus !== false,
+          provider: config.config?.workspaceManager,
+        }
       );
       if (options.focus === false) print(indexedResult.data.path);
     } else {
@@ -133,7 +136,10 @@ export async function workCommand(
   if (options?.tmux) {
     await openManagedWorkspace(
       { repoName: repo.name, branch, worktreePath },
-      { focus: options.focus !== false }
+      {
+        focus: options.focus !== false,
+        provider: config.config?.workspaceManager,
+      }
     );
   }
   if (!options?.tmux || options.focus === false) {

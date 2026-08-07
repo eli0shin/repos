@@ -23,6 +23,11 @@ export function anyString(): string {
   return expect.any(String) as unknown as string;
 }
 
+export function anyNumber(): number {
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+  return expect.any(Number) as unknown as number;
+}
+
 export function arrayContaining<T>(arr: T[]): T[] {
   // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
   return expect.arrayContaining(arr) as unknown as T[];
