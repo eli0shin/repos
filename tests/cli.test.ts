@@ -98,10 +98,11 @@ Arguments:
   repo-name            Repo name (optional if inside a tracked repo)
 
 Options:
-  -t, --tmux           Open a tmux session in the worktree (default: false)
-  --no-tmux            Do not use tmux, even inside a tmux session
-  --no-focus           Create or reuse tmux session without attaching or
-                       switching
+  -t, --tmux           Open the Managed Workspace for the worktree (default:
+                       false)
+  --no-tmux            Disable the Workspace Manager, even inside a managed
+                       environment
+  --no-focus           Create or reuse a Managed Workspace without focusing
   -i, --index <index>  Use a worktree index from repos list
   -h, --help           display help for command
 `;
@@ -114,9 +115,9 @@ Arguments:
   branch      New branch name
 
 Options:
-  -t, --tmux  Open a tmux session in the worktree (default: false)
-  --no-tmux   Do not use tmux, even inside a tmux session
-  --no-focus  Create or reuse tmux session without attaching or switching
+  -t, --tmux  Open the Managed Workspace for the worktree (default: false)
+  --no-tmux   Disable the Workspace Manager, even inside a managed environment
+  --no-focus  Create or reuse a Managed Workspace without focusing
   -h, --help  display help for command
 `;
 
@@ -132,10 +133,11 @@ Options:
   --force              Force removal even if branch has stacked children
   --dry-run            Show what would be removed without removing
   -i, --index <index>  Use a worktree index from repos list
-  -t, --tmux           Kill the worktree tmux session and switch to the main
-                       worktree session (default: false)
-  --no-tmux            Do not use tmux, even inside a tmux session
-  --no-focus           Kill tmux session without attaching or switching
+  -t, --tmux           Close the Managed Workspace and focus the main worktree
+                       (default: false)
+  --no-tmux            Disable the Workspace Manager, even inside a managed
+                       environment
+  --no-focus           Close the Managed Workspace without changing focus
   -h, --help           display help for command
 `;
 

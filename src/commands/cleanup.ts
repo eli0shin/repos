@@ -177,15 +177,16 @@ export async function cleanupCommand(
     (repoContext): repoContext is RepoContext => repoContext !== null
   );
 
+  const workspaceTargets = removed.map((result) => ({
+    repoName: result.repo,
+    branch: result.branch,
+    worktreePath: result.path,
+  }));
   let workspaceClosure: ManagedWorkspaceClosurePlan | undefined;
   if (options.tmux && removed.length > 0) {
     const removedPaths = new Set(removed.map((result) => result.path));
     workspaceClosure = await planManagedWorkspaceClosure(
-      removed.map((result) => ({
-        repoName: result.repo,
-        branch: result.branch,
-        worktreePath: result.path,
-      })),
+      workspaceTargets,
       {
         kind: 'automatic',
         candidates: liveContexts.map((repoContext) => {
@@ -206,11 +207,17 @@ export async function cleanupCommand(
           };
         }),
       },
-      { mode: options.dryRun ? 'preview' : 'execute' }
+      {
+        mode: options.dryRun ? 'preview' : 'execute',
+        provider: config.config?.workspaceManager,
+      }
     );
   }
 
-  if (!options.dryRun) {
+  const completedPaths = new Set<string>();
+  if (options.dryRun) {
+    for (const result of removed) completedPaths.add(result.path);
+  } else {
     for (const result of removed) {
       const repoContext = liveContexts.find(
         (candidate) => candidate.repo.name === result.repo
@@ -221,7 +228,9 @@ export async function cleanupCommand(
         result.path,
         { force: true }
       );
-      if (!removeResult.success) {
+      if (removeResult.success) {
+        completedPaths.add(result.path);
+      } else {
         printError(
           `Error removing worktree ${result.branch}: ${removeResult.error}`
         );
@@ -230,13 +239,14 @@ export async function cleanupCommand(
   }
 
   const prefix = options.dryRun ? 'Would remove' : 'Removed';
+  const completed = removed.filter((result) => completedPaths.has(result.path));
 
   for (const result of results) {
     if (result.skipped === 'uncommitted-changes') {
       print(
         `Skipped ${result.repo}/${result.branch}: uncommitted changes (${result.reason})`
       );
-    } else {
+    } else if (completedPaths.has(result.path)) {
       const reasonText =
         result.reason === 'upstream-gone' ? 'upstream deleted' : 'merged';
       print(`${prefix} ${result.repo}/${result.branch} (${reasonText})`);
@@ -244,9 +254,9 @@ export async function cleanupCommand(
   }
 
   // Summary
-  if (removed.length > 0) {
-    const merged = removed.filter((r) => r.reason === 'merged').length;
-    const upstreamGone = removed.filter(
+  if (completed.length > 0) {
+    const merged = completed.filter((r) => r.reason === 'merged').length;
+    const upstreamGone = completed.filter(
       (r) => r.reason === 'upstream-gone'
     ).length;
 
@@ -255,7 +265,7 @@ export async function cleanupCommand(
     if (upstreamGone > 0) parts.push(`${upstreamGone} upstream deleted`);
 
     const verb = options.dryRun ? 'Would remove' : 'Removed';
-    print(`\n${verb} ${removed.length} worktree(s) (${parts.join(', ')})`);
+    print(`\n${verb} ${completed.length} worktree(s) (${parts.join(', ')})`);
   }
 
   if (skipped.length > 0) {
@@ -266,7 +276,11 @@ export async function cleanupCommand(
     if (options.dryRun) {
       await workspaceClosure.preview();
     } else {
-      await workspaceClosure.execute();
+      await workspaceClosure.execute(
+        workspaceTargets.filter((target) =>
+          completedPaths.has(target.worktreePath)
+        )
+      );
     }
   }
 }

@@ -151,7 +151,10 @@ export async function stackCommand(
   if (options?.tmux) {
     await openManagedWorkspace(
       { repoName: repo.name, branch: newBranch, worktreePath },
-      { focus: options.focus !== false }
+      {
+        focus: options.focus !== false,
+        provider: config.config?.workspaceManager,
+      }
     );
   }
   if (!options?.tmux || options.focus === false) {

@@ -82,6 +82,21 @@ async function readCurrentSession(
   };
 }
 
+function includesTarget(
+  completedTargets: ManagedWorkspaceTarget[] | undefined,
+  target: ManagedWorkspaceTarget
+): boolean {
+  return (
+    completedTargets === undefined ||
+    completedTargets.some(
+      (completed) =>
+        completed.repoName === target.repoName &&
+        completed.branch === target.branch &&
+        completed.worktreePath === target.worktreePath
+    )
+  );
+}
+
 async function killSession(id: string, serverPid: string): Promise<boolean> {
   const result = await tmux.tmuxKillSessionIfIdentity(id, serverPid);
   if (!result.success) {
@@ -230,10 +245,19 @@ export async function planTmuxClosure(
       }
     },
 
-    async execute(): Promise<void> {
+    async execute(completedTargets): Promise<void> {
       if (options.mode === 'preview') {
         fail('Error: Cannot execute a preview-only Workspace Manager plan');
       }
+
+      const executingClosures = closures.filter((closure) =>
+        includesTarget(completedTargets, closure.target)
+      );
+      const executingSessionIdentities = new Set(
+        executingClosures.flatMap((closure) =>
+          closure.sessionIdentity ? [closure.sessionIdentity] : []
+        )
+      );
 
       const workingDirectory =
         focus.kind === 'preserve'
@@ -245,7 +269,7 @@ export async function planTmuxClosure(
 
       if (
         focus.kind === 'automatic' &&
-        killingSessionIdentities.size > 0 &&
+        executingSessionIdentities.size > 0 &&
         tmux.isInsideTmux()
       ) {
         const currentResult = await readCurrentSession();
@@ -256,17 +280,17 @@ export async function planTmuxClosure(
           return;
         }
         const executingCurrentSession = currentResult.data;
-        if (killingSessionIdentities.has(executingCurrentSession.identity)) {
+        if (executingSessionIdentities.has(executingCurrentSession.identity)) {
           const switched = await selectAutomaticDestination(
             executingCurrentSession,
-            killingSessionIdentities,
+            executingSessionIdentities,
             candidateClosures
           );
           if (!switched) {
             printError(
               `Warning: cannot kill current tmux session "${executingCurrentSession.name}" — no safe session to switch to`
             );
-            killingSessionIdentities.delete(executingCurrentSession.identity);
+            executingSessionIdentities.delete(executingCurrentSession.identity);
           }
         }
       }
@@ -275,7 +299,7 @@ export async function planTmuxClosure(
         await focusDestination(focus.target);
       }
 
-      for (const closure of closures) {
+      for (const closure of executingClosures) {
         const {
           sessionId,
           sessionIdentity: identity,
@@ -287,7 +311,7 @@ export async function planTmuxClosure(
           !identity ||
           !name ||
           !serverPid ||
-          !killingSessionIdentities.has(identity)
+          !executingSessionIdentities.has(identity)
         ) {
           continue;
         }
