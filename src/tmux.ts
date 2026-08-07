@@ -70,6 +70,33 @@ export async function tmuxKillSession(name: string): Promise<OperationResult> {
   return { success: true, data: undefined };
 }
 
+export async function tmuxKillSessionIfIdentity(
+  id: string,
+  serverPid: string
+): Promise<OperationResult<boolean>> {
+  const mismatchMarker = 'repos-identity-mismatch';
+  const matchesIdentity = `#{&&:#{==:#{pid},${serverPid}},#{==:#{session_id},${id}}}`;
+  const result = await runTmuxCommand([
+    'if-shell',
+    '-F',
+    '-t',
+    id,
+    matchesIdentity,
+    `kill-session -t ${id}`,
+    `display-message -p ${mismatchMarker}`,
+  ]);
+  if (result.exitCode === 1) {
+    return { success: true, data: false };
+  }
+  if (result.exitCode !== 0) {
+    return {
+      success: false,
+      error: result.stderr || 'Failed to kill tmux session safely',
+    };
+  }
+  return { success: true, data: result.stdout !== mismatchMarker };
+}
+
 export async function tmuxSwitchClient(name: string): Promise<OperationResult> {
   const result = await runTmuxCommand(['switch-client', '-t', name]);
   if (result.exitCode !== 0) {
@@ -92,6 +119,21 @@ export async function tmuxSwitchClientLast(): Promise<OperationResult> {
   return { success: true, data: undefined };
 }
 
+export async function tmuxLastSession(): Promise<OperationResult<string>> {
+  const result = await runTmuxCommand([
+    'display-message',
+    '-p',
+    '#{client_last_session}',
+  ]);
+  if (result.exitCode !== 0 || result.stdout === '') {
+    return {
+      success: false,
+      error: result.stderr || 'Failed to read last tmux session',
+    };
+  }
+  return { success: true, data: result.stdout };
+}
+
 export async function tmuxCurrentSession(): Promise<OperationResult<string>> {
   const result = await runTmuxCommand(['display-message', '-p', '#S']);
   if (result.exitCode !== 0) {
@@ -103,16 +145,12 @@ export async function tmuxCurrentSession(): Promise<OperationResult<string>> {
   return { success: true, data: result.stdout };
 }
 
-export async function tmuxNewSessionDefault(): Promise<
-  OperationResult<string>
-> {
-  const result = await runTmuxCommand([
-    'new-session',
-    '-d',
-    '-P',
-    '-F',
-    '#{session_name}',
-  ]);
+export async function tmuxNewSessionDefault(
+  startDirectory?: string
+): Promise<OperationResult<string>> {
+  const args = ['new-session', '-d', '-P', '-F', '#{session_name}'];
+  if (startDirectory) args.push('-c', startDirectory);
+  const result = await runTmuxCommand(args);
   if (result.exitCode !== 0) {
     return {
       success: false,
@@ -155,7 +193,12 @@ export function getSessionName(repoName: string, branch: string): string {
   return `${repoName}@${branch.replace(/\//g, '-')}`;
 }
 
-type SessionInfo = { name: string; path: string };
+export type SessionInfo = {
+  id?: string;
+  serverPid?: string;
+  name: string;
+  path: string;
+};
 
 export async function tmuxListSessionPaths(): Promise<
   OperationResult<SessionInfo[]>
@@ -163,7 +206,7 @@ export async function tmuxListSessionPaths(): Promise<
   const result = await runTmuxCommand([
     'list-sessions',
     '-F',
-    '#{session_name}\t#{pane_current_path}',
+    '#{pid}\t#{session_id}\t#{session_name}\t#{pane_current_path}',
   ]);
   if (result.exitCode === 1) {
     return { success: true, data: [] };
@@ -178,10 +221,29 @@ export async function tmuxListSessionPaths(): Promise<
     .split('\n')
     .filter((line) => line.includes('\t'))
     .map((line) => {
-      const [name, path] = line.split('\t');
-      return { name, path };
+      const [serverPid, id, name, path] = line.split('\t');
+      return { serverPid, id, name, path };
     });
   return { success: true, data: sessions };
+}
+
+export function matchSessionInfo(
+  sessions: SessionInfo[],
+  candidateNames: string[],
+  worktreePath: string
+): SessionInfo | null {
+  for (const name of candidateNames) {
+    const namedSession = sessions.find((session) => session.name === name);
+    if (namedSession) return namedSession;
+  }
+
+  const prefix = worktreePath.endsWith('/') ? worktreePath : worktreePath + '/';
+  return (
+    sessions.find(
+      (session) =>
+        session.path === worktreePath || session.path.startsWith(prefix)
+    ) ?? null
+  );
 }
 
 export function matchSession(
@@ -189,17 +251,7 @@ export function matchSession(
   candidateNames: string[],
   worktreePath: string
 ): string | null {
-  for (const name of candidateNames) {
-    if (sessions.some((s) => s.name === name)) {
-      return name;
-    }
-  }
-
-  const prefix = worktreePath.endsWith('/') ? worktreePath : worktreePath + '/';
-  const match = sessions.find(
-    (s) => s.path === worktreePath || s.path.startsWith(prefix)
-  );
-  return match?.name ?? null;
+  return matchSessionInfo(sessions, candidateNames, worktreePath)?.name ?? null;
 }
 
 export async function findSessionForWorktree(
