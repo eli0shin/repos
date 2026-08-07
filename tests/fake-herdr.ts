@@ -28,6 +28,7 @@ export type FakeHerdrState = {
   }[];
   failure?: { command: string; code: string; message: string };
   barePaths?: string[];
+  mainPaths?: string[];
   bareOpenWorkspaceIds?: Record<string, string>;
   paneCwds?: Record<string, string>;
 };
@@ -153,7 +154,7 @@ if (args[0] === 'workspace' && args[1] === 'list') {
         repo_name: 'repo',
         repo_root: valueAfter('--cwd'),
         checkout_path: path,
-        is_linked_worktree: true,
+        is_linked_worktree: !state.mainPaths?.includes(path),
       },
     };
     state.workspaces.push(workspace);
@@ -241,6 +242,7 @@ export async function createFakeHerdr(
     calls: initial.calls ?? [],
     ...(initial.failure ? { failure: initial.failure } : {}),
     ...(initial.barePaths ? { barePaths: initial.barePaths } : {}),
+    ...(initial.mainPaths ? { mainPaths: initial.mainPaths } : {}),
     ...(initial.bareOpenWorkspaceIds
       ? { bareOpenWorkspaceIds: initial.bareOpenWorkspaceIds }
       : {}),

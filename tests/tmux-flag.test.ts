@@ -474,56 +474,6 @@ describe('--tmux flag', () => {
     expect(output).toEqual([]);
   });
 
-  test('clean --tmux uses the fallback worktree branch for the destination', async () => {
-    const repoDir = join(testDir, `${REAL_TMUX_REPO}-nonbare`);
-    await runGitCommand(['clone', sourceDir, repoDir]);
-    await runGitCommand(['switch', '-c', 'develop'], repoDir);
-    const mainPath = join(testDir, `${REAL_TMUX_REPO}-nonbare-main`);
-    await runGitCommand(['worktree', 'add', mainPath, 'main'], repoDir);
-    const config = {
-      repos: [{ name: REAL_TMUX_REPO, url: sourceDir, path: repoDir }],
-    } satisfies ReposConfig;
-    await writeConfig(configPath, config);
-
-    const { restore } = captureStdout();
-    await cleanCommand({ configPath }, 'main', REAL_TMUX_REPO, {
-      force: false,
-      dryRun: false,
-      tmux: true,
-    });
-    restore();
-
-    expect(await isGitRepo(mainPath)).toBe(false);
-    expect(openTmuxSessionSpy).toHaveBeenCalledTimes(1);
-    expect(openTmuxSessionSpy).toHaveBeenCalledWith(
-      REAL_TMUX_REPO,
-      'develop',
-      realpathSync(repoDir)
-    );
-  });
-
-  test('clean --tmux uses the default branch for a bare destination', async () => {
-    const { bareDir } = await setupBareRepo(REAL_TMUX_REPO);
-    const mainPath = join(testDir, `${REAL_TMUX_REPO}.git-main`);
-    await runGitCommand(['worktree', 'add', mainPath, 'main'], bareDir);
-
-    const { restore } = captureStdout();
-    await cleanCommand({ configPath }, 'main', REAL_TMUX_REPO, {
-      force: false,
-      dryRun: false,
-      tmux: true,
-    });
-    restore();
-
-    expect(await isGitRepo(mainPath)).toBe(false);
-    expect(openTmuxSessionSpy).toHaveBeenCalledTimes(1);
-    expect(openTmuxSessionSpy).toHaveBeenCalledWith(
-      REAL_TMUX_REPO,
-      'main',
-      realpathSync(bareDir)
-    );
-  });
-
   test('clean with tmux and focus disabled kills the worktree session without opening another session and prints the destination', async () => {
     const { bareDir } = await setupBareRepo(REAL_TMUX_REPO);
     const worktreePath = join(testDir, `${REAL_TMUX_REPO}.git-feature`);

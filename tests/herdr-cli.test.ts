@@ -1,11 +1,23 @@
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  test,
+} from 'bun:test';
 import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { writeConfig } from '../src/config.ts';
-import { cloneRepo, runGitCommand } from '../src/git/index.ts';
+import { cloneBare, cloneRepo, runGitCommand } from '../src/git/index.ts';
 import { getCollisionSafeManagedWorkspaceName } from '../src/workspace-manager/name.ts';
 import { createTestRepo, matchString } from './helpers.ts';
-import { createFakeHerdr, readFakeHerdrState } from './fake-herdr.ts';
+import {
+  createFakeHerdr,
+  readFakeHerdrState,
+  type FakeHerdrWorkspace,
+} from './fake-herdr.ts';
 
 const root = import.meta.dir.replace('/tests', '');
 const testDir = `/tmp/repos-test-herdr-cli-${process.pid}`;
@@ -20,6 +32,31 @@ const childPath = join(testDir, 'repo-child');
 let statePath: string;
 let serverSocketPath: string;
 let serverReadyPath: string;
+
+function linkedWorkspace(
+  id: string,
+  label: string,
+  path: string,
+  repoRoot: string,
+  isLinkedWorktree = true
+): FakeHerdrWorkspace {
+  return {
+    workspace_id: id,
+    label,
+    focused: false,
+    pane_count: 1,
+    tab_count: 1,
+    active_tab_id: `${id}:t1`,
+    agent_status: 'unknown',
+    worktree: {
+      repo_key: repoRoot,
+      repo_name: 'repo',
+      repo_root: repoRoot,
+      checkout_path: path,
+      is_linked_worktree: isLinkedWorktree,
+    },
+  };
+}
 
 async function runCli(
   args: string[],
@@ -301,5 +338,132 @@ describe.serial('Herdr CLI worktree workflow', () => {
       )
     ).toEqual([canonicalLabel]);
     expect(await Bun.file(join(slashPath, 'test.txt')).exists()).toBe(false);
+  });
+});
+
+describe.serial('Herdr CLI focused clean destinations', () => {
+  async function setupRemote(): Promise<void> {
+    await createTestRepo(seedPath);
+    await runGitCommand(['branch', '-M', 'main'], seedPath);
+    await runGitCommand(['init', '--bare', remotePath], testDir);
+    await runGitCommand(
+      ['symbolic-ref', 'HEAD', 'refs/heads/main'],
+      remotePath
+    );
+    await runGitCommand(['remote', 'add', 'origin', remotePath], seedPath);
+    await runGitCommand(['push', '-u', 'origin', 'main'], seedPath);
+  }
+
+  async function configureFakeHerdr(
+    initial: Parameters<typeof createFakeHerdr>[1]
+  ): Promise<void> {
+    const fake = await createFakeHerdr(fakeDir, initial);
+    statePath = fake.statePath;
+    serverSocketPath = fake.serverSocketPath;
+    serverReadyPath = fake.serverReadyPath;
+  }
+
+  beforeEach(async () => {
+    await rm(testDir, { recursive: true, force: true });
+    await rm(fakeDir, { recursive: true, force: true });
+    await setupRemote();
+  });
+
+  afterEach(async () => {
+    await rm(testDir, { recursive: true, force: true });
+    await rm(fakeDir, { recursive: true, force: true });
+  });
+
+  test('focuses the regular main checkout under its actual branch', async () => {
+    const cloned = await cloneRepo(remotePath, repoPath);
+    if (!cloned.success) throw new Error(cloned.error);
+    await runGitCommand(['switch', '-c', 'develop'], repoPath);
+    const mainPath = join(testDir, 'repo-main');
+    await runGitCommand(['worktree', 'add', mainPath, 'main'], repoPath);
+    await writeConfig(configPath, {
+      repos: [{ name: 'repo', url: remotePath, path: repoPath }],
+      config: { updateBehavior: 'off', workspaceManager: 'herdr' },
+    });
+    await configureFakeHerdr({
+      nextId: 2,
+      workspaces: [linkedWorkspace('w1', 'repo@main', mainPath, repoPath)],
+      mainPaths: [repoPath],
+    });
+    const developHead = await runGitCommand(['rev-parse', 'HEAD'], repoPath);
+
+    expect(await runCli(['clean', '--tmux', 'main', 'repo'], mainPath)).toEqual(
+      {
+        stdout: '',
+        stderr:
+          'Removing worktree for "main"...\n' +
+          'Removed worktree "repo-main"\n' +
+          'Opened Herdr workspace "repo@develop"\n',
+        exitCode: 0,
+      }
+    );
+    expect(
+      await runGitCommand(['worktree', 'list', '--porcelain'], repoPath)
+    ).toEqual({
+      stdout:
+        `worktree ${repoPath}\n` +
+        `HEAD ${developHead.stdout}\n` +
+        'branch refs/heads/develop',
+      stderr: '',
+      exitCode: 0,
+    });
+    expect((await readFakeHerdrState(statePath)).workspaces).toEqual([
+      {
+        ...linkedWorkspace('w2', 'repo@develop', repoPath, repoPath, false),
+        focused: true,
+      },
+    ]);
+  });
+
+  test('focuses a bare repository under its default branch', async () => {
+    const barePath = join(testDir, 'repo.git');
+    const cloned = await cloneBare(remotePath, barePath);
+    if (!cloned.success) throw new Error(cloned.error);
+    const mainPath = join(testDir, 'repo-main');
+    await runGitCommand(['worktree', 'add', mainPath, 'main'], barePath);
+    await writeConfig(configPath, {
+      repos: [{ name: 'repo', url: remotePath, path: barePath, bare: true }],
+      config: { updateBehavior: 'off', workspaceManager: 'herdr' },
+    });
+    await configureFakeHerdr({
+      nextId: 2,
+      workspaces: [linkedWorkspace('w1', 'repo@main', mainPath, barePath)],
+      barePaths: [barePath],
+    });
+
+    expect(await runCli(['clean', '--tmux', 'main', 'repo'], mainPath)).toEqual(
+      {
+        stdout: '',
+        stderr:
+          'Removing worktree for "main"...\n' +
+          'Removed worktree "repo-main"\n' +
+          'Opened Herdr workspace "repo@main"\n',
+        exitCode: 0,
+      }
+    );
+    expect(
+      await runGitCommand(['worktree', 'list', '--porcelain'], barePath)
+    ).toEqual({
+      stdout: `worktree ${barePath}\nbare`,
+      stderr: '',
+      exitCode: 0,
+    });
+    const state = await readFakeHerdrState(statePath);
+    expect(state.workspaces).toEqual([
+      {
+        workspace_id: 'w2',
+        label: 'repo@main',
+        focused: true,
+        pane_count: 1,
+        tab_count: 1,
+        active_tab_id: 'w2:t1',
+        agent_status: 'unknown',
+      },
+    ]);
+    expect(state.paneCwds).toEqual({ w2: barePath });
   });
 });
