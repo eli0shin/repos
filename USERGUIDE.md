@@ -996,7 +996,7 @@ The current managed environment takes precedence over `workspaceManager`: Herdr 
 
 Provider selection does not activate workspace management. It is automatic only inside tmux or Herdr. Outside both, use `--tmux` or `--no-focus` to enable the selected provider. Use `--no-tmux` to disable it. These tmux-named flags are retained for compatibility and apply to both providers.
 
-Repos creates and removes all Git worktrees. A Workspace Manager only opens, focuses, reuses, and closes the associated Managed Workspace. Managed Workspaces use the canonical `repo@branch` label; slashes in branch names become dashes.
+Repos creates and removes all Git worktrees. A Workspace Manager only opens, focuses, reuses, and closes the associated Managed Workspace. Managed Workspaces use the canonical `repo@branch` label; slashes in branch names become dashes. If that normalized Herdr label already belongs to a different worktree, repos adds a stable hash suffix to keep the labels distinct.
 
 ### Stacks
 

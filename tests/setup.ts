@@ -1,15 +1,6 @@
-// Test setup - runs before all tests
-const herdrEnvironmentKeys = [
-  'HERDR_ENV',
-  'HERDR_SOCKET_PATH',
-  'HERDR_CLIENT_SOCKET_PATH',
-  'HERDR_SESSION',
-  'HERDR_WORKSPACE_ID',
-  'HERDR_TAB_ID',
-  'HERDR_PANE_ID',
-  'HERDR_BIN_PATH',
-];
+import { afterAll } from 'bun:test';
+import { isolateHerdrEnvironment } from './utils.ts';
 
-for (const key of herdrEnvironmentKeys) {
-  Reflect.deleteProperty(process.env, key);
-}
+// Test setup - runs before all tests
+const restoreHerdrEnvironment = isolateHerdrEnvironment(process.env);
+afterAll(restoreHerdrEnvironment);

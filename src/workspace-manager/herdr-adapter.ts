@@ -8,7 +8,10 @@ import type {
   ManagedWorkspaceClosurePlan,
   ManagedWorkspaceTarget,
 } from './index.ts';
-import { getManagedWorkspaceName } from './name.ts';
+import {
+  getCollisionSafeManagedWorkspaceName,
+  getManagedWorkspaceName,
+} from './name.ts';
 
 type HerdrWorkspace = {
   workspace_id: string;
@@ -494,8 +497,16 @@ async function matchWorkspace(
     }
   }
 
+  const collisionSafeName = getCollisionSafeManagedWorkspaceName(
+    target.repoName,
+    target.branch
+  );
   const namedBareWorkspace = targetWorktree?.is_bare
-    ? namedWorkspaces.find((workspace) => !workspace.worktree)
+    ? (namedWorkspaces.find((workspace) => !workspace.worktree) ??
+      availableWorkspaces.find(
+        (workspace) =>
+          workspace.label === collisionSafeName && !workspace.worktree
+      ))
     : undefined;
   return { success: true, data: namedBareWorkspace ?? null };
 }
@@ -508,7 +519,11 @@ async function ensureWorkspace(
   const listed = await listWorkspaces(context, { startServer: true });
   if (!listed.success) fail(listed.error);
 
-  const name = getManagedWorkspaceName(target.repoName, target.branch);
+  const canonicalName = getManagedWorkspaceName(target.repoName, target.branch);
+  const collisionSafeName = getCollisionSafeManagedWorkspaceName(
+    target.repoName,
+    target.branch
+  );
   const matched = await matchWorkspace(
     context,
     listed.data,
@@ -517,6 +532,16 @@ async function ensureWorkspace(
   );
   if (!matched.success) fail(matched.error);
   if (matched.data) {
+    const canonicalOccupiedByOther = listed.data.some(
+      (workspace) =>
+        workspace.label === canonicalName &&
+        workspace.workspace_id !== matched.data?.workspace_id &&
+        !excludedWorkspaceIds.has(workspace.workspace_id)
+    );
+    const name =
+      matched.data.label === collisionSafeName || canonicalOccupiedByOther
+        ? collisionSafeName
+        : canonicalName;
     if (matched.data.label !== name) {
       const renamed = await runHerdrJson(
         context,
@@ -531,6 +556,13 @@ async function ensureWorkspace(
     };
   }
 
+  const name = listed.data.some(
+    (workspace) =>
+      workspace.label === canonicalName &&
+      !excludedWorkspaceIds.has(workspace.workspace_id)
+  )
+    ? collisionSafeName
+    : canonicalName;
   const worktrees = await listWorktrees(context, target.worktreePath);
   if (!worktrees.success) fail(worktrees.error);
   const targetPath = await canonicalPath(target.worktreePath);

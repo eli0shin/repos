@@ -12,6 +12,7 @@ import {
   planHerdrClosure,
   type HerdrAdapterDependencies,
 } from '../src/workspace-manager/herdr-adapter.ts';
+import { getCollisionSafeManagedWorkspaceName } from '../src/workspace-manager/name.ts';
 import {
   createFakeHerdr,
   readFakeHerdrState,
@@ -29,6 +30,10 @@ const target = {
   branch: 'feature/one',
   worktreePath: targetPath,
 } satisfies ManagedWorkspaceTarget;
+const collisionSafeTargetName = getCollisionSafeManagedWorkspaceName(
+  target.repoName,
+  target.branch
+);
 
 function workspace(
   id: string,
@@ -192,10 +197,14 @@ describe.serial('Herdr Workspace Manager adapter', () => {
     const state = await readFakeHerdrState(statePath);
     expect(state.workspaces).toEqual([
       workspace('w1', 'repo@feature-one', otherPath),
-      { ...workspace('w2', 'repo@feature-one', targetPath), focused: true },
+      {
+        ...workspace('w2', collisionSafeTargetName, targetPath),
+        focused: true,
+      },
     ]);
     expect(state.calls.map((call) => call.args)).toEqual([
       ['workspace', 'list'],
+      ['workspace', 'rename', 'w2', collisionSafeTargetName],
       ['workspace', 'focus', 'w2'],
     ]);
 
@@ -220,11 +229,12 @@ describe.serial('Herdr Workspace Manager adapter', () => {
     adapterEnvironment().FAKE_HERDR_STATE = statePath;
 
     await openManagedWorkspace(target, { focus: false, provider: 'herdr' });
+    await openManagedWorkspace(target, { focus: false, provider: 'herdr' });
 
     const state = await readFakeHerdrState(statePath);
     expect(state.workspaces).toEqual([
       workspace('w1', 'repo@feature-one', otherPath),
-      workspace('w2', 'repo@feature-one', targetPath, targetPath),
+      workspace('w2', collisionSafeTargetName, targetPath, targetPath),
     ]);
     expect(state.calls.map((call) => call.args)).toEqual([
       ['workspace', 'list'],
@@ -238,9 +248,11 @@ describe.serial('Herdr Workspace Manager adapter', () => {
         '--path',
         targetPath,
         '--label',
-        'repo@feature-one',
+        collisionSafeTargetName,
         '--no-focus',
       ],
+      ['workspace', 'list'],
+      ['worktree', 'list', '--cwd', targetPath],
     ]);
   });
 

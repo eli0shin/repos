@@ -3,6 +3,7 @@ import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { writeConfig } from '../src/config.ts';
 import { cloneRepo, runGitCommand } from '../src/git/index.ts';
+import { getCollisionSafeManagedWorkspaceName } from '../src/workspace-manager/name.ts';
 import { createTestRepo, matchString } from './helpers.ts';
 import { createFakeHerdr, readFakeHerdrState } from './fake-herdr.ts';
 
@@ -207,5 +208,98 @@ describe.serial('Herdr CLI worktree workflow', () => {
     });
     expect((await readFakeHerdrState(statePath)).workspaces).toEqual([]);
     expect(await Bun.file(join(parentPath, 'test.txt')).exists()).toBe(false);
+  });
+
+  test('keeps colliding branch workspaces distinct through work, focus, clean, and cleanup', async () => {
+    const slashBranch = 'feature/x';
+    const dashBranch = 'feature-x';
+    const slashPath = join(testDir, 'repo-feature-x');
+    const canonicalLabel = 'repo@feature-x';
+    const collisionSafeLabel = getCollisionSafeManagedWorkspaceName(
+      'repo',
+      slashBranch
+    );
+
+    await runGitCommand(['checkout', '-b', dashBranch], repoPath);
+    expect(
+      await runCli(['work', '--no-focus', dashBranch, 'repo'], repoPath)
+    ).toEqual({
+      stdout: `${repoPath}\n`,
+      stderr: `Opened Herdr workspace "${canonicalLabel}"\n`,
+      exitCode: 0,
+    });
+    expect(
+      await runCli(['work', '--no-focus', slashBranch, 'repo'], repoPath)
+    ).toEqual({
+      stdout: `${slashPath}\n`,
+      stderr:
+        `Creating worktree for "${slashBranch}"...\n` +
+        `Created worktree "repo-feature-x"\n` +
+        `Opened Herdr workspace "${collisionSafeLabel}"\n`,
+      exitCode: 0,
+    });
+
+    let state = await readFakeHerdrState(statePath);
+    expect(
+      state.workspaces.map((workspace) => ({
+        label: workspace.label,
+        path: workspace.worktree?.checkout_path,
+      }))
+    ).toEqual([
+      { label: canonicalLabel, path: repoPath },
+      { label: collisionSafeLabel, path: slashPath },
+    ]);
+
+    const herdrEnvironment = {
+      HERDR_ENV: '1',
+      HERDR_BIN_PATH: join(fakeDir, 'herdr'),
+      HERDR_SOCKET_PATH: join(testDir, 'herdr-collision.sock'),
+      HERDR_SESSION: `repos-collision-${process.pid}`,
+    };
+    expect(
+      await runCli(['work', slashBranch, 'repo'], slashPath, herdrEnvironment)
+    ).toEqual({
+      stdout: '',
+      stderr: `Attaching to existing Herdr workspace "${collisionSafeLabel}"\n`,
+      exitCode: 0,
+    });
+    state = await readFakeHerdrState(statePath);
+    expect(state.workspaces.map((workspace) => workspace.focused)).toEqual([
+      false,
+      true,
+    ]);
+
+    expect(
+      await runCli(['clean', '--no-focus', slashBranch, 'repo'], slashPath)
+    ).toEqual({
+      stdout: `${repoPath}\n`,
+      stderr:
+        `Removing worktree for "${slashBranch}"...\n` +
+        `Removed worktree "repo-feature/x"\n`,
+      exitCode: 0,
+    });
+    expect(
+      (await readFakeHerdrState(statePath)).workspaces.map(
+        (workspace) => workspace.label
+      )
+    ).toEqual([canonicalLabel]);
+
+    await runCli(['work', '--no-focus', slashBranch, 'repo'], repoPath);
+    await runGitCommand(['push', '-u', 'origin', slashBranch], slashPath);
+    await runGitCommand(['push', 'origin', '--delete', slashBranch], repoPath);
+    expect(await runCli(['cleanup', '--tmux'], repoPath)).toEqual({
+      stdout:
+        `Removed repo/${slashBranch} (upstream deleted)\n\n` +
+        `Removed 1 worktree(s) (1 upstream deleted)\n` +
+        `Closed Herdr workspace "${collisionSafeLabel}"\n`,
+      stderr: '',
+      exitCode: 0,
+    });
+    expect(
+      (await readFakeHerdrState(statePath)).workspaces.map(
+        (workspace) => workspace.label
+      )
+    ).toEqual([canonicalLabel]);
+    expect(await Bun.file(join(slashPath, 'test.txt')).exists()).toBe(false);
   });
 });
