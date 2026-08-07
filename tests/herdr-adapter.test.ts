@@ -284,6 +284,59 @@ describe.serial('Herdr Workspace Manager adapter', () => {
     ]);
   });
 
+  test('matches descendant bare pane paths without matching sibling prefixes', async () => {
+    const bareTarget = {
+      repoName: 'bare',
+      branch: 'main',
+      worktreePath: targetPath,
+    };
+    const descendantPath = join(targetPath, 'hooks');
+    const siblingPath = join(`${targetPath}-other`, 'hooks');
+    await mkdir(descendantPath, { recursive: true });
+    await mkdir(siblingPath, { recursive: true });
+
+    const sibling = workspace('w1', 'bare@main', siblingPath);
+    const managed = workspace('w2', 'bare@main', descendantPath);
+    delete sibling.worktree;
+    delete managed.worktree;
+    const initial = await createFakeHerdr(fakeDir, {
+      nextId: 3,
+      workspaces: [sibling, managed],
+      barePaths: [targetPath],
+      bareOpenWorkspaceIds: { [targetPath]: 'w1' },
+      paneCwds: { w1: siblingPath, w2: descendantPath },
+    });
+    statePath = initial.statePath;
+    adapterEnvironment().FAKE_HERDR_STATE = statePath;
+
+    await openManagedWorkspace(bareTarget, {
+      focus: false,
+      provider: 'herdr',
+    });
+    await openManagedWorkspace(bareTarget, {
+      focus: true,
+      provider: 'herdr',
+    });
+
+    const collisionSafeName = getCollisionSafeManagedWorkspaceName(
+      'bare',
+      'main'
+    );
+    expect((await readFakeHerdrState(statePath)).workspaces).toEqual([
+      sibling,
+      { ...managed, label: collisionSafeName, focused: true },
+    ]);
+
+    const plan = await planManagedWorkspaceClosure(
+      [bareTarget],
+      { kind: 'preserve', destination: { path: otherPath } },
+      { provider: 'herdr' }
+    );
+    await plan.execute();
+
+    expect((await readFakeHerdrState(statePath)).workspaces).toEqual([sibling]);
+  });
+
   test('keeps unrelated bare workspaces through open, reuse, focus, clean, and cleanup', async () => {
     const bareTarget = {
       repoName: 'bare',

@@ -1,5 +1,5 @@
 import { realpath, stat } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { isAbsolute, relative, resolve, sep } from 'node:path';
 import { print, printError, printStatus } from '../output.ts';
 import type { OperationResult } from '../types.ts';
 import type {
@@ -479,7 +479,14 @@ async function workspaceUsesPath(
   if (!listed.success) return listed;
 
   for (const pane of listed.data.panes) {
-    if (pane.cwd && (await canonicalPath(pane.cwd)) === targetPath) {
+    if (!pane.cwd) continue;
+    const panePath = await canonicalPath(pane.cwd);
+    const relativePath = relative(targetPath, panePath);
+    if (
+      relativePath !== '..' &&
+      !relativePath.startsWith(`..${sep}`) &&
+      !isAbsolute(relativePath)
+    ) {
       return { success: true, data: true };
     }
   }
