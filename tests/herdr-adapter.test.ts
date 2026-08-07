@@ -284,6 +284,87 @@ describe.serial('Herdr Workspace Manager adapter', () => {
     ]);
   });
 
+  test('keeps unrelated bare workspaces through open, reuse, focus, clean, and cleanup', async () => {
+    const bareTarget = {
+      repoName: 'bare',
+      branch: 'main',
+      worktreePath: targetPath,
+    };
+    const unrelated = workspace('w1', 'bare@main', otherPath);
+    delete unrelated.worktree;
+    const initial = await createFakeHerdr(fakeDir, {
+      nextId: 2,
+      workspaces: [unrelated],
+      barePaths: [targetPath],
+      bareOpenWorkspaceIds: { [targetPath]: 'w1' },
+      paneCwds: { w1: otherPath },
+    });
+    statePath = initial.statePath;
+    adapterEnvironment().FAKE_HERDR_STATE = statePath;
+
+    await openManagedWorkspace(bareTarget, {
+      focus: false,
+      provider: 'herdr',
+    });
+    await openManagedWorkspace(bareTarget, {
+      focus: false,
+      provider: 'herdr',
+    });
+    await openManagedWorkspace(bareTarget, {
+      focus: true,
+      provider: 'herdr',
+    });
+
+    const collisionSafeName = getCollisionSafeManagedWorkspaceName(
+      'bare',
+      'main'
+    );
+    const managed = workspace('w2', collisionSafeName, targetPath);
+    delete managed.worktree;
+    expect((await readFakeHerdrState(statePath)).workspaces).toEqual([
+      unrelated,
+      { ...managed, focused: true },
+    ]);
+
+    const plan = await planManagedWorkspaceClosure(
+      [bareTarget],
+      { kind: 'preserve', destination: { path: otherPath } },
+      { provider: 'herdr' }
+    );
+    await plan.execute();
+
+    expect((await readFakeHerdrState(statePath)).workspaces).toEqual([
+      unrelated,
+    ]);
+
+    await openManagedWorkspace(bareTarget, {
+      focus: false,
+      provider: 'herdr',
+    });
+    const cleanupPlan = await planManagedWorkspaceClosure(
+      [bareTarget],
+      { kind: 'automatic', candidates: [] },
+      { provider: 'herdr' }
+    );
+    await cleanupPlan.execute();
+
+    const state = await readFakeHerdrState(statePath);
+    expect(state.workspaces).toEqual([unrelated]);
+    expect(
+      state.calls
+        .map((call) => call.args)
+        .filter(
+          (args) =>
+            args[0] === 'workspace' &&
+            (args[1] === 'focus' || args[1] === 'close')
+        )
+    ).toEqual([
+      ['workspace', 'focus', 'w2'],
+      ['workspace', 'close', 'w2'],
+      ['workspace', 'close', 'w3'],
+    ]);
+  });
+
   test('focuses through the current Herdr socket context', async () => {
     await openManagedWorkspace(target, { focus: false, provider: 'herdr' });
     await openManagedWorkspace(target, { focus: true, provider: 'herdr' });

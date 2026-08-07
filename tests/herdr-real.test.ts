@@ -12,6 +12,7 @@ import {
   planHerdrClosure,
   type HerdrAdapterDependencies,
 } from '../src/workspace-manager/herdr-adapter.ts';
+import { getCollisionSafeManagedWorkspaceName } from '../src/workspace-manager/name.ts';
 import { anyNumber, anyString, createTestRepo } from './helpers.ts';
 
 const herdrBinary = Bun.which('herdr');
@@ -91,6 +92,29 @@ function isRealHerdrWorkspace(value: unknown): value is RealHerdrWorkspace {
     typeof value.active_tab_id === 'string' &&
     typeof value.agent_status === 'string'
   );
+}
+
+async function createWorkspace(cwd: string, label: string): Promise<string> {
+  const result = await runHerdr([
+    'workspace',
+    'create',
+    '--cwd',
+    cwd,
+    '--label',
+    label,
+    '--no-focus',
+  ]);
+  if (result.exitCode !== 0) throw new Error(result.stderr);
+  const response: unknown = JSON.parse(result.stdout);
+  if (
+    !isRecord(response) ||
+    !isRecord(response.result) ||
+    !isRecord(response.result.workspace) ||
+    typeof response.result.workspace.workspace_id !== 'string'
+  ) {
+    throw new Error('Herdr returned an invalid created workspace');
+  }
+  return response.result.workspace.workspace_id;
 }
 
 async function listWorkspaces(): Promise<RealHerdrWorkspace[]> {
@@ -209,13 +233,16 @@ describe.serial('real Herdr integration', () => {
   );
 
   integrationTest(
-    'opens a bare repository without creating a checkout',
+    'verifies bare workspace provenance before reuse and closure',
     async () => {
       const target = {
         repoName: 'bare',
         branch: 'main',
         worktreePath: barePath,
       };
+      const unrelatedWorkspaceId = await createWorkspace(repoPath, 'bare@main');
+      const targetLabel = getCollisionSafeManagedWorkspaceName('bare', 'main');
+
       await openManagedWorkspace(target, {
         focus: false,
         provider: 'herdr',
@@ -233,14 +260,24 @@ describe.serial('real Herdr integration', () => {
         exitCode: 0,
       });
       expect(
-        (await listWorkspaces()).filter(
-          (workspace) => workspace.label === 'bare@main'
+        (await listWorkspaces()).filter((workspace) =>
+          workspace.label.startsWith('bare@main')
         )
       ).toEqual([
         {
-          workspace_id: anyString(),
+          workspace_id: unrelatedWorkspaceId,
           number: anyNumber(),
           label: 'bare@main',
+          focused: false,
+          pane_count: 1,
+          tab_count: 1,
+          active_tab_id: anyString(),
+          agent_status: 'unknown',
+        },
+        {
+          workspace_id: anyString(),
+          number: anyNumber(),
+          label: targetLabel,
           focused: false,
           pane_count: 1,
           tab_count: 1,
@@ -256,10 +293,22 @@ describe.serial('real Herdr integration', () => {
       );
       await plan.execute();
       expect(
-        (await listWorkspaces()).filter(
-          (workspace) => workspace.label === 'bare@main'
+        (await listWorkspaces()).filter((workspace) =>
+          workspace.label.startsWith('bare@main')
         )
-      ).toEqual([]);
+      ).toEqual([
+        {
+          workspace_id: unrelatedWorkspaceId,
+          number: anyNumber(),
+          label: 'bare@main',
+          focused: false,
+          pane_count: 1,
+          tab_count: 1,
+          active_tab_id: anyString(),
+          agent_status: 'unknown',
+        },
+      ]);
+      await runHerdr(['workspace', 'close', unrelatedWorkspaceId]);
     }
   );
 

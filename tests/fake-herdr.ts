@@ -27,6 +27,9 @@ export type FakeHerdrState = {
     environment: Record<string, string | undefined>;
   }[];
   failure?: { command: string; code: string; message: string };
+  barePaths?: string[];
+  bareOpenWorkspaceIds?: Record<string, string>;
+  paneCwds?: Record<string, string>;
 };
 
 const FAKE_HERDR_SOURCE = String.raw`#!/usr/bin/env bun
@@ -101,20 +104,32 @@ if (args[0] === 'workspace' && args[1] === 'list') {
       repo_root: cwd,
       source_checkout_path: cwd,
     },
-    worktrees: state.workspaces.flatMap((workspace) =>
-      workspace.worktree
-        ? [{
-            path: workspace.worktree.checkout_path,
-            branch: 'feature',
-            is_bare: false,
-            is_detached: false,
-            is_prunable: false,
-            is_linked_worktree: true,
-            open_workspace_id: workspace.workspace_id,
-            label: 'repo',
-          }]
-        : []
-    ),
+    worktrees: [
+      ...state.workspaces.flatMap((workspace) =>
+        workspace.worktree
+          ? [{
+              path: workspace.worktree.checkout_path,
+              branch: 'feature',
+              is_bare: false,
+              is_detached: false,
+              is_prunable: false,
+              is_linked_worktree: true,
+              open_workspace_id: workspace.workspace_id,
+              label: 'repo',
+            }]
+          : []
+      ),
+      ...(state.barePaths ?? []).map((path) => ({
+        path,
+        branch: null,
+        is_bare: true,
+        is_detached: false,
+        is_prunable: false,
+        is_linked_worktree: false,
+        open_workspace_id: state.bareOpenWorkspaceIds?.[path],
+        label: 'repo',
+      })),
+    ],
   });
 } else if (args[0] === 'worktree' && args[1] === 'open') {
   const path = valueAfter('--path');
@@ -151,6 +166,26 @@ if (args[0] === 'workspace' && args[1] === 'list') {
     tab: {},
     root_pane: {},
   });
+} else if (args[0] === 'workspace' && args[1] === 'create') {
+  const workspaceId = 'w' + state.nextId++;
+  const workspace = {
+    workspace_id: workspaceId,
+    label: valueAfter('--label'),
+    focused: false,
+    pane_count: 1,
+    tab_count: 1,
+    active_tab_id: workspaceId + ':t1',
+    agent_status: 'unknown',
+  };
+  state.workspaces.push(workspace);
+  state.paneCwds ??= {};
+  state.paneCwds[workspaceId] = valueAfter('--cwd');
+  await success({
+    type: 'workspace_created',
+    workspace,
+    tab: {},
+    root_pane: { cwd: valueAfter('--cwd') },
+  });
 } else if (args[0] === 'workspace' && args[1] === 'rename') {
   const workspace = state.workspaces.find(
     (candidate) => candidate.workspace_id === args[2]
@@ -166,6 +201,13 @@ if (args[0] === 'workspace' && args[1] === 'list') {
   for (const candidate of state.workspaces) candidate.focused = false;
   workspace.focused = true;
   await success({ type: 'workspace_info', workspace });
+} else if (args[0] === 'pane' && args[1] === 'list') {
+  const workspaceId = valueAfter('--workspace');
+  const cwd = state.paneCwds?.[workspaceId];
+  await success({
+    type: 'pane_list',
+    panes: cwd ? [{ cwd }] : [],
+  });
 } else if (args[0] === 'workspace' && args[1] === 'close') {
   const index = state.workspaces.findIndex(
     (candidate) => candidate.workspace_id === args[2]
@@ -198,6 +240,11 @@ export async function createFakeHerdr(
     workspaces: initial.workspaces ?? [],
     calls: initial.calls ?? [],
     ...(initial.failure ? { failure: initial.failure } : {}),
+    ...(initial.barePaths ? { barePaths: initial.barePaths } : {}),
+    ...(initial.bareOpenWorkspaceIds
+      ? { bareOpenWorkspaceIds: initial.bareOpenWorkspaceIds }
+      : {}),
+    ...(initial.paneCwds ? { paneCwds: initial.paneCwds } : {}),
   } satisfies FakeHerdrState;
   await Bun.write(
     binary,

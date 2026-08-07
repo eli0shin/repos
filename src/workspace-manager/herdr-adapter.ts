@@ -65,6 +65,11 @@ type WorkspaceCreatedResult = {
   workspace: HerdrWorkspace;
 };
 
+type PaneListResult = {
+  type: 'pane_list';
+  panes: { cwd?: string }[];
+};
+
 type PlannedClosure = {
   workspaceId: string;
   label: string;
@@ -205,6 +210,19 @@ function isWorkspaceCreatedResult(
     isRecord(value) &&
     value.type === 'workspace_created' &&
     isHerdrWorkspace(value.workspace)
+  );
+}
+
+function isPaneListResult(value: unknown): value is PaneListResult {
+  return (
+    isRecord(value) &&
+    value.type === 'pane_list' &&
+    Array.isArray(value.panes) &&
+    value.panes.every(
+      (pane) =>
+        isRecord(pane) &&
+        (pane.cwd === undefined || typeof pane.cwd === 'string')
+    )
   );
 }
 
@@ -448,6 +466,26 @@ async function listWorktrees(
   );
 }
 
+async function workspaceUsesPath(
+  context: HerdrCommandContext,
+  workspaceId: string,
+  targetPath: string
+): Promise<OperationResult<boolean>> {
+  const listed = await runHerdrJson(
+    context,
+    ['pane', 'list', '--workspace', workspaceId],
+    isPaneListResult
+  );
+  if (!listed.success) return listed;
+
+  for (const pane of listed.data.panes) {
+    if (pane.cwd && (await canonicalPath(pane.cwd)) === targetPath) {
+      return { success: true, data: true };
+    }
+  }
+  return { success: true, data: false };
+}
+
 async function matchWorkspace(
   context: HerdrCommandContext,
   workspaces: HerdrWorkspace[],
@@ -477,14 +515,45 @@ async function matchWorkspace(
 
   let targetWorktree: HerdrWorktree | undefined;
   for (const worktree of worktreeResult.data.worktrees) {
-    if ((await canonicalPath(worktree.path)) !== targetPath) continue;
+    if ((await canonicalPath(worktree.path)) === targetPath) {
+      targetWorktree = worktree;
+      break;
+    }
+  }
 
-    targetWorktree = worktree;
-    if (worktree.open_workspace_id) {
-      const matched = availableWorkspaces.find(
-        (workspace) => workspace.workspace_id === worktree.open_workspace_id
+  const checkedBareWorkspaceIds = new Set<string>();
+  if (targetWorktree?.is_bare) {
+    for (const workspace of namedWorkspaces.filter(
+      (candidate) => !candidate.worktree
+    )) {
+      checkedBareWorkspaceIds.add(workspace.workspace_id);
+      const verified = await workspaceUsesPath(
+        context,
+        workspace.workspace_id,
+        targetPath
       );
-      if (matched) return { success: true, data: matched };
+      if (!verified.success) return verified;
+      if (verified.data) return { success: true, data: workspace };
+    }
+  }
+
+  if (targetWorktree?.open_workspace_id) {
+    const matched = availableWorkspaces.find(
+      (workspace) => workspace.workspace_id === targetWorktree.open_workspace_id
+    );
+    if (matched && targetWorktree.is_bare && !matched.worktree) {
+      if (!checkedBareWorkspaceIds.has(matched.workspace_id)) {
+        checkedBareWorkspaceIds.add(matched.workspace_id);
+        const verified = await workspaceUsesPath(
+          context,
+          matched.workspace_id,
+          targetPath
+        );
+        if (!verified.success) return verified;
+        if (verified.data) return { success: true, data: matched };
+      }
+    } else if (matched) {
+      return { success: true, data: matched };
     }
   }
 
@@ -497,18 +566,27 @@ async function matchWorkspace(
     }
   }
 
-  const collisionSafeName = getCollisionSafeManagedWorkspaceName(
-    target.repoName,
-    target.branch
-  );
-  const namedBareWorkspace = targetWorktree?.is_bare
-    ? (namedWorkspaces.find((workspace) => !workspace.worktree) ??
-      availableWorkspaces.find(
-        (workspace) =>
-          workspace.label === collisionSafeName && !workspace.worktree
-      ))
-    : undefined;
-  return { success: true, data: namedBareWorkspace ?? null };
+  if (targetWorktree?.is_bare) {
+    const collisionSafeName = getCollisionSafeManagedWorkspaceName(
+      target.repoName,
+      target.branch
+    );
+    const bareCandidates = availableWorkspaces.filter(
+      (workspace) =>
+        workspace.label === collisionSafeName && !workspace.worktree
+    );
+    for (const workspace of bareCandidates) {
+      if (checkedBareWorkspaceIds.has(workspace.workspace_id)) continue;
+      const verified = await workspaceUsesPath(
+        context,
+        workspace.workspace_id,
+        targetPath
+      );
+      if (!verified.success) return verified;
+      if (verified.data) return { success: true, data: workspace };
+    }
+  }
+  return { success: true, data: null };
 }
 
 async function ensureWorkspace(
