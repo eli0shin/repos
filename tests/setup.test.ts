@@ -19,6 +19,9 @@ test('test setup isolates the tmux suite from inherited Herdr markers', async ()
           : `${key}-inherited`,
     ])
   );
+  const childEnvironment = Object.fromEntries(
+    Object.entries(process.env).filter(([key]) => key !== 'GITHUB_ACTIONS')
+  );
   const proc = Bun.spawn(
     [
       process.execPath,
@@ -27,7 +30,7 @@ test('test setup isolates the tmux suite from inherited Herdr markers', async ()
     ],
     {
       cwd: import.meta.dir.replace('/tests', ''),
-      env: { ...process.env, ...herdrEnvironment },
+      env: { ...childEnvironment, ...herdrEnvironment },
       stdout: 'pipe',
       stderr: 'pipe',
     }
