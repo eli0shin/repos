@@ -33,6 +33,7 @@ describe('--tmux flag', () => {
   const sourceDir = '/tmp/repos-test-tmux-flag-source';
   const configPath = '/tmp/repos-test-tmux-flag-config/config.json';
   let originalCwd: string;
+  let originalTmuxEnv: string | undefined;
   let openTmuxSessionSpy: Mock<typeof tmux.openTmuxSession>;
   let ensureTmuxSessionSpy: Mock<typeof tmux.ensureTmuxSession>;
   let processExitSpy: ReturnType<typeof mockProcessExit> | undefined;
@@ -43,6 +44,7 @@ describe('--tmux flag', () => {
 
   beforeEach(async () => {
     originalCwd = process.cwd();
+    originalTmuxEnv = process.env.TMUX;
     openTmuxSessionSpy = spyOn(tmux, 'openTmuxSession').mockResolvedValue(
       undefined
     );
@@ -56,6 +58,11 @@ describe('--tmux flag', () => {
 
   afterEach(async () => {
     process.chdir(originalCwd);
+    if (originalTmuxEnv === undefined) {
+      delete process.env.TMUX;
+    } else {
+      process.env.TMUX = originalTmuxEnv;
+    }
     openTmuxSessionSpy.mockRestore();
     ensureTmuxSessionSpy.mockRestore();
     processExitSpy?.mockRestore();
@@ -275,6 +282,26 @@ describe('--tmux flag', () => {
     });
   });
 
+  test('cleanup --tmux outside tmux stops before Git mutation when workspace discovery fails', async () => {
+    const { worktreePath } = await setupStaleWorktree(
+      REAL_TMUX_REPO,
+      'feature'
+    );
+    delete process.env.TMUX;
+    const listSpy = spyOn(tmux, 'tmuxListSessionPaths').mockResolvedValue({
+      success: false,
+      error: 'cannot discover tmux sessions',
+    });
+    processExitSpy = mockProcessExit();
+
+    await expect(
+      cleanupCommand({ configPath }, { dryRun: false, tmux: true })
+    ).rejects.toThrow('process.exit(1)');
+
+    expect(await isGitRepo(worktreePath)).toBe(true);
+    listSpy.mockRestore();
+  });
+
   test('cleanup --tmux is a no-op for worktrees without an existing session', async () => {
     const { worktreePath } = await setupStaleWorktree(
       REAL_TMUX_REPO,
@@ -380,6 +407,34 @@ describe('--tmux flag', () => {
     );
     expect(openTmuxSessionSpy).toHaveBeenCalledTimes(0);
     expect(output).toEqual([childPath + '\n']);
+  });
+
+  test('clean --tmux outside tmux stops before Git mutation when workspace discovery fails', async () => {
+    const { bareDir } = await setupBareRepo(REAL_TMUX_REPO);
+    const featurePath = join(testDir, `${REAL_TMUX_REPO}.git-feature`);
+    await runGitCommand(
+      ['worktree', 'add', '-b', 'feature', featurePath],
+      bareDir
+    );
+    const mainPath = join(testDir, `${REAL_TMUX_REPO}.git-main`);
+    await runGitCommand(['worktree', 'add', mainPath, 'main'], bareDir);
+    delete process.env.TMUX;
+    const listSpy = spyOn(tmux, 'tmuxListSessionPaths').mockResolvedValue({
+      success: false,
+      error: 'cannot discover tmux sessions',
+    });
+    processExitSpy = mockProcessExit();
+
+    await expect(
+      cleanCommand({ configPath }, 'feature', REAL_TMUX_REPO, {
+        force: false,
+        dryRun: false,
+        tmux: true,
+      })
+    ).rejects.toThrow('process.exit(1)');
+
+    expect(await isGitRepo(featurePath)).toBe(true);
+    listSpy.mockRestore();
   });
 
   test('clean --tmux kills worktree session and opens main session', async () => {

@@ -180,11 +180,7 @@ export async function planTmuxClosure(
   options: ClosurePlanOptions = {}
 ): Promise<ManagedWorkspaceClosurePlan> {
   const listResult = await tmux.tmuxListSessionPaths();
-  const requiresSafePlanning =
-    focus.kind === 'preserve' ||
-    (focus.kind === 'automatic' &&
-      tmux.isInsideTmux() &&
-      options.mode !== 'preview');
+  const requiresSafePlanning = options.mode !== 'preview';
   if (!listResult.success && requiresSafePlanning) {
     fail(`Error: ${listResult.error}`);
   }
