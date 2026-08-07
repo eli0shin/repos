@@ -251,6 +251,30 @@ describe('--tmux flag', () => {
     expect(hasAfter).toEqual({ success: true, data: false });
   });
 
+  test('cleanup --tmux uses the bare repo when the default worktree is removed', async () => {
+    const { bareDir } = await setupBareRepo(REAL_TMUX_REPO);
+    const mainPath = join(testDir, `${REAL_TMUX_REPO}.git-main`);
+    await runGitCommand(['worktree', 'add', mainPath, 'main'], bareDir);
+    await runGitCommand(['config', 'branch.main.remote', 'origin'], mainPath);
+    await runGitCommand(
+      ['config', 'branch.main.merge', 'refs/heads/main'],
+      mainPath
+    );
+    const sessionName = `${REAL_TMUX_REPO}@main`;
+    await startRealTmuxSession(sessionName, mainPath);
+
+    const { restore } = captureStdout();
+    await cleanupCommand({ configPath }, { dryRun: false, tmux: true });
+    restore();
+
+    expect(await isGitRepo(mainPath)).toBe(false);
+    expect(process.cwd()).toBe(realpathSync(bareDir));
+    expect(await tmux.tmuxHasSession(sessionName)).toEqual({
+      success: true,
+      data: false,
+    });
+  });
+
   test('cleanup --tmux is a no-op for worktrees without an existing session', async () => {
     const { worktreePath } = await setupStaleWorktree(
       REAL_TMUX_REPO,

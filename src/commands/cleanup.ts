@@ -179,6 +179,7 @@ export async function cleanupCommand(
 
   let workspaceClosure: ManagedWorkspaceClosurePlan | undefined;
   if (options.tmux && removed.length > 0) {
+    const removedPaths = new Set(removed.map((result) => result.path));
     workspaceClosure = await planManagedWorkspaceClosure(
       removed.map((result) => ({
         repoName: result.repo,
@@ -195,13 +196,13 @@ export async function cleanupCommand(
             repoContext.worktrees,
             repoContext.defaultBranch
           );
+          const safeWorktree = [defaultWorktree, mainWorktree].find(
+            (worktree) => worktree && !removedPaths.has(worktree.path)
+          );
           return {
             repoName: repoContext.repo.name,
             branch: repoContext.defaultBranch,
-            worktreePath:
-              defaultWorktree?.path ??
-              mainWorktree?.path ??
-              repoContext.repo.path,
+            worktreePath: safeWorktree?.path ?? repoContext.repo.path,
           };
         }),
       },
