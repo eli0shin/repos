@@ -144,18 +144,17 @@ export async function cleanCommand(
         defaultBranch
       );
       const mainWorktree = worktreesResult.data.find((wt) => wt.isMain);
-      const mainPath =
-        [defaultWorktree, mainWorktree].find(
-          (candidate) => candidate && candidate.path !== worktree.path
-        )?.path ?? repo.path;
+      const destinationWorktree = [defaultWorktree, mainWorktree].find(
+        (candidate) => candidate && candidate.path !== worktree.path
+      );
       workspaceClosure = await planManagedWorkspaceClosure(
         [target],
         {
           kind: 'destination',
           target: {
             repoName: repo.name,
-            branch: defaultBranch,
-            worktreePath: mainPath,
+            branch: destinationWorktree?.branch || defaultBranch,
+            worktreePath: destinationWorktree?.path ?? repo.path,
           },
         },
         { provider: config.config?.workspaceManager }
