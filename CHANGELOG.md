@@ -1,5 +1,15 @@
 # repos
 
+## 2.2.0
+
+### Minor Changes
+
+- [#113](https://github.com/eli0shin/repos/pull/113) [`1913a41`](https://github.com/eli0shin/repos/commit/1913a4154c079d1cb3f087ee91330ac4f979bf99) Thanks [@eli0shin](https://github.com/eli0shin)! - Add Herdr as a configurable Workspace Manager for all worktree workflows while retaining tmux as the default.
+
+### Patch Changes
+
+- [#113](https://github.com/eli0shin/repos/pull/113) [`1913a41`](https://github.com/eli0shin/repos/commit/1913a4154c079d1cb3f087ee91330ac4f979bf99) Thanks [@eli0shin](https://github.com/eli0shin)! - Move tmux lifecycle management behind the Workspace Manager seam without changing command behavior.
+
 ## 2.1.0
 
 ### Minor Changes
