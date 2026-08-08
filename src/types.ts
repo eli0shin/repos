@@ -12,10 +12,12 @@ export type RepoEntry = {
 };
 
 export type UpdateBehavior = 'auto' | 'notify' | 'off';
+export type WorkspaceManagerProvider = 'tmux' | 'herdr';
 
 export type ReposConfigSettings = {
   updateBehavior?: UpdateBehavior;
   updateCheckIntervalHours?: number;
+  workspaceManager?: WorkspaceManagerProvider;
 };
 
 export type ReposConfig = {

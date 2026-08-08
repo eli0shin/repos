@@ -33,7 +33,7 @@ import { initCommand, initPrintCommand } from './commands/init.ts';
 import { runUpdaterWorker } from './updater-worker.ts';
 import { handleAutoUpdate, printUpdateMessage } from './auto-update.ts';
 import { print, printError } from './output.ts';
-import { isInsideTmux } from './tmux.ts';
+import { isInsideManagedEnvironment } from './workspace-manager/index.ts';
 import type { UpdateBehavior } from './types.ts';
 
 // Handle update worker mode early
@@ -52,7 +52,7 @@ function getCommandContext(): CommandContext {
   };
 }
 
-function resolveTmuxOptions(
+function resolveWorkspaceManagerOptions(
   tmux: boolean,
   focus: boolean
 ): { tmux: boolean; focus: boolean } {
@@ -169,22 +169,26 @@ program
   .argument('[branch]', 'Branch name for the worktree')
   .argument('[repo-name]', 'Repo name (optional if inside a tracked repo)')
   .addOption(
-    new Option('-t, --tmux', 'Open a tmux session in the worktree').default(
-      isInsideTmux()
-    )
+    new Option(
+      '-t, --tmux',
+      'Open the Managed Workspace for the worktree'
+    ).default(isInsideManagedEnvironment())
   )
-  .option('--no-tmux', 'Do not use tmux, even inside a tmux session')
   .option(
-    '--no-focus',
-    'Create or reuse tmux session without attaching or switching'
+    '--no-tmux',
+    'Disable the Workspace Manager, even inside a managed environment'
   )
+  .option('--no-focus', 'Create or reuse a Managed Workspace without focusing')
   .option(
     '-i, --index <index>',
     'Use a worktree index from repos list',
     parseWorktreeIndex
   )
   .action(async (branch, repoName, options) => {
-    const tmuxOptions = resolveTmuxOptions(options.tmux, options.focus);
+    const tmuxOptions = resolveWorkspaceManagerOptions(
+      options.tmux,
+      options.focus
+    );
 
     if (options.index !== undefined && branch && !repoName) {
       repoName = branch;
@@ -202,17 +206,21 @@ program
   .description('Create a stacked worktree from current branch')
   .argument('<branch>', 'New branch name')
   .addOption(
-    new Option('-t, --tmux', 'Open a tmux session in the worktree').default(
-      isInsideTmux()
-    )
+    new Option(
+      '-t, --tmux',
+      'Open the Managed Workspace for the worktree'
+    ).default(isInsideManagedEnvironment())
   )
-  .option('--no-tmux', 'Do not use tmux, even inside a tmux session')
   .option(
-    '--no-focus',
-    'Create or reuse tmux session without attaching or switching'
+    '--no-tmux',
+    'Disable the Workspace Manager, even inside a managed environment'
   )
+  .option('--no-focus', 'Create or reuse a Managed Workspace without focusing')
   .action(async (branch, options) => {
-    const tmuxOptions = resolveTmuxOptions(options.tmux, options.focus);
+    const tmuxOptions = resolveWorkspaceManagerOptions(
+      options.tmux,
+      options.focus
+    );
     await stackCommand(getCommandContext(), branch, tmuxOptions);
   });
 
@@ -272,13 +280,19 @@ program
   .addOption(
     new Option(
       '-t, --tmux',
-      'Kill the worktree tmux session and switch to the main worktree session'
-    ).default(isInsideTmux())
+      'Close the Managed Workspace and focus the main worktree'
+    ).default(isInsideManagedEnvironment())
   )
-  .option('--no-tmux', 'Do not use tmux, even inside a tmux session')
-  .option('--no-focus', 'Kill tmux session without attaching or switching')
+  .option(
+    '--no-tmux',
+    'Disable the Workspace Manager, even inside a managed environment'
+  )
+  .option('--no-focus', 'Close the Managed Workspace without changing focus')
   .action(async (branch, repoName, options) => {
-    const tmuxOptions = resolveTmuxOptions(options.tmux, options.focus);
+    const tmuxOptions = resolveWorkspaceManagerOptions(
+      options.tmux,
+      options.focus
+    );
 
     if (options.index !== undefined && branch && !repoName) {
       repoName = branch;
@@ -336,10 +350,13 @@ program
   .addOption(
     new Option(
       '-t, --tmux',
-      'Also kill tmux sessions for removed worktrees'
-    ).default(isInsideTmux())
+      'Also close Managed Workspaces for removed worktrees'
+    ).default(isInsideManagedEnvironment())
   )
-  .option('--no-tmux', 'Do not use tmux, even inside a tmux session')
+  .option(
+    '--no-tmux',
+    'Disable the Workspace Manager, even inside a managed environment'
+  )
   .action(async (options) => {
     await cleanupCommand(getCommandContext(), {
       dryRun: options.dryRun ?? false,

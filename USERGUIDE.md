@@ -472,14 +472,14 @@ Slashes in branch names are converted to dashes:
 - `feature/auth` → `my-repo-feature-auth`
 - `bugfix/login-issue` → `my-repo-bugfix-login-issue`
 
-**Tmux options:**
+**Workspace Manager options:**
 
-- `--tmux` creates or reuses the worktree's tmux session and attaches or switches to it.
-- `--no-tmux` disables tmux session management.
-- `--no-focus` creates or reuses the tmux session without attaching or switching, including when run outside tmux. It prints the worktree path to stdout and cannot be combined with `--no-tmux`.
+- `--tmux` creates or reuses the worktree's Managed Workspace and focuses it. The retained flag name controls either tmux or Herdr.
+- `--no-tmux` disables Workspace Manager behavior.
+- `--no-focus` creates or reuses the Managed Workspace without focusing or attaching, including when run outside a managed environment. It prints the worktree path to stdout and cannot be combined with `--no-tmux`.
 
 **Output:**
-Prints the worktree path to stdout when tmux is disabled or `--no-focus` is used. Use with the `work` shell function to automatically `cd` into it.
+Prints the worktree path to stdout when Workspace Manager behavior is disabled or `--no-focus` is used. Use with the `work` shell function to automatically `cd` into it.
 
 **Repo-local setup:**
 If `.repos/worktree.json` is present for the repo, `repos work` copies any configured files and runs the setup command before printing the path. Setup only runs when creating a new worktree, not when reusing an existing one. If setup fails, the worktree is left in place for manual recovery and no stdout path is printed.
@@ -566,7 +566,7 @@ repos stack feature-profile    # Stack profile feature on top of auth
 **Output:**
 Prints the worktree path to stdout when tmux is disabled or `--no-focus` is used.
 
-Use `--no-focus` to create or reuse the new worktree's tmux session without attaching or switching the current client. This works inside and outside tmux and cannot be combined with `--no-tmux`.
+Use `--no-focus` to create or reuse the new worktree's Managed Workspace without focusing or attaching a client. This works inside and outside a managed environment and cannot be combined with `--no-tmux`.
 
 ---
 
@@ -782,8 +782,8 @@ repos clean parent --force         # Force remove parent with stacked children
 
 - `-i, --index <index>` - Use a worktree index from `repos list` instead of a branch name
 - `--force` - Force removal even if the branch has stacked children
-- `--no-focus` - Kill the worktree's tmux session without attaching or switching to another session; prints the logical destination path
-- `--no-tmux` - Disable tmux session management entirely
+- `--no-focus` - Close the worktree's Managed Workspace without changing focus; prints the logical destination path
+- `--no-tmux` - Disable Workspace Manager behavior entirely
 
 **Safety checks:**
 
@@ -811,10 +811,10 @@ Error: Cannot remove worktree with uncommitted changes
 **Output behavior:**
 
 - Human-readable status is written to stderr
-- On successful non-dry-run cleanup without tmux focus, stdout prints a logical destination path for `work-clean`
+- On successful non-dry-run cleanup without Workspace Manager focus, stdout prints a logical destination path for `work-clean`
   (stack parent worktree when available, otherwise main worktree or bare repo directory)
-- With `--no-focus`, cleanup is rejected before removing the worktree when the target session is the caller's active tmux session
-- `--no-focus` works inside and outside tmux and cannot be combined with `--no-tmux`
+- With `--no-focus`, cleanup is rejected before removing the worktree when the target Managed Workspace is active
+- `--no-focus` works inside and outside a managed environment and cannot be combined with `--no-tmux`
 
 ---
 
@@ -864,6 +864,10 @@ repos cleanup --dry-run # Preview without removing
 **Options:**
 
 - `--dry-run` - Show what would be removed without actually removing
+- `--tmux` - Close matching Managed Workspaces for removed worktrees. The retained flag name controls either tmux or Herdr.
+- `--no-tmux` - Leave Managed Workspaces open.
+
+When Herdr is selected, automatic cleanup closes all matching stale-worktree workspaces and lets Herdr select any remaining focused workspace. Dry-run reports the exact workspace labels without opening, focusing, attaching, or closing them.
 
 **A worktree is cleaned up if:**
 
@@ -963,7 +967,8 @@ If `XDG_CONFIG_HOME` is set, uses `$XDG_CONFIG_HOME/repos/config.json` instead.
   ],
   "config": {
     "updateBehavior": "auto",
-    "updateCheckIntervalHours": 24
+    "updateCheckIntervalHours": 24,
+    "workspaceManager": "herdr"
   }
 }
 ```
@@ -983,6 +988,15 @@ If `XDG_CONFIG_HOME` is set, uses `$XDG_CONFIG_HOME/repos/config.json` instead.
 | -------------------------- | ------ | ------- | --------------------------------------------------------- |
 | `updateBehavior`           | string | `auto`  | `auto`: auto-install, `notify`: warn only, `off`: disable |
 | `updateCheckIntervalHours` | number | `24`    | Hours between update checks                               |
+| `workspaceManager`         | string | `tmux`  | Workspace Manager: `tmux` or `herdr`                      |
+
+### Workspace Manager selection
+
+The current managed environment takes precedence over `workspaceManager`: Herdr is selected when `HERDR_ENV=1`, including when tmux is also present; tmux is selected when only tmux is current. Outside both environments, the global setting selects the provider. If the setting is absent, repos selects tmux.
+
+Provider selection does not activate workspace management. It is automatic only inside tmux or Herdr. Outside both, use `--tmux` or `--no-focus` to enable the selected provider. Use `--no-tmux` to disable it. These tmux-named flags are retained for compatibility and apply to both providers.
+
+Repos creates and removes all Git worktrees. A Workspace Manager only opens, focuses, reuses, and closes the associated Managed Workspace. Managed Workspaces use the canonical `repo@branch` label; slashes in branch names become dashes. If that normalized Herdr label already belongs to a different worktree, repos adds a stable hash suffix to keep the labels distinct.
 
 ### Stacks
 
