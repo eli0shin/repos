@@ -1,5 +1,11 @@
 # repos
 
+## 2.3.0
+
+### Minor Changes
+
+- [#115](https://github.com/eli0shin/repos/pull/115) [`40e24a5`](https://github.com/eli0shin/repos/commit/40e24a5f01b0aa8217f2ca8c67712589fe30621e) Thanks [@eli0shin](https://github.com/eli0shin)! - Allow `repos clean --force` to remove worktrees with uncommitted changes.
+
 ## 2.2.0
 
 ### Minor Changes
