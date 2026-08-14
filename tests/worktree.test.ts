@@ -743,6 +743,31 @@ describe('repos clean command', () => {
     expect(await isGitRepo(worktreePath)).toBe(true);
   });
 
+  test('force-removes a worktree with uncommitted changes', async () => {
+    const bareDir = join(testDir, 'bare.git');
+    await cloneBare(sourceDir, bareDir);
+
+    const worktreePath = join(testDir, 'bare.git-feature');
+    await runGitCommand(
+      ['worktree', 'add', '-b', 'feature', worktreePath],
+      bareDir
+    );
+    await Bun.write(join(worktreePath, 'dirty.txt'), 'dirty');
+
+    const config = {
+      repos: [{ name: 'bare', url: sourceDir, path: bareDir, bare: true }],
+    } satisfies ReposConfig;
+    await writeConfig(configPath, config);
+
+    await cleanCommand({ configPath }, 'feature', 'bare', {
+      force: true,
+      dryRun: false,
+      tmux: false,
+    });
+
+    expect(await isGitRepo(worktreePath)).toBe(false);
+  });
+
   test('fails when worktree does not exist', async () => {
     // Clone as bare
     const bareDir = join(testDir, 'bare.git');

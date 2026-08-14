@@ -770,7 +770,7 @@ repos clean feature-x              # Inside a tracked repo
 repos clean feature-x my-repo      # Specify repo explicitly
 repos clean -i 2                   # Use a worktree index from repos list
 repos clean -i 2 my-repo           # Use an index for a specific repo
-repos clean parent --force         # Force remove parent with stacked children
+repos clean parent --force         # Discard changes or remove a parent with children
 ```
 
 **Arguments:**
@@ -781,14 +781,14 @@ repos clean parent --force         # Force remove parent with stacked children
 **Options:**
 
 - `-i, --index <index>` - Use a worktree index from `repos list` instead of a branch name
-- `--force` - Force removal even if the branch has stacked children
+- `--force` - Force removal when the worktree has uncommitted changes or the branch has stacked children
 - `--no-focus` - Close the worktree's Managed Workspace without changing focus; prints the logical destination path
 - `--no-tmux` - Disable Workspace Manager behavior entirely
 
 **Safety checks:**
 
 - Cannot remove the main worktree
-- Blocks removal if uncommitted changes exist
+- Blocks removal if uncommitted changes exist (use `--force` to discard them)
 - Blocks removal if branch has stacked children (use `--force` to override)
 
 **Stacked children:**
@@ -800,7 +800,7 @@ Error: Branch "parent" has stacked children: child-1, child-2
 Use --force to remove anyway (children will become independent).
 ```
 
-Using `--force` removes the parent worktree and makes child branches independent (removes their stack entries).
+Using `--force` discards uncommitted changes. It also removes the parent worktree and makes child branches independent (removes their Branch Stack relationships).
 
 **Example error:**
 
