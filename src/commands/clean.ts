@@ -96,7 +96,7 @@ export async function cleanCommand(
     process.exit(1);
   }
 
-  if (changesResult.data) {
+  if (changesResult.data && !options.force) {
     printError(
       'Error: Worktree has uncommitted changes. Commit or stash them first.'
     );
@@ -168,7 +168,9 @@ export async function cleanCommand(
   if (!options.dryRun) {
     printStatus(`Removing worktree for "${worktree.branch}"...`);
 
-    const result = await removeWorktree(repo.path, worktree.path);
+    const result = await removeWorktree(repo.path, worktree.path, {
+      force: options.force,
+    });
     if (!result.success) {
       printError(`Error: ${result.error}`);
       process.exit(1);

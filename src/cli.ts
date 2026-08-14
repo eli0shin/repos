@@ -270,7 +270,10 @@ program
   .description('Remove a worktree')
   .argument('[branch]', 'Branch name (optional if inside a worktree)')
   .argument('[repo-name]', 'Repo name (optional if inside a tracked repo)')
-  .option('--force', 'Force removal even if branch has stacked children')
+  .option(
+    '--force',
+    'Force removal with uncommitted changes or stacked children'
+  )
   .option('--dry-run', 'Show what would be removed without removing')
   .option(
     '-i, --index <index>',

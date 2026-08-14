@@ -130,7 +130,8 @@ Arguments:
   repo-name            Repo name (optional if inside a tracked repo)
 
 Options:
-  --force              Force removal even if branch has stacked children
+  --force              Force removal with uncommitted changes or stacked
+                       children
   --dry-run            Show what would be removed without removing
   -i, --index <index>  Use a worktree index from repos list
   -t, --tmux           Close the Managed Workspace and focus the main worktree
