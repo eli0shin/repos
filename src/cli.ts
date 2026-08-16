@@ -325,8 +325,11 @@ program
 
 program
   .command('rebase')
-  .description('Rebase a branch and its children on their parents')
-  .argument('[branch]', 'Branch name to rebase (optional if inside a worktree)')
+  .description('Update the default branch or rebase a branch and its children')
+  .argument(
+    '[branch]',
+    'Branch name to update or rebase (optional if inside a worktree)'
+  )
   .argument('[repo-name]', 'Repo name (optional if inside a tracked repo)')
   .option(
     '-i, --index <index>',

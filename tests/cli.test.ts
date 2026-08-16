@@ -83,7 +83,7 @@ Commands:
   squash [options]                       Squash commits since base branch into a single commit
   clean [options] [branch] [repo-name]   Remove a worktree
   main [repo-name]                       Output main worktree path (for shell wrapper to cd)
-  rebase [options] [branch] [repo-name]  Rebase a branch and its children on their parents
+  rebase [options] [branch] [repo-name]  Update the default branch or rebase a branch and its children
   cleanup [options]                      Remove worktrees for merged or deleted branches
   init [options]                         Configure shell for work command
   help [command]                         display help for command
