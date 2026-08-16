@@ -1,5 +1,11 @@
 # repos
 
+## 2.4.0
+
+### Minor Changes
+
+- [#117](https://github.com/eli0shin/repos/pull/117) [`4cdc3b9`](https://github.com/eli0shin/repos/commit/4cdc3b9fd93ecd657bb57ccc1801c94b08b5cd92) Thanks [@eli0shin](https://github.com/eli0shin)! - Update the remote default branch with `repos rebase` while preserving local commits and then rebase its Branch Stack descendants.
+
 ## 2.3.0
 
 ### Minor Changes
