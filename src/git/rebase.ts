@@ -127,6 +127,7 @@ export async function fetchAndRebase(
 
 const REPOS_ONLY_MARKER = 'repos-only';
 const REPOS_ROOT_MARKER = 'repos-root';
+const REPOS_DEFAULT_BRANCH_MARKER = 'repos-default-branch';
 
 async function getActiveRebaseStateDir(
   repoDir: string
@@ -145,6 +146,35 @@ async function getActiveRebaseStateDir(
   }
 
   return { success: false, error: 'No active rebase state directory found' };
+}
+
+export async function markRebaseContinuation(
+  repoDir: string,
+  rootBranch: string | undefined,
+  defaultBranch?: string
+): Promise<OperationResult> {
+  const stateDirResult = await getActiveRebaseStateDir(repoDir);
+  if (!stateDirResult.success) return stateDirResult;
+
+  try {
+    if (rootBranch) {
+      await Bun.write(join(stateDirResult.data, REPOS_ROOT_MARKER), rootBranch);
+    } else {
+      await Bun.write(join(stateDirResult.data, REPOS_ONLY_MARKER), '');
+    }
+    if (defaultBranch) {
+      await Bun.write(
+        join(stateDirResult.data, REPOS_DEFAULT_BRANCH_MARKER),
+        defaultBranch
+      );
+    }
+    return { success: true, data: undefined };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
 
 /**
@@ -183,6 +213,22 @@ export async function markRebaseRoot(
       success: false,
       error: error instanceof Error ? error.message : String(error),
     };
+  }
+}
+
+export async function getRebaseDefaultBranch(
+  repoDir: string
+): Promise<string | undefined> {
+  const stateDirResult = await getActiveRebaseStateDir(repoDir);
+  if (!stateDirResult.success) return undefined;
+
+  try {
+    const defaultBranch = await Bun.file(
+      join(stateDirResult.data, REPOS_DEFAULT_BRANCH_MARKER)
+    ).text();
+    return defaultBranch.trim() || undefined;
+  } catch {
+    return undefined;
   }
 }
 

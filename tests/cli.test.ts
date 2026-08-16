@@ -83,7 +83,7 @@ Commands:
   squash [options]                       Squash commits since base branch into a single commit
   clean [options] [branch] [repo-name]   Remove a worktree
   main [repo-name]                       Output main worktree path (for shell wrapper to cd)
-  rebase [options] [branch] [repo-name]  Rebase a branch and its children on their parents
+  rebase [options] [branch] [repo-name]  Update the default branch from origin or rebase a branch and its children on their parents
   cleanup [options]                      Remove worktrees for merged or deleted branches
   init [options]                         Configure shell for work command
   help [command]                         display help for command
@@ -142,6 +142,22 @@ Options:
   -h, --help           display help for command
 `;
 
+const REBASE_HELP_OUTPUT = `Usage: repos rebase [options] [branch] [repo-name]
+
+Update the default branch from origin or rebase a branch and its children on
+their parents
+
+Arguments:
+  branch               Branch name to update or rebase (optional if inside a
+                       worktree)
+  repo-name            Repo name (optional if inside a tracked repo)
+
+Options:
+  -i, --index <index>  Use a worktree index from repos list
+  --only               Only update or rebase the selected branch, skip children
+  -h, --help           display help for command
+`;
+
 const REMOVE_HELP_OUTPUT = `Usage: repos remove [options] <name>
 
 Remove a repo from tracking
@@ -166,6 +182,14 @@ describe('CLI help output', () => {
   test('-h displays help', async () => {
     expect(await runCli(['-h'])).toEqual({
       stdout: HELP_OUTPUT,
+      stderr: '',
+      exitCode: 0,
+    });
+  });
+
+  test('rebase help documents default updates and parent-based rebases', async () => {
+    expect(await runCli(['rebase', '--help'])).toEqual({
+      stdout: REBASE_HELP_OUTPUT,
       stderr: '',
       exitCode: 0,
     });

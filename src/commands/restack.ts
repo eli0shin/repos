@@ -2,7 +2,7 @@ import type { CommandContext } from '../cli.ts';
 import { loadConfig, resolveRepo } from '../config.ts';
 import type { RepoEntry, ReposConfig } from '../types.ts';
 import {
-  getDefaultBranch,
+  getRemoteDefaultBranchName,
   listWorktrees,
   findWorktreeByBranch,
   fetchOrigin,
@@ -12,8 +12,7 @@ import {
   resolveRef,
   resolveWorktree,
   isRebaseInProgress,
-  markRebaseOnly,
-  markRebaseRoot,
+  markRebaseContinuation,
   runGitCommand,
   type WorktreeInfo,
 } from '../git/index.ts';
@@ -39,10 +38,36 @@ export type RestackContext = {
   repo: RepoEntry;
   config: ReposConfig;
   worktrees: WorktreeInfo[];
-  /** Resolved once at the start of the rebase run; undefined if resolution failed. */
+  /** Remote default branch resolved once at the start of a new rebase run. */
   defaultBranch: string | undefined;
+  /** Remote default head from before the fetch, used as the local-commit boundary. */
+  previousDefaultHead?: string;
   rootBranch?: string;
 };
+
+async function preserveRebaseContinuation(
+  rctx: RestackContext,
+  worktreePath: string,
+  branch: string,
+  includeChildren: boolean
+): Promise<void> {
+  if (!(await isRebaseInProgress(worktreePath))) return;
+
+  const markerResult = await markRebaseContinuation(
+    worktreePath,
+    includeChildren ? (rctx.rootBranch ?? branch) : undefined,
+    rctx.defaultBranch
+  );
+  if (markerResult.success) return;
+
+  const abortResult = await runGitCommand(['rebase', '--abort'], worktreePath);
+  printError(`Error: Failed to preserve rebase state: ${markerResult.error}`);
+  if (abortResult.exitCode === 0) {
+    printError('The rebase was aborted to avoid losing continuation state.');
+  } else {
+    printError(`Failed to abort the rebase: ${abortResult.stderr}`);
+  }
+}
 
 /**
  * Restack a single branch onto its parent.
@@ -60,6 +85,28 @@ async function restackBranch(
   if (!worktree) {
     printError(`Error: No worktree found for branch "${branch}"`);
     return false;
+  }
+
+  if (branch === rctx.defaultBranch) {
+    const targetRef = `origin/${rctx.defaultBranch}`;
+    print(`Updating "${branch}" from "${targetRef}"...`);
+
+    const rebaseResult = rctx.previousDefaultHead
+      ? await rebaseOnto(worktree.path, targetRef, rctx.previousDefaultHead)
+      : await rebaseOnRef(worktree.path, targetRef);
+    if (!rebaseResult.success) {
+      await preserveRebaseContinuation(
+        rctx,
+        worktree.path,
+        branch,
+        includeChildren
+      );
+      printError(`Error: ${rebaseResult.error}`);
+      return false;
+    }
+
+    print(`Updated "${branch}" from "${targetRef}"`);
+    return true;
   }
 
   const parentBranch = getParentBranch(repo, branch);
@@ -171,27 +218,12 @@ async function restackBranch(
   }
 
   if (!rebaseResult.success) {
-    if (await isRebaseInProgress(worktree.path)) {
-      const markerResult = includeChildren
-        ? await markRebaseRoot(worktree.path, rctx.rootBranch ?? branch)
-        : await markRebaseOnly(worktree.path);
-      if (!markerResult.success) {
-        const abortResult = await runGitCommand(
-          ['rebase', '--abort'],
-          worktree.path
-        );
-        printError(
-          `Error: Failed to preserve rebase state: ${markerResult.error}`
-        );
-        if (abortResult.exitCode === 0) {
-          printError(
-            'The rebase was aborted to avoid losing continuation state.'
-          );
-        } else {
-          printError(`Failed to abort the rebase: ${abortResult.stderr}`);
-        }
-      }
-    }
+    await preserveRebaseContinuation(
+      rctx,
+      worktree.path,
+      branch,
+      includeChildren
+    );
     printError(`Error: ${rebaseResult.error}`);
     return false;
   }
@@ -347,18 +379,30 @@ export async function rebaseStackCommand(
     process.exit(1);
   }
 
-  // Fetch latest changes once at the start
+  // Identify the remote default before fetching so its old tracking head can
+  // separate local-only commits from upstream commits removed by a force-push.
+  const defaultBranchResult = await getRemoteDefaultBranchName(repo.path);
+  if (!defaultBranchResult.success) {
+    printError(`Error: ${defaultBranchResult.error}`);
+    process.exit(1);
+  }
+  const defaultBranch = defaultBranchResult.data;
+  const targetRef = `origin/${defaultBranch}`;
+  const previousDefaultHeadResult = await resolveRef(repo.path, targetRef);
+
   const fetchResult = await fetchOrigin(currentWorktree.path);
   if (!fetchResult.success) {
     printError(`Error fetching: ${fetchResult.error}`);
     process.exit(1);
   }
 
-  // Resolve once here so restackBranch doesn't call getDefaultBranch per branch
-  const defaultBranchResult = await getDefaultBranch(repo.path);
-  const defaultBranch = defaultBranchResult.success
-    ? defaultBranchResult.data
-    : undefined;
+  const defaultHeadResult = await resolveRef(repo.path, targetRef);
+  if (!defaultHeadResult.success) {
+    printError(
+      `Error: Remote default branch "${defaultBranch}" could not be resolved as "${targetRef}"`
+    );
+    process.exit(1);
+  }
 
   const rctx = {
     ctx,
@@ -366,6 +410,9 @@ export async function rebaseStackCommand(
     config,
     worktrees: worktreesResult.data,
     defaultBranch,
+    previousDefaultHead: previousDefaultHeadResult.success
+      ? previousDefaultHeadResult.data
+      : undefined,
   } satisfies RestackContext;
 
   let success: boolean;

@@ -16,6 +16,7 @@ import {
   runGitCommand,
   getDefaultBranch,
   shouldRebaseChildren,
+  getRebaseDefaultBranch,
   getRebaseRoot,
 } from '../git/index.ts';
 import { print, printError } from '../output.ts';
@@ -73,6 +74,10 @@ export async function continueCommand(ctx: CommandContext): Promise<void> {
 
   const includeChildren = await shouldRebaseChildren(currentWorktree.path);
   const rebaseRoot = await getRebaseRoot(currentWorktree.path);
+  const recordedDefaultBranch = await getRebaseDefaultBranch(
+    currentWorktree.path
+  );
+  const isDefaultBranch = currentBranch === recordedDefaultBranch;
 
   print('Continuing rebase...');
 
@@ -83,9 +88,13 @@ export async function continueCommand(ctx: CommandContext): Promise<void> {
     process.exit(1);
   }
 
-  // Update the base ref to the branch's effective parent.
+  const defaultBranchResult = recordedDefaultBranch
+    ? { success: true as const, data: recordedDefaultBranch }
+    : await getDefaultBranch(repo.path);
+
+  // A default-branch update does not have a Fork Point.
   const parentBranch = getParentBranch(repo, currentBranch);
-  if (parentBranch) {
+  if (!isDefaultBranch && parentBranch) {
     const parentWorktree = findWorktreeByBranch(
       worktreesResult.data,
       parentBranch
@@ -151,28 +160,23 @@ export async function continueCommand(ctx: CommandContext): Promise<void> {
 
       print('Updated fork point reference.');
     }
-  } else {
-    const defaultBranchResult = await getDefaultBranch(repo.path);
-    if (defaultBranchResult.success) {
-      const targetRef = `origin/${defaultBranchResult.data}`;
-      const targetResult = await runGitCommand(
-        ['rev-parse', targetRef],
-        repo.path
+  } else if (!isDefaultBranch && defaultBranchResult.success) {
+    const targetRef = `origin/${defaultBranchResult.data}`;
+    const targetResult = await runGitCommand(
+      ['rev-parse', targetRef],
+      repo.path
+    );
+    if (targetResult.exitCode === 0) {
+      const setRefResult = await completeBranchRebase(
+        repo.path,
+        currentBranch,
+        targetResult.stdout.trim()
       );
-      if (targetResult.exitCode === 0) {
-        const setRefResult = await completeBranchRebase(
-          repo.path,
-          currentBranch,
-          targetResult.stdout.trim()
-        );
-        if (!setRefResult.success) {
-          printError(
-            `Error: Failed to update fork point: ${setRefResult.error}`
-          );
-          process.exit(1);
-        }
-        print('Updated fork point reference.');
+      if (!setRefResult.success) {
+        printError(`Error: Failed to update fork point: ${setRefResult.error}`);
+        process.exit(1);
       }
+      print('Updated fork point reference.');
     }
   }
 
@@ -210,16 +214,14 @@ export async function continueCommand(ctx: CommandContext): Promise<void> {
   if (remainingBranches.length === 0) return;
 
   print(`Rebasing ${remainingBranches.length} remaining branch(es)...`);
-  const defaultBranchResult = await getDefaultBranch(repo.path);
-  const defaultBranch = defaultBranchResult.success
-    ? defaultBranchResult.data
-    : undefined;
   const rctx = {
     ctx,
     repo: freshRepo,
     config: freshConfig,
     worktrees: freshWorktreesResult.data,
-    defaultBranch,
+    defaultBranch: defaultBranchResult.success
+      ? defaultBranchResult.data
+      : undefined,
     rootBranch,
   } satisfies RestackContext;
 

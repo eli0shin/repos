@@ -820,7 +820,7 @@ Error: Cannot remove worktree with uncommitted changes
 
 #### `repos rebase [branch] [repo-name]`
 
-Rebase a worktree branch on its recorded parent, then recursively rebase its children.
+Update the default branch from origin, or rebase another worktree branch on its recorded parent and then recursively rebase its children.
 
 ```bash
 repos rebase feature-x my-repo     # Specify branch and repo
@@ -828,24 +828,25 @@ repos rebase feature-x             # Inside repo, specify branch
 repos rebase -i 2                  # Use a worktree index from repos list
 repos rebase -i 2 my-repo          # Use an index for a specific repo
 repos rebase                       # Inside worktree, auto-detect
-repos rebase --only                # Rebase only the selected branch
+repos rebase --only                # Update or rebase only the selected branch
 ```
 
 **Arguments:**
 
-- `[branch]` (optional) - Branch to rebase. Auto-detected if inside a worktree, or replaced by `--index`.
+- `[branch]` (optional) - Branch to update or rebase. Auto-detected if inside a worktree, or replaced by `--index`.
 - `[repo-name]` (optional) - Repository name. Auto-detected if inside a tracked repo.
 
 **Options:**
 
 - `-i, --index <index>` - Use a worktree index from `repos list` instead of a branch name
-- `--only` - Rebase only the selected branch, without rebasing its children
+- `--only` - Update or rebase only the selected branch, without rebasing its children
 
 **Behavior:**
 
-1. Fetches latest from origin
-2. Rebases the selected branch onto its recorded parent, or the default branch if it has no recorded parent
-3. Recursively rebases child branches onto their updated parents unless `--only` is used
+1. Fetches the latest refs from origin and detects the remote default branch
+2. If the selected branch is the default branch, rebases it onto `origin/<default>` so local-only commits remain on top of the updated remote branch
+3. Otherwise, rebases the selected branch onto its recorded parent, or onto `origin/<default>` if it has no recorded parent
+4. Recursively rebases child branches onto their updated parents unless `--only` is used
 
 **On conflicts:**
 Resolve and stage the conflicts, then run `repos continue`. If the rebase started with `--only`, that choice is preserved until the rebase completes or is aborted.
@@ -1357,26 +1358,26 @@ cat ~/.config/repos/config.json | grep updateBehavior
 
 ## Command Quick Reference
 
-| Command                                       | Description                                 |
-| --------------------------------------------- | ------------------------------------------- |
-| `repos list`                                  | List tracked repos and worktrees            |
-| `repos add <url> [--bare]`                    | Clone and track a repository                |
-| `repos clone [name]`                          | Clone repos from config                     |
-| `repos remove <name> [-d]`                    | Remove repo from tracking                   |
-| `repos latest`                                | Pull all repos in parallel                  |
-| `repos adopt`                                 | Add existing repos to config                |
-| `repos sync`                                  | Adopt + clone missing repos                 |
-| `repos init [--print] [--force]`              | Set up shell for work command               |
-| `repos work <branch> [repo] [--no-focus]`     | Create worktree for branch                  |
-| `repos stack <branch> [--no-focus]`           | Create stacked worktree from current branch |
-| `repos restack [--only]`                      | Deprecated alias for `repos rebase`         |
-| `repos continue`                              | Continue rebase after resolving conflicts   |
-| `repos unstack`                               | Unstack branch onto default branch          |
-| `repos squash [-m] [-f] [--dry-run]`          | Squash commits since base into one commit   |
-| `repos clean <branch> [repo]` / `-i <index>`  | Remove a worktree (`--no-focus` supported)  |
-| `repos rebase [branch] [repo]` / `-i <index>` | Rebase branch and children on their parents |
-| `repos cleanup [--dry-run]`                   | Remove merged/deleted worktrees             |
-| `repos update`                                | Update CLI to latest version                |
-| `repos -v`                                    | Show version                                |
-| `work <branch>`                               | Create worktree and cd into it (shell fn)   |
-| `work-clean [args...]`                        | Clean worktree and cd to parent (shell fn)  |
+| Command                                       | Description                                  |
+| --------------------------------------------- | -------------------------------------------- |
+| `repos list`                                  | List tracked repos and worktrees             |
+| `repos add <url> [--bare]`                    | Clone and track a repository                 |
+| `repos clone [name]`                          | Clone repos from config                      |
+| `repos remove <name> [-d]`                    | Remove repo from tracking                    |
+| `repos latest`                                | Pull all repos in parallel                   |
+| `repos adopt`                                 | Add existing repos to config                 |
+| `repos sync`                                  | Adopt + clone missing repos                  |
+| `repos init [--print] [--force]`              | Set up shell for work command                |
+| `repos work <branch> [repo] [--no-focus]`     | Create worktree for branch                   |
+| `repos stack <branch> [--no-focus]`           | Create stacked worktree from current branch  |
+| `repos restack [--only]`                      | Deprecated alias for `repos rebase`          |
+| `repos continue`                              | Continue rebase after resolving conflicts    |
+| `repos unstack`                               | Unstack branch onto default branch           |
+| `repos squash [-m] [-f] [--dry-run]`          | Squash commits since base into one commit    |
+| `repos clean <branch> [repo]` / `-i <index>`  | Remove a worktree (`--no-focus` supported)   |
+| `repos rebase [branch] [repo]` / `-i <index>` | Update default or rebase branch and children |
+| `repos cleanup [--dry-run]`                   | Remove merged/deleted worktrees              |
+| `repos update`                                | Update CLI to latest version                 |
+| `repos -v`                                    | Show version                                 |
+| `work <branch>`                               | Create worktree and cd into it (shell fn)    |
+| `work-clean [args...]`                        | Clean worktree and cd to parent (shell fn)   |

@@ -45,6 +45,38 @@ export async function getDefaultBranch(
   return { success: false, error: 'Could not determine default branch' };
 }
 
+export async function getRemoteDefaultBranchName(
+  repoDir: string
+): Promise<OperationResult<string>> {
+  const remoteHeadResult = await runGitCommand(
+    ['ls-remote', '--symref', 'origin', 'HEAD'],
+    repoDir
+  );
+
+  if (remoteHeadResult.exitCode !== 0) {
+    return {
+      success: false,
+      error:
+        remoteHeadResult.stderr ||
+        'Could not determine the remote default branch from origin/HEAD',
+    };
+  }
+
+  const defaultBranch = remoteHeadResult.stdout
+    .split('\n')
+    .map((line) => /^ref: refs\/heads\/(.+)\tHEAD$/.exec(line)?.[1])
+    .find((branch) => branch !== undefined);
+
+  if (!defaultBranch) {
+    return {
+      success: false,
+      error: 'Could not determine the remote default branch from origin/HEAD',
+    };
+  }
+
+  return { success: true, data: defaultBranch };
+}
+
 export async function localBranchExists(
   repoDir: string,
   branch: string
