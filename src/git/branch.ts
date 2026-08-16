@@ -45,7 +45,7 @@ export async function getDefaultBranch(
   return { success: false, error: 'Could not determine default branch' };
 }
 
-export async function getRemoteDefaultBranch(
+export async function getRemoteDefaultBranchName(
   repoDir: string
 ): Promise<OperationResult<string>> {
   const remoteHeadResult = await runGitCommand(
@@ -71,18 +71,6 @@ export async function getRemoteDefaultBranch(
     return {
       success: false,
       error: 'Could not determine the remote default branch from origin/HEAD',
-    };
-  }
-
-  const targetRef = `origin/${defaultBranch}`;
-  const resolvedResult = await runGitCommand(
-    ['rev-parse', '--verify', '--quiet', targetRef],
-    repoDir
-  );
-  if (resolvedResult.exitCode !== 0) {
-    return {
-      success: false,
-      error: `Remote default branch "${defaultBranch}" could not be resolved as "${targetRef}"`,
     };
   }
 

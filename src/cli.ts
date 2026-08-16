@@ -325,7 +325,9 @@ program
 
 program
   .command('rebase')
-  .description('Update the default branch or rebase a branch and its children')
+  .description(
+    'Update the default branch from origin or rebase a branch and its children on their parents'
+  )
   .argument(
     '[branch]',
     'Branch name to update or rebase (optional if inside a worktree)'
@@ -336,7 +338,7 @@ program
     'Use a worktree index from repos list',
     parseWorktreeIndex
   )
-  .option('--only', 'Only rebase the selected branch, skip children')
+  .option('--only', 'Only update or rebase the selected branch, skip children')
   .action(async (branch, repoName, options) => {
     if (options.index !== undefined && branch && !repoName) {
       repoName = branch;

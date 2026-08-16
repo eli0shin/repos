@@ -133,6 +133,45 @@ describe('repos rebase default branch updates', () => {
       stderr: '',
     });
 
+    // Do not replay upstream commits that a force-push removed.
+    scenario = await createScenario(root);
+    ctx = { configPath: scenario.configPath };
+    await cloneUpdater(scenario.remote, scenario.updater);
+    await commitFile(
+      scenario.updater,
+      'discarded.txt',
+      'discarded',
+      'discarded upstream'
+    );
+    await runGitCommand(['push', 'origin', 'trunk'], scenario.updater);
+    await runGitCommand(['fetch', 'origin'], scenario.local);
+    await runGitCommand(['merge', '--ff-only', 'origin/trunk'], scenario.local);
+    await commitFile(scenario.local, 'local.txt', 'local', 'local only');
+    await runGitCommand(['reset', '--hard', 'HEAD^'], scenario.updater);
+    await commitFile(
+      scenario.updater,
+      'replacement.txt',
+      'replacement',
+      'replacement upstream'
+    );
+    await runGitCommand(
+      ['push', '--force', 'origin', 'trunk'],
+      scenario.updater
+    );
+
+    expect(
+      await captureOutput(() => rebaseCommand(ctx, 'trunk', 'local'))
+    ).toEqual({
+      stdout:
+        'Updating "trunk" from "origin/trunk"...\n' +
+        'Updated "trunk" from "origin/trunk"\n',
+      stderr: '',
+    });
+    expect(
+      (await runGitCommand(['log', '--format=%s'], scenario.local)).stdout
+    ).toEqual('local only\nreplacement upstream\nbase');
+    expect(existsSync(join(scenario.local, 'discarded.txt'))).toBe(false);
+
     // Rebase descendants by default, but not with --only.
     scenario = await createScenario(root);
     ctx = { configPath: scenario.configPath };

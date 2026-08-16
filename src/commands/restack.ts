@@ -2,7 +2,7 @@ import type { CommandContext } from '../cli.ts';
 import { loadConfig, resolveRepo } from '../config.ts';
 import type { RepoEntry, ReposConfig } from '../types.ts';
 import {
-  getRemoteDefaultBranch,
+  getRemoteDefaultBranchName,
   listWorktrees,
   findWorktreeByBranch,
   fetchOrigin,
@@ -40,6 +40,8 @@ export type RestackContext = {
   worktrees: WorktreeInfo[];
   /** Remote default branch resolved once at the start of a new rebase run. */
   defaultBranch: string | undefined;
+  /** Remote default head from before the fetch, used as the local-commit boundary. */
+  previousDefaultHead?: string;
   rootBranch?: string;
 };
 
@@ -89,7 +91,9 @@ async function restackBranch(
     const targetRef = `origin/${rctx.defaultBranch}`;
     print(`Updating "${branch}" from "${targetRef}"...`);
 
-    const rebaseResult = await rebaseOnRef(worktree.path, targetRef);
+    const rebaseResult = rctx.previousDefaultHead
+      ? await rebaseOnto(worktree.path, targetRef, rctx.previousDefaultHead)
+      : await rebaseOnRef(worktree.path, targetRef);
     if (!rebaseResult.success) {
       await preserveRebaseContinuation(
         rctx,
@@ -375,20 +379,30 @@ export async function rebaseStackCommand(
     process.exit(1);
   }
 
-  // Fetch latest changes once at the start
+  // Identify the remote default before fetching so its old tracking head can
+  // separate local-only commits from upstream commits removed by a force-push.
+  const defaultBranchResult = await getRemoteDefaultBranchName(repo.path);
+  if (!defaultBranchResult.success) {
+    printError(`Error: ${defaultBranchResult.error}`);
+    process.exit(1);
+  }
+  const defaultBranch = defaultBranchResult.data;
+  const targetRef = `origin/${defaultBranch}`;
+  const previousDefaultHeadResult = await resolveRef(repo.path, targetRef);
+
   const fetchResult = await fetchOrigin(currentWorktree.path);
   if (!fetchResult.success) {
     printError(`Error fetching: ${fetchResult.error}`);
     process.exit(1);
   }
 
-  // Resolve the remote default branch without inferring it from the selected branch.
-  const defaultBranchResult = await getRemoteDefaultBranch(repo.path);
-  if (!defaultBranchResult.success) {
-    printError(`Error: ${defaultBranchResult.error}`);
+  const defaultHeadResult = await resolveRef(repo.path, targetRef);
+  if (!defaultHeadResult.success) {
+    printError(
+      `Error: Remote default branch "${defaultBranch}" could not be resolved as "${targetRef}"`
+    );
     process.exit(1);
   }
-  const defaultBranch = defaultBranchResult.data;
 
   const rctx = {
     ctx,
@@ -396,6 +410,9 @@ export async function rebaseStackCommand(
     config,
     worktrees: worktreesResult.data,
     defaultBranch,
+    previousDefaultHead: previousDefaultHeadResult.success
+      ? previousDefaultHeadResult.data
+      : undefined,
   } satisfies RestackContext;
 
   let success: boolean;
