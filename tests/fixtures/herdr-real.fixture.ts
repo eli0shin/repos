@@ -16,7 +16,6 @@ import { getCollisionSafeManagedWorkspaceName } from '../../src/workspace-manage
 import { anyNumber, anyString, createTestRepo } from '../helpers.ts';
 
 const herdrBinary = Bun.which('herdr');
-const integrationTest = herdrBinary ? test : test.skip;
 const testDir = `/tmp/repos-test-herdr-real-${process.pid}`;
 const repoPath = join(testDir, 'repo');
 const barePath = join(testDir, 'bare.git');
@@ -135,7 +134,8 @@ async function listWorkspaces(): Promise<RealHerdrWorkspace[]> {
 
 describe.serial('real Herdr integration', () => {
   beforeAll(async () => {
-    if (!herdrBinary) return;
+    if (!herdrBinary)
+      throw new Error('Herdr is required for integration tests');
     await rm(testDir, { recursive: true, force: true });
     await createTestRepo(repoPath);
     await runGitCommand(['branch', '-M', 'main'], repoPath);
@@ -177,202 +177,191 @@ describe.serial('real Herdr integration', () => {
     await rm(testDir, { recursive: true, force: true });
   });
 
-  integrationTest(
-    'uses one isolated-session workspace through open, reuse, and planned closure',
-    async () => {
-      const target = {
-        repoName: 'repo',
-        branch: 'feature/real',
-        worktreePath,
-      };
-      await openManagedWorkspace(target, {
-        focus: false,
-        provider: 'herdr',
-      });
-      await openManagedWorkspace(target, {
-        focus: false,
-        provider: 'herdr',
-      });
+  test('uses one isolated-session workspace through open, reuse, and planned closure', async () => {
+    const target = {
+      repoName: 'repo',
+      branch: 'feature/real',
+      worktreePath,
+    };
+    await openManagedWorkspace(target, {
+      focus: false,
+      provider: 'herdr',
+    });
+    await openManagedWorkspace(target, {
+      focus: false,
+      provider: 'herdr',
+    });
 
-      const opened = await listWorkspaces();
-      expect(
-        opened.filter((workspace) => workspace.label === 'repo@feature-real')
-      ).toEqual([
-        {
-          workspace_id: anyString(),
-          number: anyNumber(),
-          label: 'repo@feature-real',
-          focused: false,
-          pane_count: 1,
-          tab_count: 1,
-          active_tab_id: anyString(),
-          agent_status: 'unknown',
-          worktree: {
-            checkout_path: worktreePath,
-            is_linked_worktree: true,
-            repo_key: anyString(),
-            repo_name: 'repo',
-            repo_root: repoPath,
-          },
+    const opened = await listWorkspaces();
+    expect(
+      opened.filter((workspace) => workspace.label === 'repo@feature-real')
+    ).toEqual([
+      {
+        workspace_id: anyString(),
+        number: anyNumber(),
+        label: 'repo@feature-real',
+        focused: false,
+        pane_count: 1,
+        tab_count: 1,
+        active_tab_id: anyString(),
+        agent_status: 'unknown',
+        worktree: {
+          checkout_path: worktreePath,
+          is_linked_worktree: true,
+          repo_key: anyString(),
+          repo_name: 'repo',
+          repo_root: repoPath,
         },
-      ]);
+      },
+    ]);
 
-      const plan = await planManagedWorkspaceClosure(
-        [target],
-        { kind: 'automatic', candidates: [] },
-        { provider: 'herdr' }
-      );
-      await runGitCommand(['worktree', 'remove', worktreePath], repoPath);
-      await plan.execute();
+    const plan = await planManagedWorkspaceClosure(
+      [target],
+      { kind: 'automatic', candidates: [] },
+      { provider: 'herdr' }
+    );
+    await runGitCommand(['worktree', 'remove', worktreePath], repoPath);
+    await plan.execute();
 
-      expect(
-        (await listWorkspaces()).filter(
-          (workspace) => workspace.label === 'repo@feature-real'
-        )
-      ).toEqual([]);
-    }
-  );
+    expect(
+      (await listWorkspaces()).filter(
+        (workspace) => workspace.label === 'repo@feature-real'
+      )
+    ).toEqual([]);
+  });
 
-  integrationTest(
-    'verifies bare workspace provenance before reuse and closure',
-    async () => {
-      const target = {
-        repoName: 'bare',
-        branch: 'main',
-        worktreePath: barePath,
-      };
-      const unrelatedWorkspaceId = await createWorkspace(repoPath, 'bare@main');
-      const targetLabel = getCollisionSafeManagedWorkspaceName('bare', 'main');
+  test('verifies bare workspace provenance before reuse and closure', async () => {
+    const target = {
+      repoName: 'bare',
+      branch: 'main',
+      worktreePath: barePath,
+    };
+    const unrelatedWorkspaceId = await createWorkspace(repoPath, 'bare@main');
+    const targetLabel = getCollisionSafeManagedWorkspaceName('bare', 'main');
 
-      await openManagedWorkspace(target, {
-        focus: false,
-        provider: 'herdr',
-      });
-      await openManagedWorkspace(target, {
-        focus: false,
-        provider: 'herdr',
-      });
+    await openManagedWorkspace(target, {
+      focus: false,
+      provider: 'herdr',
+    });
+    await openManagedWorkspace(target, {
+      focus: false,
+      provider: 'herdr',
+    });
 
-      expect(
-        await runGitCommand(['worktree', 'list', '--porcelain'], barePath)
-      ).toEqual({
-        stdout: `worktree ${barePath}\nbare`,
-        stderr: '',
-        exitCode: 0,
-      });
-      expect(
-        (await listWorkspaces()).filter((workspace) =>
-          workspace.label.startsWith('bare@main')
-        )
-      ).toEqual([
-        {
-          workspace_id: unrelatedWorkspaceId,
-          number: anyNumber(),
-          label: 'bare@main',
-          focused: false,
-          pane_count: 1,
-          tab_count: 1,
-          active_tab_id: anyString(),
-          agent_status: 'unknown',
+    expect(
+      await runGitCommand(['worktree', 'list', '--porcelain'], barePath)
+    ).toEqual({
+      stdout: `worktree ${barePath}\nbare`,
+      stderr: '',
+      exitCode: 0,
+    });
+    expect(
+      (await listWorkspaces()).filter((workspace) =>
+        workspace.label.startsWith('bare@main')
+      )
+    ).toEqual([
+      {
+        workspace_id: unrelatedWorkspaceId,
+        number: anyNumber(),
+        label: 'bare@main',
+        focused: false,
+        pane_count: 1,
+        tab_count: 1,
+        active_tab_id: anyString(),
+        agent_status: 'unknown',
+      },
+      {
+        workspace_id: anyString(),
+        number: anyNumber(),
+        label: targetLabel,
+        focused: false,
+        pane_count: 1,
+        tab_count: 1,
+        active_tab_id: anyString(),
+        agent_status: 'unknown',
+      },
+    ]);
+
+    const plan = await planManagedWorkspaceClosure(
+      [target],
+      { kind: 'preserve', destination: { path: repoPath } },
+      { provider: 'herdr' }
+    );
+    await plan.execute();
+    expect(
+      (await listWorkspaces()).filter((workspace) =>
+        workspace.label.startsWith('bare@main')
+      )
+    ).toEqual([
+      {
+        workspace_id: unrelatedWorkspaceId,
+        number: anyNumber(),
+        label: 'bare@main',
+        focused: false,
+        pane_count: 1,
+        tab_count: 1,
+        active_tab_id: anyString(),
+        agent_status: 'unknown',
+      },
+    ]);
+    await runHerdr(['workspace', 'close', unrelatedWorkspaceId]);
+  });
+
+  test('replaces a closing default-branch workspace with the bare destination', async () => {
+    await runGitCommand(['worktree', 'add', bareMainPath, 'main'], barePath);
+    const closingTarget = {
+      repoName: 'bare',
+      branch: 'main',
+      worktreePath: bareMainPath,
+    };
+    const destination = {
+      repoName: 'bare',
+      branch: 'main',
+      worktreePath: barePath,
+    };
+    await openManagedWorkspace(closingTarget, {
+      focus: false,
+      provider: 'herdr',
+    });
+    const plan = await planManagedWorkspaceClosure(
+      [closingTarget],
+      { kind: 'destination', target: destination },
+      { provider: 'herdr' }
+    );
+
+    await runGitCommand(['worktree', 'remove', bareMainPath], barePath);
+    await plan.execute();
+
+    expect(
+      (await listWorkspaces()).filter(
+        (workspace) => workspace.label === 'bare@main'
+      )
+    ).toEqual([
+      {
+        workspace_id: anyString(),
+        number: anyNumber(),
+        label: 'bare@main',
+        focused: true,
+        pane_count: 1,
+        tab_count: 1,
+        active_tab_id: anyString(),
+        agent_status: 'unknown',
+        worktree: {
+          checkout_path: barePath,
+          is_linked_worktree: false,
+          repo_key: barePath,
+          repo_name: 'bare.git',
+          repo_root: barePath,
         },
-        {
-          workspace_id: anyString(),
-          number: anyNumber(),
-          label: targetLabel,
-          focused: false,
-          pane_count: 1,
-          tab_count: 1,
-          active_tab_id: anyString(),
-          agent_status: 'unknown',
-        },
-      ]);
+      },
+    ]);
+    expect(await Bun.file(join(bareMainPath, 'test.txt')).exists()).toBe(false);
 
-      const plan = await planManagedWorkspaceClosure(
-        [target],
-        { kind: 'preserve', destination: { path: repoPath } },
-        { provider: 'herdr' }
-      );
-      await plan.execute();
-      expect(
-        (await listWorkspaces()).filter((workspace) =>
-          workspace.label.startsWith('bare@main')
-        )
-      ).toEqual([
-        {
-          workspace_id: unrelatedWorkspaceId,
-          number: anyNumber(),
-          label: 'bare@main',
-          focused: false,
-          pane_count: 1,
-          tab_count: 1,
-          active_tab_id: anyString(),
-          agent_status: 'unknown',
-        },
-      ]);
-      await runHerdr(['workspace', 'close', unrelatedWorkspaceId]);
-    }
-  );
-
-  integrationTest(
-    'replaces a closing default-branch workspace with the bare destination',
-    async () => {
-      await runGitCommand(['worktree', 'add', bareMainPath, 'main'], barePath);
-      const closingTarget = {
-        repoName: 'bare',
-        branch: 'main',
-        worktreePath: bareMainPath,
-      };
-      const destination = {
-        repoName: 'bare',
-        branch: 'main',
-        worktreePath: barePath,
-      };
-      await openManagedWorkspace(closingTarget, {
-        focus: false,
-        provider: 'herdr',
-      });
-      const plan = await planManagedWorkspaceClosure(
-        [closingTarget],
-        { kind: 'destination', target: destination },
-        { provider: 'herdr' }
-      );
-
-      await runGitCommand(['worktree', 'remove', bareMainPath], barePath);
-      await plan.execute();
-
-      expect(
-        (await listWorkspaces()).filter(
-          (workspace) => workspace.label === 'bare@main'
-        )
-      ).toEqual([
-        {
-          workspace_id: anyString(),
-          number: anyNumber(),
-          label: 'bare@main',
-          focused: true,
-          pane_count: 1,
-          tab_count: 1,
-          active_tab_id: anyString(),
-          agent_status: 'unknown',
-          worktree: {
-            checkout_path: barePath,
-            is_linked_worktree: false,
-            repo_key: barePath,
-            repo_name: 'bare.git',
-            repo_root: barePath,
-          },
-        },
-      ]);
-      expect(await Bun.file(join(bareMainPath, 'test.txt')).exists()).toBe(
-        false
-      );
-
-      const destinationPlan = await planManagedWorkspaceClosure(
-        [destination],
-        { kind: 'preserve', destination: { path: repoPath } },
-        { provider: 'herdr' }
-      );
-      await destinationPlan.execute();
-    }
-  );
+    const destinationPlan = await planManagedWorkspaceClosure(
+      [destination],
+      { kind: 'preserve', destination: { path: repoPath } },
+      { provider: 'herdr' }
+    );
+    await destinationPlan.execute();
+  });
 });
