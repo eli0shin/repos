@@ -1,5 +1,11 @@
 # repos
 
+## 2.4.1
+
+### Patch Changes
+
+- [#119](https://github.com/eli0shin/repos/pull/119) [`dfb125a`](https://github.com/eli0shin/repos/commit/dfb125afb5a04da22a7f0a3e33f600bb1b6745d0) Thanks [@eli0shin](https://github.com/eli0shin)! - Update the local default branch before rebasing features onto it: use upstream when behind or diverged, and keep local when ahead. Preserve local-head rebasing for non-default parents and protect dirty or busy default worktrees.
+
 ## 2.4.0
 
 ### Minor Changes
