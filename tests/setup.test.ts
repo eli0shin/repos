@@ -4,6 +4,7 @@ import { HERDR_ENVIRONMENT_KEYS } from './utils.ts';
 
 function normalizeTestOutput(output: string): string {
   return output
+    .replace(/^(bun test v\S+) \([a-f0-9]+\)\n/, '$1 (<revision>)\n')
     .replace(/repos-test-workspace-manager-\d+/g, '<repo>')
     .replace(/\[\d+(?:\.\d+)?(?:ms|s)\]/g, '[<time>]');
 }
@@ -47,7 +48,7 @@ test('test setup isolates the tmux suite from inherited Herdr markers', async ()
     exitCode,
   }).toEqual({
     stdout:
-      `bun test v${Bun.version} (${Bun.revision.slice(0, 8)})\n` +
+      `bun test v${Bun.version} (<revision>)\n` +
       'Killed tmux session "<repo>@feature"\n' +
       'Killed tmux session "<repo>@feature"\n' +
       'Killed tmux session "<repo>@feature"\n' +

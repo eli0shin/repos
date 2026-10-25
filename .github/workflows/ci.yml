@@ -21,9 +21,18 @@ jobs:
           git config --global user.name "github-actions[bot]"
 
       - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
 
       - name: Install dependencies
         run: bun install
+
+      - name: Install Herdr
+        run: |
+          curl -fsSL --retry 3 https://herdr.dev/install.sh -o "$RUNNER_TEMP/install-herdr.sh"
+          HERDR_INSTALL_DIR="$RUNNER_TEMP/herdr-bin" sh "$RUNNER_TEMP/install-herdr.sh"
+          echo "$RUNNER_TEMP/herdr-bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/herdr-bin/herdr" --version
 
       - name: Check formatting
         id: format-check

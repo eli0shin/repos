@@ -34,6 +34,7 @@ export type FakeHerdrState = {
 };
 
 const FAKE_HERDR_SOURCE = String.raw`#!/usr/bin/env bun
+import { rename } from 'node:fs/promises';
 const statePath = process.env.FAKE_HERDR_STATE;
 if (!statePath) process.exit(2);
 const args = process.argv.slice(2);
@@ -56,7 +57,13 @@ state.calls.push({
     HERDR_BIN_PATH: process.env.HERDR_BIN_PATH,
   },
 });
-const save = async () => Bun.write(statePath, JSON.stringify(state));
+// Startup and readiness probes overlap. Publish complete JSON atomically so
+// another fake process never reads a truncated state file.
+const save = async () => {
+  const temporaryPath = statePath + '.' + process.pid + '.tmp';
+  await Bun.write(temporaryPath, JSON.stringify(state));
+  await rename(temporaryPath, statePath);
+};
 const success = async (result) => {
   await save();
   console.log(JSON.stringify({ id: 'fake', result }));
@@ -73,10 +80,10 @@ if (state.failure && command.startsWith(state.failure.command)) {
 }
 if (args[0] === 'server') {
   state.running = true;
+  await save();
   if (process.env.FAKE_HERDR_SERVER_READY) {
     await Bun.write(process.env.FAKE_HERDR_SERVER_READY, 'ready');
   }
-  await save();
   process.exit(0);
 }
 if (!state.running) await failure('server_not_running', 'Herdr server is not running');

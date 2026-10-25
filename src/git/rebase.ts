@@ -9,6 +9,93 @@ import {
   runGitCommandInteractive,
 } from './core.ts';
 import { fetchOrigin } from './remote.ts';
+import { hasUncommittedChanges, localBranchExists } from './branch.ts';
+import { resolveRef } from './repository.ts';
+import { findWorktreeByBranch, getInProgressOperation } from './worktree.ts';
+import type { WorktreeInfo } from './types.ts';
+
+/** Keep a strictly-ahead local default; otherwise use upstream, including divergence. */
+export async function updateDefaultBranch(
+  repoDir: string,
+  branch: string,
+  worktrees: WorktreeInfo[]
+): Promise<OperationResult<boolean>> {
+  const localRef = `refs/heads/${branch}`;
+  if (!(await localBranchExists(repoDir, branch))) {
+    return { success: true, data: false };
+  }
+
+  const localHead = await resolveRef(repoDir, localRef);
+  if (!localHead.success) return localHead;
+  const upstreamHead = await resolveRef(
+    repoDir,
+    `refs/remotes/origin/${branch}`
+  );
+  if (!upstreamHead.success) return upstreamHead;
+
+  const worktree = findWorktreeByBranch(worktrees, branch);
+  // A paused rebase detaches HEAD, hiding the branch from worktree list.
+  if (!worktree) {
+    for (const candidate of worktrees.filter((wt) => !wt.branch)) {
+      const rebasingBranch = await getRebaseBranch(candidate.path);
+      if (rebasingBranch.success && rebasingBranch.data === branch) {
+        return {
+          success: false,
+          error: `Cannot update "${branch}": worktree has an in-progress rebase`,
+        };
+      }
+    }
+  }
+
+  const upstreamIsAncestor = await runGitCommand(
+    ['merge-base', '--is-ancestor', upstreamHead.data, localHead.data],
+    repoDir
+  );
+  if (upstreamIsAncestor.exitCode === 0) {
+    return { success: true, data: false };
+  }
+  if (upstreamIsAncestor.exitCode !== 1) {
+    return {
+      success: false,
+      error:
+        upstreamIsAncestor.stderr || 'Failed to compare default branch heads',
+    };
+  }
+
+  if (worktree) {
+    const operation = await getInProgressOperation(worktree.path);
+    if (operation) {
+      return {
+        success: false,
+        error: `Cannot update "${branch}": worktree has an in-progress ${operation}`,
+      };
+    }
+    const dirty = await hasUncommittedChanges(worktree.path);
+    if (!dirty.success) return dirty;
+    if (dirty.data) {
+      return {
+        success: false,
+        error: `Cannot update "${branch}": worktree has uncommitted changes`,
+      };
+    }
+  }
+
+  // --keep updates both the checked-out files and the branch, without clobbering
+  // changes made after the safety check. Never hard-reset another worktree.
+  const result = worktree
+    ? await runGitCommand(['reset', '--keep', upstreamHead.data], worktree.path)
+    : await runGitCommand(
+        ['update-ref', localRef, upstreamHead.data, localHead.data],
+        repoDir
+      );
+  if (result.exitCode !== 0) {
+    return {
+      success: false,
+      error: result.stderr || `Failed to update "${branch}"`,
+    };
+  }
+  return { success: true, data: true };
+}
 
 export async function rebaseOnBranch(
   repoDir: string,

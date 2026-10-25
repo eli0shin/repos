@@ -25,6 +25,8 @@ jobs:
       - name: Setup Bun
         if: steps.changes.outputs.src_changed == 'true'
         uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
 
       - name: Install dependencies
         if: steps.changes.outputs.src_changed == 'true'

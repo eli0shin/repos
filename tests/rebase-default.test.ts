@@ -40,6 +40,15 @@ async function captureOutput(
   }
 }
 
+async function captureExit(command: () => Promise<void>) {
+  const mockExit = mockProcessExit();
+  try {
+    return await captureOutput(command);
+  } finally {
+    mockExit.mockRestore();
+  }
+}
+
 async function commitFile(
   repo: string,
   file: string,
@@ -91,8 +100,370 @@ describe('repos rebase default branch updates', () => {
     await rm(root, { recursive: true, force: true });
   });
 
+  for (const relationship of ['recorded', 'implicit'] as const) {
+    for (const state of ['behind', 'ahead', 'diverged'] as const) {
+      test(`uses the newest default head when ${relationship} parent is ${state}`, async () => {
+        const scenario = await createScenario(root);
+        if (state !== 'behind') {
+          await commitFile(
+            scenario.local,
+            'local.txt',
+            'local',
+            'local update'
+          );
+        }
+        const feature = join(root, 'feature');
+        await runGitCommand(
+          ['worktree', 'add', '-b', 'feature', feature],
+          scenario.local
+        );
+        await commitFile(feature, 'feature.txt', 'feature', 'feature');
+        if (relationship === 'recorded') {
+          await writeConfig(scenario.configPath, {
+            repos: [
+              {
+                name: 'local',
+                url: scenario.remote,
+                path: scenario.local,
+                stacks: [{ parent: 'trunk', child: 'feature' }],
+              },
+            ],
+          });
+        }
+        await cloneUpdater(scenario.remote, scenario.updater);
+        if (state !== 'ahead') {
+          await commitFile(
+            scenario.updater,
+            'remote.txt',
+            'remote',
+            'remote update'
+          );
+          await runGitCommand(['push', 'origin', 'trunk'], scenario.updater);
+        }
+        process.chdir(feature);
+        const result = await captureOutput(() =>
+          rebaseCommand({ configPath: scenario.configPath })
+        );
+        if (result.error) throw result.error;
+        const expectedDefaultLog =
+          state === 'ahead' ? 'local update\nbase' : 'remote update\nbase';
+        expect(
+          (await runGitCommand(['log', '--format=%s', 'trunk'], feature)).stdout
+        ).toEqual(expectedDefaultLog);
+        expect(
+          (await runGitCommand(['log', '--format=%s'], feature)).stdout
+        ).toEqual(`feature\n${expectedDefaultLog}`);
+        const defaultHead = (
+          await runGitCommand(['rev-parse', 'trunk'], feature)
+        ).stdout;
+        expect(await getForkPoint(scenario.local, 'feature')).toEqual({
+          success: true,
+          data: defaultHead,
+        });
+        expect(
+          (await runGitCommand(['status', '--porcelain'], scenario.local))
+            .stdout
+        ).toEqual('');
+        expect(
+          existsSync(
+            join(scenario.local, state === 'ahead' ? 'local.txt' : 'remote.txt')
+          )
+        ).toEqual(true);
+      });
+    }
+  }
+
+  test('uses a non-default parent local head without updating it from upstream', async () => {
+    const scenario = await createScenario(root);
+    const parent = join(root, 'parent');
+    const feature = join(root, 'feature');
+    await runGitCommand(
+      ['worktree', 'add', '-b', 'parent', parent],
+      scenario.local
+    );
+    await commitFile(parent, 'parent.txt', 'parent', 'parent');
+    await runGitCommand(['push', '-u', 'origin', 'parent'], parent);
+    await runGitCommand(
+      ['worktree', 'add', '-b', 'feature', feature, 'parent'],
+      scenario.local
+    );
+    await commitFile(feature, 'feature.txt', 'feature', 'feature');
+    await commitFile(parent, 'local.txt', 'local', 'local parent update');
+    await cloneUpdater(scenario.remote, scenario.updater);
+    await runGitCommand(['checkout', 'parent'], scenario.updater);
+    await commitFile(
+      scenario.updater,
+      'remote.txt',
+      'remote',
+      'remote parent update'
+    );
+    await runGitCommand(['push', 'origin', 'parent'], scenario.updater);
+    await writeConfig(scenario.configPath, {
+      repos: [
+        {
+          name: 'local',
+          url: scenario.remote,
+          path: scenario.local,
+          stacks: [{ parent: 'parent', child: 'feature' }],
+        },
+      ],
+    });
+    process.chdir(feature);
+    const result = await captureOutput(() =>
+      rebaseCommand({ configPath: scenario.configPath })
+    );
+    if (result.error) throw result.error;
+    expect(
+      (await runGitCommand(['log', '--format=%s'], feature)).stdout
+    ).toEqual('feature\nlocal parent update\nparent\nbase');
+    expect(
+      (await runGitCommand(['log', '--format=%s'], parent)).stdout
+    ).toEqual('local parent update\nparent\nbase');
+  });
+
+  for (const state of ['behind', 'ahead', 'diverged', 'missing'] as const) {
+    test(`handles a ${state} local default without a checked-out default worktree`, async () => {
+      const scenario = await createScenario(root);
+      if (state === 'ahead' || state === 'diverged') {
+        await commitFile(scenario.local, 'local.txt', 'local', 'local update');
+      }
+      const feature = join(root, 'feature');
+      await runGitCommand(
+        ['worktree', 'add', '-b', 'feature', feature],
+        scenario.local
+      );
+      await commitFile(feature, 'feature.txt', 'feature', 'feature');
+      await runGitCommand(['checkout', '--detach'], scenario.local);
+      if (state === 'missing') {
+        await runGitCommand(['branch', '-D', 'trunk'], scenario.local);
+      }
+      await cloneUpdater(scenario.remote, scenario.updater);
+      if (state !== 'ahead') {
+        await commitFile(
+          scenario.updater,
+          'remote.txt',
+          'remote',
+          'remote update'
+        );
+        await runGitCommand(['push', 'origin', 'trunk'], scenario.updater);
+      }
+      process.chdir(feature);
+      const result = await captureOutput(() =>
+        rebaseCommand({ configPath: scenario.configPath })
+      );
+      if (result.error) throw result.error;
+      const expected =
+        state === 'ahead' ? 'local update\nbase' : 'remote update\nbase';
+      expect(
+        (await runGitCommand(['log', '--format=%s'], feature)).stdout
+      ).toEqual(`feature\n${expected}`);
+      const target = state === 'missing' ? 'origin/trunk' : 'trunk';
+      expect(
+        (await runGitCommand(['log', '--format=%s', target], feature)).stdout
+      ).toEqual(expected);
+    });
+  }
+
+  for (const obstruction of [
+    'uncommitted changes',
+    'merge',
+    'rebase',
+  ] as const) {
+    test(`does not update main or feature when main has ${obstruction}`, async () => {
+      const scenario = await createScenario(root);
+      const feature = join(root, 'feature');
+      await runGitCommand(
+        ['worktree', 'add', '-b', 'feature', feature],
+        scenario.local
+      );
+      await commitFile(feature, 'feature.txt', 'feature', 'feature');
+      await cloneUpdater(scenario.remote, scenario.updater);
+      await commitFile(scenario.updater, 'base.txt', 'remote', 'remote update');
+      await runGitCommand(['push', 'origin', 'trunk'], scenario.updater);
+      const upstreamHead = (
+        await runGitCommand(['rev-parse', 'HEAD'], scenario.updater)
+      ).stdout;
+      if (obstruction === 'uncommitted changes') {
+        await Bun.write(join(scenario.local, 'base.txt'), 'uncommitted');
+      } else {
+        await commitFile(scenario.local, 'base.txt', 'local', 'local update');
+        await runGitCommand(['fetch', 'origin'], scenario.local);
+        const operation =
+          obstruction === 'merge'
+            ? ['merge', 'origin/trunk']
+            : ['rebase', 'origin/trunk'];
+        await runGitCommand(operation, scenario.local);
+      }
+      const mainHead = (
+        await runGitCommand(['rev-parse', 'trunk'], scenario.local)
+      ).stdout;
+      const featureHead = (await runGitCommand(['rev-parse', 'HEAD'], feature))
+        .stdout;
+      const status = (
+        await runGitCommand(['status', '--porcelain'], scenario.local)
+      ).stdout;
+      const contents = await Bun.file(join(scenario.local, 'base.txt')).text();
+      process.chdir(feature);
+      const result = await captureExit(() =>
+        rebaseCommand({ configPath: scenario.configPath })
+      );
+      expect(result.error).toEqual(new Error('process.exit(1)'));
+      expect(result.stderr).toEqual(
+        `Error: Cannot update "trunk": worktree has ${obstruction === 'uncommitted changes' ? obstruction : `an in-progress ${obstruction}`}\n`
+      );
+      expect(
+        (await runGitCommand(['rev-parse', 'trunk'], scenario.local)).stdout
+      ).toEqual(mainHead);
+      expect(
+        (await runGitCommand(['rev-parse', 'HEAD'], feature)).stdout
+      ).toEqual(featureHead);
+      expect(
+        (await runGitCommand(['status', '--porcelain'], scenario.local)).stdout
+      ).toEqual(status);
+      expect(await Bun.file(join(scenario.local, 'base.txt')).text()).toEqual(
+        contents
+      );
+      expect(
+        (await runGitCommand(['rev-parse', 'origin/trunk'], feature)).stdout
+      ).toEqual(upstreamHead);
+    });
+  }
+
+  test('preserves child boundaries before replacing a divergent default with --only', async () => {
+    const scenario = await createScenario(root);
+    await commitFile(scenario.local, 'local.txt', 'local', 'local update');
+    const feature = join(root, 'feature');
+    await runGitCommand(
+      ['worktree', 'add', '-b', 'feature', feature],
+      scenario.local
+    );
+    await commitFile(feature, 'feature.txt', 'feature', 'feature');
+    await writeConfig(scenario.configPath, {
+      repos: [
+        {
+          name: 'local',
+          url: scenario.remote,
+          path: scenario.local,
+          stacks: [{ parent: 'trunk', child: 'feature' }],
+        },
+      ],
+    });
+    const featureHead = (await runGitCommand(['rev-parse', 'HEAD'], feature))
+      .stdout;
+    await cloneUpdater(scenario.remote, scenario.updater);
+    await commitFile(scenario.updater, 'remote.txt', 'remote', 'remote update');
+    await runGitCommand(['push', 'origin', 'trunk'], scenario.updater);
+    const ctx = { configPath: scenario.configPath };
+    const update = await captureOutput(() =>
+      rebaseCommand(ctx, 'trunk', 'local', { only: true })
+    );
+    if (update.error) throw update.error;
+    expect(
+      (await runGitCommand(['rev-parse', 'HEAD'], feature)).stdout
+    ).toEqual(featureHead);
+    const rebase = await captureOutput(() =>
+      rebaseCommand(ctx, 'feature', 'local')
+    );
+    if (rebase.error) throw rebase.error;
+    expect(
+      (await runGitCommand(['log', '--format=%s'], feature)).stdout
+    ).toEqual('feature\nremote update\nbase');
+  });
+
+  test('preserves implicit siblings before replacing a divergent default', async () => {
+    const scenario = await createScenario(root);
+    await commitFile(scenario.local, 'local.txt', 'local', 'local update');
+    const siblings = [join(root, 'feature-a'), join(root, 'feature-b')];
+    for (const [index, feature] of siblings.entries()) {
+      await runGitCommand(
+        ['worktree', 'add', '-b', `feature-${index}`, feature, 'trunk'],
+        scenario.local
+      );
+      await commitFile(
+        feature,
+        `feature-${index}.txt`,
+        'feature',
+        `feature ${index}`
+      );
+    }
+    await cloneUpdater(scenario.remote, scenario.updater);
+    await commitFile(scenario.updater, 'remote.txt', 'remote', 'remote update');
+    await runGitCommand(['push', 'origin', 'trunk'], scenario.updater);
+    for (const [index, feature] of siblings.entries()) {
+      process.chdir(feature);
+      const result = await captureOutput(() =>
+        rebaseCommand({ configPath: scenario.configPath })
+      );
+      if (result.error) throw result.error;
+      expect(
+        (await runGitCommand(['log', '--format=%s'], feature)).stdout
+      ).toEqual(`feature ${index}\nremote update\nbase`);
+    }
+  });
+
+  test('does not let an unrelated orphan worktree block a feature rebase', async () => {
+    const scenario = await createScenario(root);
+    const feature = join(root, 'feature');
+    await runGitCommand(
+      ['worktree', 'add', '-b', 'feature', feature],
+      scenario.local
+    );
+    await commitFile(feature, 'feature.txt', 'feature', 'feature');
+    const site = join(root, 'site');
+    await runGitCommand(['worktree', 'add', '--detach', site], scenario.local);
+    await runGitCommand(['checkout', '--orphan', 'site'], site);
+    await runGitCommand(['rm', '-rf', '.'], site);
+    await commitFile(site, 'index.html', 'site', 'site root');
+    const siteHead = (await runGitCommand(['rev-parse', 'HEAD'], site)).stdout;
+    await cloneUpdater(scenario.remote, scenario.updater);
+    await commitFile(scenario.updater, 'remote.txt', 'remote', 'remote update');
+    await runGitCommand(['push', 'origin', 'trunk'], scenario.updater);
+    process.chdir(feature);
+    const result = await captureExit(() =>
+      rebaseCommand({ configPath: scenario.configPath })
+    );
+    if (result.error) throw result.error;
+    expect(
+      (await runGitCommand(['log', '--format=%s'], feature)).stdout
+    ).toEqual('feature\nremote update\nbase');
+    expect((await runGitCommand(['rev-parse', 'HEAD'], site)).stdout).toEqual(
+      siteHead
+    );
+  });
+
+  test('continues an implicit-parent conflict using the ahead local default fork point', async () => {
+    const scenario = await createScenario(root);
+    const feature = join(root, 'feature');
+    await runGitCommand(
+      ['worktree', 'add', '-b', 'feature', feature],
+      scenario.local
+    );
+    await commitFile(feature, 'base.txt', 'feature', 'feature conflict');
+    await commitFile(scenario.local, 'base.txt', 'local', 'local update');
+    const ctx = { configPath: scenario.configPath };
+    process.chdir(feature);
+    const result = await captureExit(() => rebaseCommand(ctx));
+    expect(result.error).toEqual(new Error('process.exit(1)'));
+    await Bun.write(join(feature, 'base.txt'), 'resolved');
+    await runGitCommand(['add', 'base.txt'], feature);
+    expect(await captureOutput(() => continueCommand(ctx))).toEqual({
+      stdout:
+        'Continuing rebase...\nUpdated fork point reference.\nRebase completed successfully.\n',
+      stderr: '',
+    });
+    const localHead = (await runGitCommand(['rev-parse', 'trunk'], feature))
+      .stdout;
+    expect(await getForkPoint(scenario.local, 'feature')).toEqual({
+      success: true,
+      data: localHead,
+    });
+    expect(
+      (await runGitCommand(['log', '--format=%s'], feature)).stdout
+    ).toEqual('feature conflict\nlocal update\nbase');
+  });
+
   test('updates defaults and preserves the Branch Stack contracts', async () => {
-    // Update a non-main default branch and preserve local-only commits and refs.
+    // Use upstream on a divergent non-main default branch; preserve its refs.
     let scenario = await createScenario(root);
     let ctx = { configPath: scenario.configPath };
     await cloneUpdater(scenario.remote, scenario.updater);
@@ -117,12 +488,12 @@ describe('repos rebase default branch updates', () => {
     });
     expect(
       (await runGitCommand(['log', '--format=%s'], scenario.local)).stdout
-    ).toEqual('local update\nremote update\nbase');
+    ).toEqual('remote update\nbase');
     expect(await getForkPoint(scenario.local, 'trunk')).toEqual({
       success: true,
       data: oldForkPoint,
     });
-    expect(existsSync(join(scenario.local, 'local.txt'))).toBe(true);
+    expect(existsSync(join(scenario.local, 'local.txt'))).toBe(false);
     expect(existsSync(join(scenario.local, 'remote.txt'))).toBe(true);
     expect(
       await captureOutput(() => rebaseCommand(ctx, 'trunk', 'local'))
@@ -169,7 +540,7 @@ describe('repos rebase default branch updates', () => {
     });
     expect(
       (await runGitCommand(['log', '--format=%s'], scenario.local)).stdout
-    ).toEqual('local only\nreplacement upstream\nbase');
+    ).toEqual('replacement upstream\nbase');
     expect(existsSync(join(scenario.local, 'discarded.txt'))).toBe(false);
 
     // Rebase descendants by default, but not with --only.
@@ -269,7 +640,7 @@ describe('repos rebase default branch updates', () => {
       error: 'No base ref found for branch "feature"',
     });
 
-    // Continue a conflicting default update without recording a Fork Point.
+    // Continue a conflicting child rebase after updating the default branch.
     scenario = await createScenario(root);
     ctx = { configPath: scenario.configPath };
     await cloneUpdater(scenario.remote, scenario.updater);
@@ -281,7 +652,17 @@ describe('repos rebase default branch updates', () => {
       ['worktree', 'add', '-b', 'conflict-child', conflictChild],
       scenario.local
     );
-    await commitFile(conflictChild, 'child.txt', 'child', 'conflict child');
+    await commitFile(conflictChild, 'base.txt', 'child', 'conflict child');
+    const grandchild = join(root, 'grandchild');
+    await runGitCommand(
+      ['worktree', 'add', '-b', 'grandchild', grandchild, 'conflict-child'],
+      scenario.local
+    );
+    await commitFile(grandchild, 'grandchild.txt', 'grandchild', 'grandchild');
+    await runGitCommand(
+      ['update-ref', 'refs/bases/grandchild', 'conflict-child'],
+      scenario.local
+    );
     const conflictForkPoint = (
       await runGitCommand(['rev-parse', 'trunk'], scenario.local)
     ).stdout;
@@ -295,7 +676,10 @@ describe('repos rebase default branch updates', () => {
           name: 'local',
           url: scenario.remote,
           path: scenario.local,
-          stacks: [{ parent: 'trunk', child: 'conflict-child' }],
+          stacks: [
+            { parent: 'trunk', child: 'conflict-child' },
+            { parent: 'conflict-child', child: 'grandchild' },
+          ],
         },
       ],
     });
@@ -306,7 +690,9 @@ describe('repos rebase default branch updates', () => {
     expect(conflictResult.error).toEqual(new Error('process.exit(1)'));
     expect(conflictResult.stdout).toEqual(
       'Will rebase "trunk" and 1 child branch(es)...\n' +
-        'Updating "trunk" from "origin/trunk"...\n'
+        'Updating "trunk" from "origin/trunk"...\n' +
+        'Updated "trunk" from "origin/trunk"\n' +
+        'Rebasing "conflict-child" on parent branch "trunk"...\n'
     );
     expect(conflictResult.stderr).toEqual(
       'Error: Rebase paused due to conflicts.\n\n' +
@@ -319,21 +705,22 @@ describe('repos rebase default branch updates', () => {
     conflictExit.mockRestore();
 
     await rename(scenario.remote, join(root, 'remote-unavailable.git'));
-    await Bun.write(join(scenario.local, 'base.txt'), 'resolved');
-    await runGitCommand(['add', 'base.txt'], scenario.local);
-    process.chdir(scenario.local);
+    await Bun.write(join(conflictChild, 'base.txt'), 'resolved');
+    await runGitCommand(['add', 'base.txt'], conflictChild);
+    process.chdir(conflictChild);
     expect(await captureOutput(() => continueCommand(ctx))).toEqual({
       stdout:
         'Continuing rebase...\n' +
+        'Updated fork point reference.\n' +
         'Rebase completed successfully.\n' +
         'Rebasing 1 remaining branch(es)...\n' +
-        'Rebasing "conflict-child" on parent branch "trunk"...\n' +
-        'Rebased "conflict-child" on "trunk"\n',
+        'Rebasing "grandchild" on parent branch "conflict-child"...\n' +
+        'Rebased "grandchild" on "conflict-child"\n',
       stderr: '',
     });
     expect(
       (await runGitCommand(['log', '--format=%s'], conflictChild)).stdout
-    ).toEqual('conflict child\nlocal conflict\nremote conflict\nbase');
+    ).toEqual('conflict child\nremote conflict\nbase');
     expect(await getForkPoint(scenario.local, 'trunk')).toEqual({
       success: false,
       error: 'No base ref found for branch "trunk"',

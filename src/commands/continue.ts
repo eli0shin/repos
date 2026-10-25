@@ -18,6 +18,7 @@ import {
   shouldRebaseChildren,
   getRebaseDefaultBranch,
   getRebaseRoot,
+  localBranchExists,
 } from '../git/index.ts';
 import { print, printError } from '../output.ts';
 import {
@@ -161,7 +162,10 @@ export async function continueCommand(ctx: CommandContext): Promise<void> {
       print('Updated fork point reference.');
     }
   } else if (!isDefaultBranch && defaultBranchResult.success) {
-    const targetRef = `origin/${defaultBranchResult.data}`;
+    const defaultBranch = defaultBranchResult.data;
+    const targetRef = (await localBranchExists(repo.path, defaultBranch))
+      ? defaultBranch
+      : `origin/${defaultBranch}`;
     const targetResult = await runGitCommand(
       ['rev-parse', targetRef],
       repo.path
