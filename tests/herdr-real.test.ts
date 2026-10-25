@@ -5,7 +5,9 @@ const herdrBinary = Bun.which('herdr');
 const integrationTest = herdrBinary ? test : test.skip;
 
 function normalizeTestOutput(output: string): string {
-  return output.replace(/\[\d+(?:\.\d+)?(?:ms|s)\]/g, '[<time>]');
+  return output
+    .replace(/^(bun test v\S+) \([a-f0-9]+\)\n/, '$1 (<revision>)\n')
+    .replace(/\[\d+(?:\.\d+)?(?:ms|s)\]/g, '[<time>]');
 }
 
 integrationTest(
@@ -40,7 +42,7 @@ integrationTest(
       exitCode,
     }).toEqual({
       stdout:
-        `bun test v${Bun.version} (${Bun.revision.slice(0, 8)})\n` +
+        `bun test v${Bun.version} (<revision>)\n` +
         'Closed Herdr workspace "repo@feature-real"\n',
       stderr:
         '\ntests/fixtures/herdr-real.fixture.ts:\n' +
