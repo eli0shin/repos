@@ -844,9 +844,11 @@ repos rebase --only                # Update or rebase only the selected branch
 **Behavior:**
 
 1. Fetches the latest refs from origin and detects the remote default branch
-2. If the selected branch is the default branch, rebases it onto `origin/<default>` so local-only commits remain on top of the updated remote branch
-3. Otherwise, rebases the selected branch onto its recorded parent, or onto `origin/<default>` if it has no recorded parent
-4. Recursively rebases child branches onto their updated parents unless `--only` is used
+2. When updating the default branch or rebasing onto it, compares its local head with `origin/<default>` by commit ancestry. Keeps local when it is ahead; updates local to upstream when it is behind or the histories have diverged. On divergence, local-only default-branch commits are not replayed
+3. Rebases feature branches onto the updated local default head (or upstream if no local default exists). Non-default parents always use their local head, without pulling their upstream changes
+4. Recursively rebases child branches onto their updated parents unless `--only` is used. Updating the default worktree is still required when it is the selected branch's base
+
+Default-branch updates also update its checked-out files. If an update is needed, uncommitted changes or an in-progress Git operation in that worktree block the update rather than being overwritten.
 
 **On conflicts:**
 Resolve and stage the conflicts, then run `repos continue`. If the rebase started with `--only`, that choice is preserved until the rebase completes or is aborted.

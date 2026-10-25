@@ -253,7 +253,7 @@ export async function pruneWorktrees(
   return { success: true, data: undefined };
 }
 
-async function getInProgressOperation(
+export async function getInProgressOperation(
   worktreePath: string
 ): Promise<string | undefined> {
   const gitDirResult = await runGitCommand(

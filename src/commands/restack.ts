@@ -1,6 +1,6 @@
 import type { CommandContext } from '../cli.ts';
 import { loadConfig, resolveRepo } from '../config.ts';
-import type { RepoEntry, ReposConfig } from '../types.ts';
+import type { OperationResult, RepoEntry, ReposConfig } from '../types.ts';
 import {
   getRemoteDefaultBranchName,
   listWorktrees,
@@ -9,11 +9,14 @@ import {
   rebaseOnto,
   rebaseOnRef,
   getHeadCommit,
+  getMergeBase,
   resolveRef,
   resolveWorktree,
   isRebaseInProgress,
   markRebaseContinuation,
   runGitCommand,
+  localBranchExists,
+  updateDefaultBranch,
   type WorktreeInfo,
 } from '../git/index.ts';
 import { print, printError } from '../output.ts';
@@ -40,8 +43,6 @@ export type RestackContext = {
   worktrees: WorktreeInfo[];
   /** Remote default branch resolved once at the start of a new rebase run. */
   defaultBranch: string | undefined;
-  /** Remote default head from before the fetch, used as the local-commit boundary. */
-  previousDefaultHead?: string;
   rootBranch?: string;
 };
 
@@ -69,6 +70,46 @@ async function preserveRebaseContinuation(
   }
 }
 
+async function refreshDefaultBranch(
+  rctx: RestackContext,
+  defaultBranch: string
+): Promise<OperationResult<boolean>> {
+  if (!(await localBranchExists(rctx.repo.path, defaultBranch))) {
+    return { success: true, data: false };
+  }
+  // Preserve boundaries for both recorded and implicit default-parent worktrees,
+  // including siblings that are not part of this rebase run.
+  for (const childWorktree of rctx.worktrees) {
+    const child = childWorktree.branch;
+    if (!child || child === defaultBranch) continue;
+    const parent = getParentBranch(rctx.repo, child);
+    if (parent !== undefined && parent !== defaultBranch) continue;
+    const forkPoint = await resolveForkPoint(
+      rctx.repo.path,
+      child,
+      defaultBranch
+    );
+    if (forkPoint.success) continue;
+    // An unconfigured orphan worktree has no default-parent boundary to save.
+    if (parent === undefined) {
+      const mergeBase = await getMergeBase(
+        rctx.repo.path,
+        child,
+        defaultBranch
+      );
+      if (!mergeBase.success) continue;
+    }
+    const recovered = await recoverForkPoint(
+      rctx.repo,
+      childWorktree.path,
+      child,
+      defaultBranch
+    );
+    if (!recovered.success) return recovered;
+  }
+  return updateDefaultBranch(rctx.repo.path, defaultBranch, rctx.worktrees);
+}
+
 /**
  * Restack a single branch onto its parent.
  * Returns true if successful, false if failed (e.g., conflicts).
@@ -91,17 +132,9 @@ async function restackBranch(
     const targetRef = `origin/${rctx.defaultBranch}`;
     print(`Updating "${branch}" from "${targetRef}"...`);
 
-    const rebaseResult = rctx.previousDefaultHead
-      ? await rebaseOnto(worktree.path, targetRef, rctx.previousDefaultHead)
-      : await rebaseOnRef(worktree.path, targetRef);
-    if (!rebaseResult.success) {
-      await preserveRebaseContinuation(
-        rctx,
-        worktree.path,
-        branch,
-        includeChildren
-      );
-      printError(`Error: ${rebaseResult.error}`);
+    const updateResult = await refreshDefaultBranch(rctx, branch);
+    if (!updateResult.success) {
+      printError(`Error: ${updateResult.error}`);
       return false;
     }
 
@@ -124,6 +157,16 @@ async function restackBranch(
   const parentIsDefaultBranch =
     parentBranch === defaultBranch || parentBranch === undefined;
 
+  const usesDefaultBranch =
+    !parentBranch || parentIsDefaultBranch || !parentStillExists;
+  const hasLocalDefault = defaultBranch
+    ? await localBranchExists(repo.path, defaultBranch)
+    : false;
+  const defaultTargetRef =
+    hasLocalDefault && defaultBranch
+      ? defaultBranch
+      : `origin/${defaultBranch}`;
+
   // Determine target branch for rebase
   let targetRef: string;
 
@@ -132,14 +175,14 @@ async function restackBranch(
       printError('Error: Could not determine default branch');
       return false;
     }
-    targetRef = `origin/${defaultBranch}`;
+    targetRef = defaultTargetRef;
     print(`Rebasing "${branch}" on "${defaultBranch}"...`);
   } else if (parentStillExists) {
     targetRef = parentBranch;
     print(`Rebasing "${branch}" on parent branch "${parentBranch}"...`);
   } else if (parentIsDefaultBranch) {
-    // Parent is the default branch - rebase onto origin/{default} but keep stack
-    targetRef = `origin/${defaultBranch}`;
+    // The default branch may exist locally without an active worktree.
+    targetRef = defaultTargetRef;
     print(`Rebasing "${branch}" on "${defaultBranch}"...`);
   } else {
     // Parent is gone - fallback to default branch
@@ -147,7 +190,7 @@ async function restackBranch(
       printError('Error: Could not determine default branch');
       return false;
     }
-    targetRef = `origin/${defaultBranch}`;
+    targetRef = defaultTargetRef;
 
     // Remove the stale parent relationship
     const removal = await removeBranchStackParent(
@@ -188,8 +231,12 @@ async function restackBranch(
   if (baseRefResult.success) {
     forkPoint = baseRefResult.data;
     useForkPoint = true;
-  } else if (parentStillExists && parentBranch) {
-    // No base ref exists but parent is available - compute fork point
+  } else if (
+    (parentStillExists && parentBranch) ||
+    (usesDefaultBranch && hasLocalDefault)
+  ) {
+    // Recover before updating the default branch, so commits discarded by an
+    // upstream-preferred divergence are not mistaken for feature commits.
     // This handles migration from stacks created before fork point tracking
     print('Computing fork point (no base ref found)...');
     print(
@@ -199,13 +246,24 @@ async function restackBranch(
       repo,
       worktree.path,
       branch,
-      parentBranch
+      parentStillExists && parentBranch ? parentBranch : defaultTargetRef
     );
     if (computedResult.success) {
       forkPoint = computedResult.data;
       useForkPoint = true;
       // The recovered Fork Point is persisted for future rebases because it
       // may no longer be recoverable after the parent is rebased or amended.
+    }
+  }
+
+  if (usesDefaultBranch && defaultBranch) {
+    const updateResult = await refreshDefaultBranch(rctx, defaultBranch);
+    if (!updateResult.success) {
+      printError(`Error: ${updateResult.error}`);
+      return false;
+    }
+    if (updateResult.data) {
+      print(`Updated "${defaultBranch}" from "origin/${defaultBranch}"`);
     }
   }
 
@@ -253,7 +311,7 @@ async function restackBranch(
       );
     }
   } else if (parentIsDefaultBranch) {
-    // Parent is the default branch but has no worktree - update base ref to origin/{default} HEAD
+    // Record the selected default head, whether it is local or remote.
     const revResult = await resolveRef(worktree.path, targetRef);
     if (revResult.success) {
       const setResult = await completeBranchRebase(
@@ -379,8 +437,7 @@ export async function rebaseStackCommand(
     process.exit(1);
   }
 
-  // Identify the remote default before fetching so its old tracking head can
-  // separate local-only commits from upstream commits removed by a force-push.
+  // Resolve the remote default explicitly; never infer it from a feature HEAD.
   const defaultBranchResult = await getRemoteDefaultBranchName(repo.path);
   if (!defaultBranchResult.success) {
     printError(`Error: ${defaultBranchResult.error}`);
@@ -388,8 +445,6 @@ export async function rebaseStackCommand(
   }
   const defaultBranch = defaultBranchResult.data;
   const targetRef = `origin/${defaultBranch}`;
-  const previousDefaultHeadResult = await resolveRef(repo.path, targetRef);
-
   const fetchResult = await fetchOrigin(currentWorktree.path);
   if (!fetchResult.success) {
     printError(`Error fetching: ${fetchResult.error}`);
@@ -410,9 +465,6 @@ export async function rebaseStackCommand(
     config,
     worktrees: worktreesResult.data,
     defaultBranch,
-    previousDefaultHead: previousDefaultHeadResult.success
-      ? previousDefaultHeadResult.data
-      : undefined,
   } satisfies RestackContext;
 
   let success: boolean;
