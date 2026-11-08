@@ -13,10 +13,10 @@ import {
   type HerdrAdapterDependencies,
 } from '../../src/workspace-manager/herdr-adapter.ts';
 import { getCollisionSafeManagedWorkspaceName } from '../../src/workspace-manager/name.ts';
-import { anyNumber, anyString, createTestRepo } from '../helpers.ts';
+import { anyNumber, anyString, createTestRepo, tmpRoot } from '../helpers.ts';
 
 const herdrBinary = Bun.which('herdr');
-const testDir = `/tmp/repos-test-herdr-real-${process.pid}`;
+const testDir = join(tmpRoot, `repos-test-herdr-real-${process.pid}`);
 const repoPath = join(testDir, 'repo');
 const barePath = join(testDir, 'bare.git');
 const bareMainPath = join(testDir, 'bare-main');

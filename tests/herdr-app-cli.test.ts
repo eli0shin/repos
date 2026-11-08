@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { realpathSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { writeConfig } from '../src/config.ts';
@@ -13,14 +12,10 @@ import {
   readFakeHerdrAppState,
   type FakeHerdrAppState,
 } from './fake-herdr-app.ts';
-import { createTestRepo } from './helpers.ts';
+import { createTestRepo, tmpRoot } from './helpers.ts';
 
 const root = import.meta.dir.replace('/tests', '');
-// Git reports resolved paths, such as /private/tmp on macOS.
-const testDir = join(
-  realpathSync('/tmp'),
-  `repos-test-herdr-app-cli-${process.pid}`
-);
+const testDir = join(tmpRoot, `repos-test-herdr-app-cli-${process.pid}`);
 const fakeDir = join(testDir, 'bin');
 const seedPath = join(testDir, 'seed');
 const remotePath = join(testDir, 'remote.git');
