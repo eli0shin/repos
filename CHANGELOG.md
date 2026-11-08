@@ -1,5 +1,15 @@
 # repos
 
+## 3.0.0
+
+### Major Changes
+
+- [#125](https://github.com/eli0shin/repos/pull/125) [`e3c359c`](https://github.com/eli0shin/repos/commit/e3c359c98dc114c91064f09bd9da8420191e5dd2) Thanks [@eli0shin](https://github.com/eli0shin)! - Remove tmux support and make Herdr the default Workspace Manager. `workspaceManager: "tmux"` is no longer valid, and the `TMUX` environment no longer enables workspace management. The `--tmux`, `--no-tmux`, and `--no-focus` flags keep their names.
+
+### Minor Changes
+
+- [#124](https://github.com/eli0shin/repos/pull/124) [`55dbef9`](https://github.com/eli0shin/repos/commit/55dbef9ead38e76a19fa8e7b82bbd99ffc6c82ab) Thanks [@eli0shin](https://github.com/eli0shin)! - Add the Herdr app as a Workspace Manager: worktrees open as spaces in the open Herdr window, selected automatically inside its terminals or with `workspaceManager: "herdr-app"`.
+
 ## 2.4.1
 
 ### Patch Changes
