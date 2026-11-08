@@ -73,7 +73,8 @@ function isReposConfig(value: unknown): value is ReposConfig {
     if (
       value.config.workspaceManager !== undefined &&
       value.config.workspaceManager !== 'tmux' &&
-      value.config.workspaceManager !== 'herdr'
+      value.config.workspaceManager !== 'herdr' &&
+      value.config.workspaceManager !== 'herdr-app'
     ) {
       return false;
     }
