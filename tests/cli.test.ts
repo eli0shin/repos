@@ -1,16 +1,19 @@
-import { afterEach, describe, expect, test } from 'bun:test';
+import {
+  afterAll,
+  beforeAll,
+  afterEach,
+  describe,
+  expect,
+  test,
+} from 'bun:test';
 import { mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { version } from '../package.json';
-import { cloneBare, runGitCommand } from '../src/git/index.ts';
-import {
-  tmuxHasSession,
-  tmuxKillSession,
-  tmuxNewSession,
-} from '../src/tmux.ts';
+import { cloneBare, cloneRepo, runGitCommand } from '../src/git/index.ts';
 import { writeConfig } from '../src/config.ts';
 import type { ReposConfig } from '../src/types.ts';
-import { tmpRoot } from './helpers.ts';
+import { createFakeHerdr } from './fake-herdr.ts';
+import { createTestRepo as createSeedRepo, tmpRoot } from './helpers.ts';
 
 // Helper to run CLI and capture output
 async function runCli(
@@ -199,9 +202,7 @@ describe('CLI help output', () => {
   test('work, stack, and clean help document --no-focus', async () => {
     expect(
       await Promise.all(
-        ['work', 'stack', 'clean'].map((command) =>
-          runCli([command, '--help'], { TMUX: undefined })
-        )
+        ['work', 'stack', 'clean'].map((command) => runCli([command, '--help']))
       )
     ).toEqual([
       { stdout: WORK_HELP_OUTPUT, stderr: '', exitCode: 0 },
@@ -263,9 +264,7 @@ describe('CLI work command', () => {
       [command, '--no-tmux', '--tmux', '--no-focus', 'feature'],
     ]);
     expect(
-      await Promise.all(
-        invocations.map((args) => runCli(args, { TMUX: undefined }))
-      )
+      await Promise.all(invocations.map((args) => runCli(args, {})))
     ).toEqual(invocations.map(() => error));
   });
 
@@ -341,7 +340,6 @@ describe('CLI index options', () => {
     expect(
       await runCli(['work', '--no-tmux', '-i', '1', 'cli-clean-index'], {
         XDG_CONFIG_HOME: configHome,
-        TMUX: undefined,
       })
     ).toEqual({
       stdout: `${worktreePath}\n`,
@@ -356,7 +354,6 @@ describe('CLI index options', () => {
     expect(
       await runCli(['clean', '--dry-run', '-i', '1', 'cli-clean-index'], {
         XDG_CONFIG_HOME: configHome,
-        TMUX: undefined,
       })
     ).toEqual({
       stdout: '',
@@ -366,237 +363,105 @@ describe('CLI index options', () => {
   });
 });
 
-describe('CLI --no-focus workflow', () => {
-  const testDir = join(tmpRoot, 'repos-test-cli-no-focus');
-  const sourceDir = join(tmpRoot, 'repos-test-cli-no-focus-source');
-  const configHome = join(tmpRoot, 'repos-test-cli-no-focus-config');
-  const repoName = 'cli-no-focus';
-  const parentSession = `${repoName}@parent`;
-  const childSession = `${repoName}@child`;
+describe.serial('CLI Workspace Manager defaults', () => {
+  const testDir = join(tmpRoot, `repos-test-cli-defaults-${process.pid}`);
+  const fakeDir = join(testDir, 'bin');
+  const seedPath = join(testDir, 'seed');
+  const remotePath = join(testDir, 'remote.git');
+  const repoPath = join(testDir, 'repo');
+  const featurePath = join(testDir, 'repo-feature');
+  const configHome = join(testDir, 'config');
+  let herdr: Record<string, string>;
 
-  afterEach(async () => {
-    await tmuxKillSession(parentSession);
-    await tmuxKillSession(childSession);
-    await rm(testDir, { recursive: true, force: true });
-    await rm(sourceDir, { recursive: true, force: true });
-    await rm(configHome, { recursive: true, force: true });
-  });
-
-  test('work, stack, and clean manage sessions outside tmux without focusing and print paths', async () => {
-    await mkdir(sourceDir, { recursive: true });
-    await runGitCommand(['init', '-b', 'main'], sourceDir);
-    await Bun.write(join(sourceDir, 'test.txt'), 'test');
-    await runGitCommand(['add', '.'], sourceDir);
-    await runGitCommand(['commit', '-m', 'initial'], sourceDir);
-
-    const bareDir = join(testDir, `${repoName}.git`);
-    await mkdir(testDir, { recursive: true });
-    await cloneBare(sourceDir, bareDir);
-    await writeConfig(join(configHome, 'repos', 'config.json'), {
-      repos: [{ name: repoName, url: sourceDir, path: bareDir, bare: true }],
-    });
-    const env = { XDG_CONFIG_HOME: configHome, TMUX: undefined };
-    const parentPath = join(testDir, `${repoName}.git-parent`);
-    const childPath = join(testDir, `${repoName}.git-child`);
-
-    expect(
-      await runCli(['work', '--no-focus', 'parent', repoName], env)
-    ).toEqual({
-      stdout: `${parentPath}\n`,
-      stderr: `Creating worktree for "parent"...\nCreated worktree "${repoName}-parent"\nCreated tmux session "${parentSession}"\n`,
-      exitCode: 0,
-    });
-    expect(await tmuxHasSession(parentSession)).toEqual({
-      success: true,
-      data: true,
-    });
-
-    expect(
-      await runCli(['work', '--no-focus', 'parent', repoName], env)
-    ).toEqual({
-      stdout: `${parentPath}\n`,
-      stderr: '',
-      exitCode: 0,
-    });
-
-    expect(
-      await runCli(['stack', '--no-focus', 'child'], env, parentPath)
-    ).toEqual({
-      stdout: `${childPath}\n`,
-      stderr: `Creating stacked branch "child" from "parent"...\nCreated stacked worktree "${repoName}-child"\nCreated tmux session "${childSession}"\n`,
-      exitCode: 0,
-    });
-    expect(await tmuxHasSession(childSession)).toEqual({
-      success: true,
-      data: true,
-    });
-
-    expect(
-      await runCli(['clean', '--no-focus', 'child', repoName], env, childPath)
-    ).toEqual({
-      stdout: `${parentPath}\n`,
-      stderr: `Removing worktree for "child"...\nRemoved worktree "${repoName}-child"\n`,
-      exitCode: 0,
-    });
-    expect(await tmuxHasSession(childSession)).toEqual({
-      success: true,
-      data: false,
-    });
-  });
-});
-
-describe('CLI tmux defaults', () => {
-  const testDir = join(tmpRoot, 'repos-test-cli-tmux-default');
-  const sourceDir = join(tmpRoot, 'repos-test-cli-tmux-default-source');
-  const configHome = join(tmpRoot, 'repos-test-cli-tmux-default-config');
-  const sessionNames: string[] = [];
-
-  afterEach(async () => {
-    await cleanup();
-  });
-
-  async function createTestRepo(dir: string): Promise<void> {
-    await mkdir(dir, { recursive: true });
-    await runGitCommand(['init', '-b', 'main'], dir);
-    await Bun.write(join(dir, 'test.txt'), 'test');
-    await runGitCommand(['add', '.'], dir);
-    await runGitCommand(['commit', '-m', 'initial'], dir);
+  function env(
+    overrides: Record<string, string | undefined> = {}
+  ): Record<string, string | undefined> {
+    return {
+      XDG_CONFIG_HOME: configHome,
+      PATH: `${fakeDir}:${process.env.PATH}`,
+      ...herdr,
+      HERDR_ENV: undefined,
+      HERDR_BIN_PATH: undefined,
+      HERDR_SOCKET_PATH: undefined,
+      HERDR_SESSION: undefined,
+      HERDR_WORKSPACE_ID: undefined,
+      HC_TERMINAL_ID: undefined,
+      ...overrides,
+    };
   }
 
-  async function setupStaleWorktree(): Promise<string> {
-    await rm(testDir, { recursive: true, force: true });
-    await rm(sourceDir, { recursive: true, force: true });
-    await rm(configHome, { recursive: true, force: true });
-    await mkdir(testDir, { recursive: true });
-    await mkdir(join(configHome, 'repos'), { recursive: true });
-    await createTestRepo(sourceDir);
+  const insideHerdr = (): Record<string, string> => ({
+    HERDR_ENV: '1',
+    HERDR_BIN_PATH: join(fakeDir, 'herdr'),
+    HERDR_SOCKET_PATH: join(testDir, 'herdr.sock'),
+    HERDR_SESSION: `repos-cli-defaults-${process.pid}`,
+  });
 
-    const repoName = 'cli-tmux-default';
-    const bareDir = join(testDir, `${repoName}.git`);
-    const worktreePath = join(testDir, `${repoName}.git-feature`);
-    await cloneBare(sourceDir, bareDir);
+  beforeAll(async () => {
+    await rm(testDir, { recursive: true, force: true });
+    await createSeedRepo(seedPath);
+    await runGitCommand(['branch', '-M', 'main'], seedPath);
+    await runGitCommand(['init', '--bare', remotePath], testDir);
     await runGitCommand(
-      ['worktree', 'add', '-b', 'feature', worktreePath],
-      bareDir
+      ['symbolic-ref', 'HEAD', 'refs/heads/main'],
+      remotePath
     );
-    await Bun.write(join(worktreePath, 'feature.txt'), 'feature');
-    await runGitCommand(['add', '.'], worktreePath);
-    await runGitCommand(['commit', '-m', 'feature work'], worktreePath);
-    await runGitCommand(['push', '-u', 'origin', 'feature'], worktreePath);
-    await runGitCommand(['branch', '-D', 'feature'], sourceDir);
+    await runGitCommand(['remote', 'add', 'origin', remotePath], seedPath);
+    await runGitCommand(['push', '-u', 'origin', 'main'], seedPath);
+    const cloned = await cloneRepo(remotePath, repoPath);
+    if (!cloned.success) throw new Error(cloned.error);
+    // No workspaceManager: Herdr is the default.
+    await writeConfig(join(configHome, 'repos', 'config.json'), {
+      repos: [{ name: 'repo', url: remotePath, path: repoPath }],
+      config: { updateBehavior: 'off' },
+    });
+    const fake = await createFakeHerdr(fakeDir);
+    herdr = {
+      FAKE_HERDR_STATE: fake.statePath,
+      FAKE_HERDR_SERVER_SOCKET: fake.serverSocketPath,
+      FAKE_HERDR_SERVER_READY: fake.serverReadyPath,
+    };
+  });
 
-    await Bun.write(
-      join(configHome, 'repos', 'config.json'),
-      JSON.stringify(
-        {
-          repos: [
-            { name: repoName, url: sourceDir, path: bareDir, bare: true },
-          ],
-          config: { updateBehavior: 'off' },
-        },
-        null,
-        2
-      )
-    );
-
-    const sessionName = `${repoName}@feature`;
-    await tmuxKillSession(sessionName);
-    sessionNames.push(sessionName);
-    const sessionResult = await tmuxNewSession(sessionName, worktreePath);
-    expect(sessionResult).toEqual({ success: true, data: undefined });
-    return sessionName;
-  }
-
-  async function cleanup(): Promise<void> {
-    for (const sessionName of sessionNames.splice(0)) {
-      await tmuxKillSession(sessionName);
-    }
+  afterAll(async () => {
     await rm(testDir, { recursive: true, force: true });
-    await rm(sourceDir, { recursive: true, force: true });
-    await rm(configHome, { recursive: true, force: true });
-  }
+  });
 
-  async function getTmuxEnv(sessionName: string): Promise<string> {
-    const proc = Bun.spawn(
-      [
-        'tmux',
-        'display-message',
-        '-p',
-        '-t',
-        sessionName,
-        '#{socket_path},#{pid},0',
-      ],
-      { stdout: 'pipe', stderr: 'pipe' }
-    );
-    const [stdout, stderr] = await Promise.all([
-      new Response(proc.stdout).text(),
-      new Response(proc.stderr).text(),
+  test('work opens a Herdr workspace when no Workspace Manager is configured', async () => {
+    expect(
+      await runCli(['work', '--no-focus', 'feature', 'repo'], env())
+    ).toEqual({
+      stdout: `${featurePath}\n`,
+      stderr:
+        'Creating worktree for "feature"...\nCreated worktree "repo-feature"\nOpened Herdr workspace "repo@feature"\n',
+      exitCode: 0,
+    });
+  });
+
+  test('cleanup closes Herdr workspaces only with --tmux or inside Herdr, and ignores tmux', async () => {
+    await runGitCommand(['push', '-u', 'origin', 'feature'], featurePath);
+    await runGitCommand(['push', 'origin', '--delete', 'feature'], repoPath);
+    const removal =
+      'Would remove repo/feature (upstream deleted)\n\nWould remove 1 worktree(s) (1 upstream deleted)\n';
+    const closure = 'Would close Herdr workspace "repo@feature"\n';
+    const preview = async (
+      args: string[],
+      overrides: Record<string, string> = {}
+    ): Promise<string> =>
+      (await runCli(['cleanup', '--dry-run', ...args], env(overrides))).stdout;
+
+    expect([
+      await preview([]),
+      await preview(['--tmux']),
+      await preview([], insideHerdr()),
+      await preview(['--no-tmux'], insideHerdr()),
+      await preview([], { TMUX: '/tmp/tmux-1000/default,1,0' }),
+    ]).toEqual([
+      removal,
+      removal + closure,
+      removal + closure,
+      removal,
+      removal,
     ]);
-    const exitCode = await proc.exited;
-    expect(stderr).toEqual('');
-    expect(exitCode).toEqual(0);
-    return stdout.trim();
-  }
-
-  test('does not use tmux by default outside tmux', async () => {
-    await setupStaleWorktree();
-    expect(
-      await runCli(['cleanup', '--dry-run'], {
-        XDG_CONFIG_HOME: configHome,
-        TMUX: undefined,
-      })
-    ).toEqual({
-      stdout:
-        'Would remove cli-tmux-default/feature (upstream deleted)\n\nWould remove 1 worktree(s) (1 upstream deleted)\n',
-      stderr: '',
-      exitCode: 0,
-    });
-  });
-
-  test('--tmux uses tmux outside tmux', async () => {
-    await setupStaleWorktree();
-    expect(
-      await runCli(['cleanup', '--dry-run', '--tmux'], {
-        XDG_CONFIG_HOME: configHome,
-        TMUX: undefined,
-      })
-    ).toEqual({
-      stdout:
-        'Would remove cli-tmux-default/feature (upstream deleted)\n\nWould remove 1 worktree(s) (1 upstream deleted)\nWould kill tmux session "cli-tmux-default@feature"\n',
-      stderr: '',
-      exitCode: 0,
-    });
-  });
-
-  test('uses tmux by default inside tmux', async () => {
-    const sessionName = await setupStaleWorktree();
-    const tmuxEnv = await getTmuxEnv(sessionName);
-    expect(
-      await runCli(['cleanup', '--dry-run'], {
-        XDG_CONFIG_HOME: configHome,
-        TMUX: tmuxEnv,
-      })
-    ).toEqual({
-      stdout:
-        'Would remove cli-tmux-default/feature (upstream deleted)\n\nWould remove 1 worktree(s) (1 upstream deleted)\nWould kill tmux session "cli-tmux-default@feature"\n',
-      stderr: '',
-      exitCode: 0,
-    });
-  });
-
-  test('--no-tmux opts out inside tmux', async () => {
-    const sessionName = await setupStaleWorktree();
-    const tmuxEnv = await getTmuxEnv(sessionName);
-    expect(
-      await runCli(['cleanup', '--dry-run', '--no-tmux'], {
-        XDG_CONFIG_HOME: configHome,
-        TMUX: tmuxEnv,
-      })
-    ).toEqual({
-      stdout:
-        'Would remove cli-tmux-default/feature (upstream deleted)\n\nWould remove 1 worktree(s) (1 upstream deleted)\n',
-      stderr: '',
-      exitCode: 0,
-    });
   });
 });

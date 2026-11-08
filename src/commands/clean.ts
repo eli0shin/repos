@@ -42,7 +42,7 @@ function resolveCleanOutputPath(
 type CleanOptions = {
   force: boolean;
   dryRun: boolean;
-  tmux: boolean;
+  workspace: boolean;
   focus?: boolean;
   index?: number;
 };
@@ -51,7 +51,7 @@ export async function cleanCommand(
   ctx: CommandContext,
   branch?: string,
   repoName?: string,
-  options: CleanOptions = { force: false, dryRun: false, tmux: false }
+  options: CleanOptions = { force: false, dryRun: false, workspace: false }
 ): Promise<void> {
   const config = await loadConfig(ctx.configPath);
   const repo = await resolveRepo(config, repoName);
@@ -116,7 +116,7 @@ export async function cleanCommand(
   }
 
   let workspaceClosure: ManagedWorkspaceClosurePlan | undefined;
-  if (options.tmux && !options.dryRun) {
+  if (options.workspace && !options.dryRun) {
     const target = {
       repoName: repo.name,
       branch: worktree.branch,

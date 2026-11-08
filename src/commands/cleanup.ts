@@ -22,7 +22,7 @@ import {
 
 export type CleanupOptions = {
   dryRun: boolean;
-  tmux: boolean;
+  workspace: boolean;
 };
 
 type CleanupResult = {
@@ -183,7 +183,7 @@ export async function cleanupCommand(
     worktreePath: result.path,
   }));
   let workspaceClosure: ManagedWorkspaceClosurePlan | undefined;
-  if (options.tmux && removed.length > 0) {
+  if (options.workspace && removed.length > 0) {
     const removedPaths = new Set(removed.map((result) => result.path));
     workspaceClosure = await planManagedWorkspaceClosure(
       workspaceTargets,

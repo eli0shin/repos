@@ -14,7 +14,7 @@ _Avoid_: Base ref
 
 **Workspace Manager**:
 A terminal environment that owns persistent work contexts for repository worktrees.
-_Avoid_: Multiplexer, tmux integration
+_Avoid_: Multiplexer
 
 **Managed Workspace**:
 A persistent terminal work context associated with one repository worktree.

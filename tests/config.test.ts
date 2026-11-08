@@ -399,10 +399,9 @@ describe('config file operations', () => {
       });
     });
 
-    test('accepts tmux, Herdr, the Herdr app, and an absent Workspace Manager setting', async () => {
+    test('accepts Herdr, the Herdr app, and an absent Workspace Manager setting', async () => {
       for (const workspaceManager of [
         undefined,
-        'tmux',
         'herdr',
         'herdr-app',
       ] as const) {
@@ -418,16 +417,18 @@ describe('config file operations', () => {
       }
     });
 
-    test('rejects an unsupported Workspace Manager setting', async () => {
-      await Bun.write(
-        testConfigPath,
-        JSON.stringify({ repos: [], config: { workspaceManager: 'zellij' } })
-      );
+    test('rejects an unsupported Workspace Manager setting, including tmux', async () => {
+      for (const workspaceManager of ['tmux', 'zellij']) {
+        await Bun.write(
+          testConfigPath,
+          JSON.stringify({ repos: [], config: { workspaceManager } })
+        );
 
-      expect(await readConfig(testConfigPath)).toEqual({
-        success: false,
-        error: 'Invalid config file format',
-      });
+        expect(await readConfig(testConfigPath)).toEqual({
+          success: false,
+          error: 'Invalid config file format',
+        });
+      }
     });
 
     test('returns error for invalid JSON', async () => {

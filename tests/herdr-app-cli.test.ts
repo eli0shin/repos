@@ -62,7 +62,6 @@ async function runCli(
       XDG_CONFIG_HOME: configHome,
       FAKE_HERDR_APP_STATE: statePath,
       PATH: `${fakeDir}:${process.env.PATH}`,
-      TMUX: undefined,
       HERDR_ENV: undefined,
       HC_TERMINAL_ID: undefined,
       ...overrides,
@@ -99,7 +98,7 @@ async function window(): Promise<
 const homeSpace = { id: 'sp0', name: 'home', folder: testDir };
 
 describe('Herdr app provider resolution', () => {
-  test('the Herdr app ranks below legacy Herdr and tmux, above config, and needs this window to show the terminal', async () => {
+  test('the Herdr app ranks below legacy Herdr, above config, and needs this window to show the terminal', async () => {
     const remote = {
       ...fakeSpace('vps/sp1', 'remote', '/srv', 'vps/t2'),
       machine: 'vps',
@@ -112,27 +111,31 @@ describe('Herdr app provider resolution', () => {
       FAKE_HERDR_APP_STATE: fake.statePath,
     };
     expect([
-      resolveWorkspaceManagerProvider('tmux', app),
+      resolveWorkspaceManagerProvider('herdr', app),
       resolveWorkspaceManagerProvider('herdr-app', app),
       resolveWorkspaceManagerProvider('herdr-app', {}),
-      resolveWorkspaceManagerProvider('herdr-app', { ...app, TMUX: '/t' }),
-      resolveWorkspaceManagerProvider('tmux', { ...app, HERDR_ENV: '1' }),
+      resolveWorkspaceManagerProvider('herdr-app', { ...app, HERDR_ENV: '1' }),
       // A terminal on another machine has the same markers; this window
       // shows it only under that machine.
-      resolveWorkspaceManagerProvider('tmux', { ...app, HC_TERMINAL_ID: 't2' }),
-      resolveWorkspaceManagerProvider('tmux', { ...app, PATH: '/nonexistent' }),
+      resolveWorkspaceManagerProvider('herdr', {
+        ...app,
+        HC_TERMINAL_ID: 't2',
+      }),
+      resolveWorkspaceManagerProvider(undefined, {
+        ...app,
+        PATH: '/nonexistent',
+      }),
     ]).toEqual([
       'herdr-app',
       'herdr-app',
       'herdr-app',
-      'tmux',
       'herdr',
-      'tmux',
-      'tmux',
+      'herdr',
+      'herdr',
     ]);
 
     await createFakeHerdrApp(fakeDir, { spaces, window: false });
-    expect(resolveWorkspaceManagerProvider('tmux', app)).toBe('tmux');
+    expect(resolveWorkspaceManagerProvider(undefined, app)).toBe('herdr');
     await rm(fakeDir, { recursive: true, force: true });
   });
 });
@@ -197,8 +200,8 @@ describe.serial('Herdr app CLI worktree workflow', () => {
     });
   });
 
-  test('inside the Herdr app, work shows a new space by default over a tmux setting', async () => {
-    await setup({}, 'tmux');
+  test('inside the Herdr app, work shows a new space by default over a Herdr setting', async () => {
+    await setup({}, 'herdr');
     const featurePath = join(testDir, 'repo-feature');
     expect(
       await runCli(['work', 'feature', 'repo'], root, {

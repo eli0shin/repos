@@ -1,5 +1,7 @@
 # Add the Herdr app as a third Workspace Manager
 
+Superseded in part by [ADR 0003](./0003-remove-tmux.md): repos no longer supports tmux, and Herdr is the default.
+
 The Herdr desktop app is a separate product from Herdr. Its terminals run in herdr-core (`hc`), and the `herdr-app` CLI arranges them in spaces and tabs in the open window. Herdr's `HERDR_ENV` is not set in its terminals, so repos treated them as unmanaged and fell back to tmux. Repos adds `herdr-app` as a provider rather than extending the Herdr adapter, because the two products share no CLI, identifiers, or environment markers.
 
 A terminal is a Herdr app terminal when `HC_TERMINAL_ID` is set and the open Herdr window on this computer lists that terminal in a local space. The marker alone is not enough: herdr-core also runs terminals on machines the app reaches over SSH, and those carry the same markers and may have their own `herdr-app` and window. Such terminals, terminals without a space, and terminals whose window is closed stay unmanaged. Herdr and tmux keep precedence, so the innermost environment still wins when either runs inside an app terminal.

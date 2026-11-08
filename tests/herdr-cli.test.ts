@@ -71,7 +71,6 @@ async function runCli(
       FAKE_HERDR_SERVER_SOCKET: serverSocketPath,
       FAKE_HERDR_SERVER_READY: serverReadyPath,
       PATH: `${fakeDir}:${process.env.PATH}`,
-      TMUX: undefined,
       HERDR_ENV: undefined,
       HERDR_BIN_PATH: undefined,
       HERDR_SOCKET_PATH: undefined,
@@ -167,7 +166,6 @@ describe.serial('Herdr CLI worktree workflow', () => {
       HERDR_BIN_PATH: join(fakeDir, 'herdr'),
       HERDR_SOCKET_PATH: join(testDir, 'herdr-test.sock'),
       HERDR_SESSION: `repos-test-${process.pid}`,
-      TMUX: '/tmp/fake-tmux',
     };
     expect(
       await runCli(['work', '-i', '1', 'repo'], root, herdrEnvironment)

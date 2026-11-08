@@ -27,7 +27,7 @@ let dependencies: HerdrAdapterDependencies;
 
 async function openManagedWorkspace(
   target: ManagedWorkspaceTarget,
-  options: { focus: boolean; provider?: 'tmux' | 'herdr' }
+  options: { focus: boolean; provider?: 'herdr' }
 ): Promise<void> {
   await openWithHerdr(target, options.focus, dependencies);
 }

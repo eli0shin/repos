@@ -52,16 +52,17 @@ function getCommandContext(): CommandContext {
   };
 }
 
+// `--tmux` and `--no-tmux` keep their names; they switch the Workspace Manager.
 function resolveWorkspaceManagerOptions(
-  tmux: boolean,
+  workspace: boolean,
   focus: boolean
-): { tmux: boolean; focus: boolean } {
+): { workspace: boolean; focus: boolean } {
   if (!focus && process.argv.slice(2).includes('--no-tmux')) {
     printError('Error: --no-focus cannot be combined with --no-tmux');
     process.exit(1);
   }
 
-  return { tmux: !focus || tmux, focus };
+  return { workspace: !focus || workspace, focus };
 }
 
 function parseWorktreeIndex(value: string): number {
@@ -185,7 +186,7 @@ program
     parseWorktreeIndex
   )
   .action(async (branch, repoName, options) => {
-    const tmuxOptions = resolveWorkspaceManagerOptions(
+    const workspaceOptions = resolveWorkspaceManagerOptions(
       options.tmux,
       options.focus
     );
@@ -196,7 +197,7 @@ program
     }
 
     await workCommand(getCommandContext(), branch, repoName, {
-      ...tmuxOptions,
+      ...workspaceOptions,
       index: options.index,
     });
   });
@@ -217,11 +218,11 @@ program
   )
   .option('--no-focus', 'Create or reuse a Managed Workspace without focusing')
   .action(async (branch, options) => {
-    const tmuxOptions = resolveWorkspaceManagerOptions(
+    const workspaceOptions = resolveWorkspaceManagerOptions(
       options.tmux,
       options.focus
     );
-    await stackCommand(getCommandContext(), branch, tmuxOptions);
+    await stackCommand(getCommandContext(), branch, workspaceOptions);
   });
 
 program
@@ -292,7 +293,7 @@ program
   )
   .option('--no-focus', 'Close the Managed Workspace without changing focus')
   .action(async (branch, repoName, options) => {
-    const tmuxOptions = resolveWorkspaceManagerOptions(
+    const workspaceOptions = resolveWorkspaceManagerOptions(
       options.tmux,
       options.focus
     );
@@ -305,7 +306,7 @@ program
     await cleanCommand(getCommandContext(), branch, repoName, {
       force: options.force ?? false,
       dryRun: options.dryRun ?? false,
-      ...tmuxOptions,
+      ...workspaceOptions,
       index: options.index,
     });
   });
@@ -368,7 +369,7 @@ program
   .action(async (options) => {
     await cleanupCommand(getCommandContext(), {
       dryRun: options.dryRun ?? false,
-      tmux: options.tmux,
+      workspace: options.tmux,
     });
   });
 
