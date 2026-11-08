@@ -7,9 +7,7 @@ on:
 
 jobs:
   test:
-    # Pinned for its tmux 3.4: the tmux tests fail with newer tmux, as on the
-    # Ubuntu 26.04 image ubuntu-latest moved to. Tests use the image's tmux.
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
@@ -28,9 +26,6 @@ jobs:
 
       - name: Install dependencies
         run: bun install
-
-      - name: Show tmux version
-        run: tmux -V
 
       - name: Install Herdr
         run: |

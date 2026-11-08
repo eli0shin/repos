@@ -12,7 +12,7 @@ export type RepoEntry = {
 };
 
 export type UpdateBehavior = 'auto' | 'notify' | 'off';
-export type WorkspaceManagerProvider = 'tmux' | 'herdr' | 'herdr-app';
+export type WorkspaceManagerProvider = 'herdr' | 'herdr-app';
 
 export type ReposConfigSettings = {
   updateBehavior?: UpdateBehavior;

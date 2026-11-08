@@ -76,17 +76,15 @@ function captureStream(stream: NodeJS.WriteStream): {
 }
 
 describe('Workspace Manager provider resolution', () => {
-  test('uses environment markers before config and defaults to tmux', () => {
+  test('uses environment markers before config and defaults to Herdr', () => {
     expect([
       resolveWorkspaceManagerProvider(undefined, {}),
       resolveWorkspaceManagerProvider('herdr', {}),
-      resolveWorkspaceManagerProvider('herdr', { TMUX: '/tmp/tmux' }),
-      resolveWorkspaceManagerProvider('tmux', { HERDR_ENV: '1' }),
-      resolveWorkspaceManagerProvider('tmux', {
-        HERDR_ENV: '1',
-        TMUX: '/tmp/tmux',
-      }),
-    ]).toEqual(['tmux', 'herdr', 'tmux', 'herdr', 'herdr']);
+      resolveWorkspaceManagerProvider('herdr-app', {}),
+      resolveWorkspaceManagerProvider('herdr-app', { HERDR_ENV: '1' }),
+      // tmux is no longer a Workspace Manager, so its marker means nothing.
+      resolveWorkspaceManagerProvider(undefined, { TMUX: '/tmp/tmux' }),
+    ]).toEqual(['herdr', 'herdr', 'herdr-app', 'herdr', 'herdr']);
   });
 });
 
@@ -104,7 +102,7 @@ describe.serial('Herdr Workspace Manager adapter', () => {
 
   async function openManagedWorkspace(
     managedTarget: ManagedWorkspaceTarget,
-    options: { focus: boolean; provider?: 'tmux' | 'herdr' }
+    options: { focus: boolean; provider?: 'herdr' }
   ): Promise<void> {
     await openWithHerdr(managedTarget, options.focus, dependencies);
   }
@@ -135,7 +133,6 @@ describe.serial('Herdr Workspace Manager adapter', () => {
         FAKE_HERDR_STATE: statePath,
         FAKE_HERDR_SERVER_SOCKET: fake.serverSocketPath,
         FAKE_HERDR_SERVER_READY: fake.serverReadyPath,
-        TMUX: '/tmp/fake-tmux',
       },
     };
   });
@@ -148,8 +145,8 @@ describe.serial('Herdr Workspace Manager adapter', () => {
   });
 
   test('opens and reuses a canonical Managed Workspace without changing focus', async () => {
-    await openManagedWorkspace(target, { focus: false, provider: 'tmux' });
-    await openManagedWorkspace(target, { focus: false, provider: 'tmux' });
+    await openManagedWorkspace(target, { focus: false, provider: 'herdr' });
+    await openManagedWorkspace(target, { focus: false, provider: 'herdr' });
 
     const state = await readFakeHerdrState(statePath);
     expect(state.workspaces).toEqual([
@@ -470,7 +467,6 @@ describe.serial('Herdr Workspace Manager adapter', () => {
   test('uses the default server namespace outside Herdr', async () => {
     const environment = adapterEnvironment();
     environment.HERDR_ENV = undefined;
-    environment.TMUX = undefined;
 
     await openManagedWorkspace(target, { focus: false, provider: 'herdr' });
 
@@ -487,7 +483,6 @@ describe.serial('Herdr Workspace Manager adapter', () => {
   test('focuses and attaches the full client outside Herdr', async () => {
     const environment = adapterEnvironment();
     environment.HERDR_ENV = undefined;
-    environment.TMUX = undefined;
 
     await openManagedWorkspace(target, { focus: true, provider: 'herdr' });
 
@@ -617,7 +612,7 @@ describe.serial('Herdr Workspace Manager adapter', () => {
     ]);
   });
 
-  test('reports provider failures without falling back to tmux', async () => {
+  test('reports provider failures without falling back to another provider', async () => {
     const fake = await createFakeHerdr(fakeDir, {
       failure: {
         command: 'workspace list',

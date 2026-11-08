@@ -20,7 +20,7 @@ import { recordBranchStack } from '../branch-stack/index.ts';
 export async function stackCommand(
   ctx: CommandContext,
   newBranch: string,
-  options?: { tmux?: boolean; focus?: boolean }
+  options?: { workspace?: boolean; focus?: boolean }
 ): Promise<void> {
   const initialConfig = await loadConfig(ctx.configPath);
 
@@ -148,7 +148,7 @@ export async function stackCommand(
     `Created stacked worktree "${repo.name}-${newBranch.replace(/\//g, '-')}"`
   );
 
-  if (options?.tmux) {
+  if (options?.workspace) {
     await openManagedWorkspace(
       { repoName: repo.name, branch: newBranch, worktreePath },
       {
@@ -157,7 +157,7 @@ export async function stackCommand(
       }
     );
   }
-  if (!options?.tmux || options.focus === false) {
+  if (!options?.workspace || options.focus === false) {
     // Output path to stdout for shell wrapper to cd into
     print(worktreePath);
   }

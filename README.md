@@ -6,7 +6,7 @@ A portable git repository manager.
 
 - **Multi-machine development** - Track your repos in a config file and clone them anywhere
 - **Parallel feature work** - Use git worktrees to work on multiple branches simultaneously
-- **Persistent work contexts** - Open worktrees as tmux, Herdr, or Herdr app Managed Workspaces
+- **Persistent work contexts** - Open worktrees as Herdr or Herdr app Managed Workspaces
 - **Batch operations** - Pull all repos at once, clean up stale worktrees across projects
 
 It simplifies worktree workflows by automatically setting up branch tracking, providing easy rebasing against the default branch, and supporting repo-local worktree setup via `.repos/worktree.json`.
@@ -42,6 +42,6 @@ curl -fsSL https://raw.githubusercontent.com/eli0shin/repos/main/install.sh | ba
 | `work <branch>`                               | Create worktree and cd into it (shell function)      |
 | `work-clean [args...]`                        | Remove worktree and cd to logical parent destination |
 
-Set `config.workspaceManager` to `"tmux"`, `"herdr"`, or `"herdr-app"` to select the Workspace Manager outside a managed environment. The existing `--tmux`, `--no-tmux`, and `--no-focus` flags control every provider.
+Herdr is the default Workspace Manager; set `config.workspaceManager` to `"herdr-app"` to use the Herdr app outside a managed environment. The `--tmux`, `--no-tmux`, and `--no-focus` flags keep their historical names and control the selected provider.
 
 See [USERGUIDE.md](./USERGUIDE.md) for complete documentation, including Workspace Manager selection and repo-local worktree setup examples.

@@ -16,7 +16,7 @@ import { workCommand } from '../src/commands/work.ts';
 import { stackCommand } from '../src/commands/stack.ts';
 import type { ReposConfig } from '../src/types.ts';
 import { mockProcessExit, type MockExit } from './utils.ts';
-import * as tmux from '../src/tmux.ts';
+import * as workspaceManager from '../src/workspace-manager/index.ts';
 
 async function createTestRepo(dir: string): Promise<void> {
   await mkdir(dir, { recursive: true });
@@ -47,14 +47,15 @@ describe('worktree setup integration', () => {
   const configPath = '/tmp/repos-test-worktree-setup-config/config.json';
   let originalCwd: string;
   let mockExit: MockExit;
-  let openTmuxSessionSpy: Mock<typeof tmux.openTmuxSession>;
+  let openWorkspaceSpy: Mock<typeof workspaceManager.openManagedWorkspace>;
 
   beforeEach(async () => {
     originalCwd = process.cwd();
     mockExit = mockProcessExit();
-    openTmuxSessionSpy = spyOn(tmux, 'openTmuxSession').mockResolvedValue(
-      undefined
-    );
+    openWorkspaceSpy = spyOn(
+      workspaceManager,
+      'openManagedWorkspace'
+    ).mockResolvedValue(undefined);
     await mkdir(testDir, { recursive: true });
     await createTestRepo(sourceDir);
   });
@@ -62,7 +63,7 @@ describe('worktree setup integration', () => {
   afterEach(async () => {
     process.chdir(originalCwd);
     mockExit.mockRestore();
-    openTmuxSessionSpy.mockRestore();
+    openWorkspaceSpy.mockRestore();
     await rm(testDir, { recursive: true, force: true });
     await rm(sourceDir, { recursive: true, force: true });
     await rm('/tmp/repos-test-worktree-setup-config', {
@@ -164,7 +165,7 @@ describe('worktree setup integration', () => {
     expect(stderr.output.join('')).toContain('setup-output');
   });
 
-  test('work with tmux keeps setup command output off stdout', async () => {
+  test('work with a Managed Workspace keeps setup command output off stdout', async () => {
     const { repoDir } = await setupRegularRepo();
     await mkdir(join(repoDir, '.repos'), { recursive: true });
     await Bun.write(
@@ -183,17 +184,20 @@ describe('worktree setup integration', () => {
     const stdout = captureOutput('stdout');
     const stderr = captureOutput('stderr');
 
-    await workCommand({ configPath }, 'feature', 'repo', { tmux: true });
+    await workCommand({ configPath }, 'feature', 'repo', { workspace: true });
 
     stdout.restore();
     stderr.restore();
 
     expect(stdout.output).toEqual([]);
     expect(stderr.output.join('')).toContain('setup-output');
-    expect(openTmuxSessionSpy).toHaveBeenCalledWith(
-      'repo',
-      'feature',
-      join(testDir, 'repo-feature')
+    expect(openWorkspaceSpy).toHaveBeenCalledWith(
+      {
+        repoName: 'repo',
+        branch: 'feature',
+        worktreePath: join(testDir, 'repo-feature'),
+      },
+      { focus: true, provider: undefined }
     );
   });
 

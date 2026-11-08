@@ -23,7 +23,7 @@ bun run format                # Check formatting
 - `src/config.ts` - Config file read/write operations
 - `src/git.ts` - Git command wrappers (clone, pull, worktree operations)
 - `src/output.ts` - stdout/stderr output utilities
-- `src/tmux.ts` - Tmux session management utilities
+- `src/workspace-manager/` - Workspace Manager seam with the Herdr and Herdr app adapters
 - `src/types.ts` - Core types (`RepoEntry`, `ReposConfig`, `OperationResult<T>`)
 - `src/commands/` - Individual command implementations
 - `src/auto-update.ts`, `src/update-state.ts`, `src/updater-worker.ts` - Background auto-update system
@@ -57,7 +57,6 @@ type OperationResult<T = void> =
 | `repos clean <branch> [repo] [-t]` / `-i <index>` | Remove a worktree (--force for parent branch) |
 | `repos rebase [branch] [repo]` / `-i <index>`     | Rebase branch and children on their parents   |
 | `repos cleanup [--dry-run] [-t]`                  | Remove worktrees for merged/deleted branches  |
-| `repos session <branch> [repo]`                   | Create a worktree and open a tmux session     |
 | `repos init`                                      | Configure shell for work command              |
 | `repos update`                                    | Update repos CLI to latest version            |
 

@@ -474,7 +474,7 @@ Slashes in branch names are converted to dashes:
 
 **Workspace Manager options:**
 
-- `--tmux` creates or reuses the worktree's Managed Workspace and focuses it. The retained flag name controls tmux, Herdr, or the Herdr app.
+- `--tmux` creates or reuses the worktree's Managed Workspace and focuses it. The flag keeps its historical name and controls the selected Workspace Manager.
 - `--no-tmux` disables Workspace Manager behavior.
 - `--no-focus` creates or reuses the Managed Workspace without focusing or attaching, including when run outside a managed environment. It prints the worktree path to stdout and cannot be combined with `--no-tmux`.
 
@@ -564,7 +564,7 @@ repos stack feature-profile    # Stack profile feature on top of auth
 ```
 
 **Output:**
-Prints the worktree path to stdout when tmux is disabled or `--no-focus` is used.
+Prints the worktree path to stdout when Workspace Manager behavior is disabled or `--no-focus` is used.
 
 Use `--no-focus` to create or reuse the new worktree's Managed Workspace without focusing or attaching a client. This works inside and outside a managed environment and cannot be combined with `--no-tmux`.
 
@@ -867,10 +867,10 @@ repos cleanup --dry-run # Preview without removing
 **Options:**
 
 - `--dry-run` - Show what would be removed without actually removing
-- `--tmux` - Close matching Managed Workspaces for removed worktrees. The retained flag name controls tmux, Herdr, or the Herdr app.
+- `--tmux` - Close matching Managed Workspaces for removed worktrees. The flag keeps its historical name and controls the selected Workspace Manager.
 - `--no-tmux` - Leave Managed Workspaces open.
 
-When Herdr or the Herdr app is selected, automatic cleanup closes all matching stale-worktree workspaces, the current one last, and lets the app select any remaining focused workspace. Dry-run reports the exact workspace labels without opening, focusing, attaching, or closing them.
+Automatic cleanup closes all matching stale-worktree workspaces, the current one last, and lets the app select any remaining focused workspace. Dry-run reports the exact workspace labels without opening, focusing, attaching, or closing them.
 
 **A worktree is cleaned up if:**
 
@@ -991,13 +991,13 @@ If `XDG_CONFIG_HOME` is set, uses `$XDG_CONFIG_HOME/repos/config.json` instead.
 | -------------------------- | ------ | ------- | --------------------------------------------------------- |
 | `updateBehavior`           | string | `auto`  | `auto`: auto-install, `notify`: warn only, `off`: disable |
 | `updateCheckIntervalHours` | number | `24`    | Hours between update checks                               |
-| `workspaceManager`         | string | `tmux`  | Workspace Manager: `tmux`, `herdr`, or `herdr-app`        |
+| `workspaceManager`         | string | `herdr` | Workspace Manager: `herdr` or `herdr-app`                 |
 
 ### Workspace Manager selection
 
-The current managed environment takes precedence over `workspaceManager`: Herdr is selected when `HERDR_ENV=1`, including when tmux is also present; then tmux when it is current; then the Herdr app inside one of its terminals (`HC_TERMINAL_ID` is set and the open Herdr window on this computer shows that terminal). Outside these environments, the global setting selects the provider. If the setting is absent, repos selects tmux.
+The current managed environment takes precedence over `workspaceManager`: Herdr is selected when `HERDR_ENV=1`, then the Herdr app inside one of its terminals (`HC_TERMINAL_ID` is set and the open Herdr window on this computer shows that terminal). Outside these environments, the global setting selects the provider. If the setting is absent, repos selects Herdr.
 
-Provider selection does not activate workspace management. It is automatic only inside tmux, Herdr, or the Herdr app. Outside them, use `--tmux` or `--no-focus` to enable the selected provider. Use `--no-tmux` to disable it. These tmux-named flags are retained for compatibility and apply to every provider.
+Provider selection does not activate workspace management. It is automatic only inside Herdr or the Herdr app. Outside them, use `--tmux` or `--no-focus` to enable the selected provider. Use `--no-tmux` to disable it. These flags keep their historical names and apply to every provider.
 
 Repos creates and removes all Git worktrees. A Workspace Manager only opens, focuses, reuses, and closes the associated Managed Workspace. Managed Workspaces use the canonical `repo@branch` label; slashes in branch names become dashes. If that normalized Herdr label already belongs to a different worktree, repos adds a stable hash suffix to keep the labels distinct.
 

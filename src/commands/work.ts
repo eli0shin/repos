@@ -18,7 +18,7 @@ import { printSetupWarnings, runWorktreeSetup } from '../worktree-setup.ts';
 import { resolveWorktreeIndex } from '../worktree-index.ts';
 import { recordBranchStackOnDefault } from '../branch-stack/index.ts';
 
-type WorkOptions = { tmux?: boolean; focus?: boolean; index?: number };
+type WorkOptions = { workspace?: boolean; focus?: boolean; index?: number };
 
 export async function workCommand(
   ctx: CommandContext,
@@ -46,7 +46,7 @@ export async function workCommand(
       process.exit(1);
     }
 
-    if (options?.tmux) {
+    if (options?.workspace) {
       await openManagedWorkspace(
         {
           repoName: repo.name,
@@ -133,7 +133,7 @@ export async function workCommand(
     );
   }
 
-  if (options?.tmux) {
+  if (options?.workspace) {
     await openManagedWorkspace(
       { repoName: repo.name, branch, worktreePath },
       {
@@ -142,7 +142,7 @@ export async function workCommand(
       }
     );
   }
-  if (!options?.tmux || options.focus === false) {
+  if (!options?.workspace || options.focus === false) {
     // Output path to stdout for shell wrapper to cd into
     print(worktreePath);
   }
