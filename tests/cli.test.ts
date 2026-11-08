@@ -10,6 +10,7 @@ import {
 } from '../src/tmux.ts';
 import { writeConfig } from '../src/config.ts';
 import type { ReposConfig } from '../src/types.ts';
+import { tmpRoot } from './helpers.ts';
 
 // Helper to run CLI and capture output
 async function runCli(
@@ -287,9 +288,9 @@ describe('CLI work command', () => {
 });
 
 describe('CLI index options', () => {
-  const testDir = '/tmp/repos-test-cli-clean-index';
-  const sourceDir = '/tmp/repos-test-cli-clean-index-source';
-  const configHome = '/tmp/repos-test-cli-clean-index-config';
+  const testDir = join(tmpRoot, 'repos-test-cli-clean-index');
+  const sourceDir = join(tmpRoot, 'repos-test-cli-clean-index-source');
+  const configHome = join(tmpRoot, 'repos-test-cli-clean-index-config');
 
   afterEach(async () => {
     await rm(testDir, { recursive: true, force: true });
@@ -366,9 +367,9 @@ describe('CLI index options', () => {
 });
 
 describe('CLI --no-focus workflow', () => {
-  const testDir = '/tmp/repos-test-cli-no-focus';
-  const sourceDir = '/tmp/repos-test-cli-no-focus-source';
-  const configHome = '/tmp/repos-test-cli-no-focus-config';
+  const testDir = join(tmpRoot, 'repos-test-cli-no-focus');
+  const sourceDir = join(tmpRoot, 'repos-test-cli-no-focus-source');
+  const configHome = join(tmpRoot, 'repos-test-cli-no-focus-config');
   const repoName = 'cli-no-focus';
   const parentSession = `${repoName}@parent`;
   const childSession = `${repoName}@child`;
@@ -445,9 +446,9 @@ describe('CLI --no-focus workflow', () => {
 });
 
 describe('CLI tmux defaults', () => {
-  const testDir = '/tmp/repos-test-cli-tmux-default';
-  const sourceDir = '/tmp/repos-test-cli-tmux-default-source';
-  const configHome = '/tmp/repos-test-cli-tmux-default-config';
+  const testDir = join(tmpRoot, 'repos-test-cli-tmux-default');
+  const sourceDir = join(tmpRoot, 'repos-test-cli-tmux-default-source');
+  const configHome = join(tmpRoot, 'repos-test-cli-tmux-default-config');
   const sessionNames: string[] = [];
 
   afterEach(async () => {

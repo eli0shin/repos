@@ -11,6 +11,11 @@ export const HERDR_ENVIRONMENT_KEYS = [
   'HERDR_TAB_ID',
   'HERDR_PANE_ID',
   'HERDR_BIN_PATH',
+  // A herdr-core terminal of the Herdr app, and the app's window selection.
+  'HC_TERMINAL_ID',
+  'HC_TERMINAL_SOCKET',
+  'HC_SCOPE',
+  'HERDR_APP_HOME',
 ] as const;
 
 export function isolateHerdrEnvironment(

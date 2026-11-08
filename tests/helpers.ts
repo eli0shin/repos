@@ -1,7 +1,12 @@
 import { expect } from 'bun:test';
+import { realpathSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { runGitCommand } from '../src/git/index.ts';
+
+// Git and process.cwd() report resolved paths, such as /private/tmp on macOS,
+// so tests that compare paths build them from the resolved directory.
+export const tmpRoot = realpathSync('/tmp');
 
 export async function createTestRepo(dir: string): Promise<void> {
   await mkdir(dir, { recursive: true });

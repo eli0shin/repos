@@ -2,9 +2,10 @@ import { describe, expect, test, beforeEach, afterEach } from 'bun:test';
 import { chmod, mkdir, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { getPullRequestStatus } from '../src/github.ts';
+import { tmpRoot } from './helpers.ts';
 
 describe('getPullRequestStatus', () => {
-  const testDir = '/tmp/repos-test-github';
+  const testDir = join(tmpRoot, 'repos-test-github');
   const binDir = join(testDir, 'bin');
   const worktreePath = join(testDir, 'worktree');
   const recordPath = join(testDir, 'record.json');

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import * as tmux from '../src/tmux.ts';
+import { tmpRoot } from './helpers.ts';
 import {
   openManagedWorkspace as openWorkspace,
   planManagedWorkspaceClosure as planClosure,
@@ -10,7 +11,7 @@ import {
   type ManagedWorkspaceTarget,
 } from '../src/workspace-manager/index.ts';
 
-const testDir = `/tmp/repos-test-workspace-manager-${process.pid}`;
+const testDir = join(tmpRoot, `repos-test-workspace-manager-${process.pid}`);
 const repoName = `repos-test-workspace-manager-${process.pid}`;
 const sessions = [
   `${repoName}@feature`,

@@ -399,8 +399,13 @@ describe('config file operations', () => {
       });
     });
 
-    test('accepts tmux, Herdr, and an absent Workspace Manager setting', async () => {
-      for (const workspaceManager of [undefined, 'tmux', 'herdr'] as const) {
+    test('accepts tmux, Herdr, the Herdr app, and an absent Workspace Manager setting', async () => {
+      for (const workspaceManager of [
+        undefined,
+        'tmux',
+        'herdr',
+        'herdr-app',
+      ] as const) {
         const config = {
           repos: [],
           config: workspaceManager === undefined ? {} : { workspaceManager },

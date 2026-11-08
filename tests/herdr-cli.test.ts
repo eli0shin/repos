@@ -12,7 +12,7 @@ import { join } from 'node:path';
 import { writeConfig } from '../src/config.ts';
 import { cloneBare, cloneRepo, runGitCommand } from '../src/git/index.ts';
 import { getCollisionSafeManagedWorkspaceName } from '../src/workspace-manager/name.ts';
-import { createTestRepo, matchString } from './helpers.ts';
+import { createTestRepo, matchString, tmpRoot } from './helpers.ts';
 import {
   createFakeHerdr,
   readFakeHerdrState,
@@ -20,7 +20,7 @@ import {
 } from './fake-herdr.ts';
 
 const root = import.meta.dir.replace('/tests', '');
-const testDir = `/tmp/repos-test-herdr-cli-${process.pid}`;
+const testDir = join(tmpRoot, `repos-test-herdr-cli-${process.pid}`);
 const seedPath = join(testDir, 'seed');
 const remotePath = join(testDir, 'remote.git');
 const repoPath = join(testDir, 'repo');
