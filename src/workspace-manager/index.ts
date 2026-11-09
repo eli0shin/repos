@@ -47,8 +47,10 @@ export function resolveWorkspaceManagerProvider(
   configured?: WorkspaceManagerProvider,
   environment: NodeJS.ProcessEnv = process.env
 ): WorkspaceManagerProvider {
-  if (environment.HERDR_ENV === '1') return 'herdr';
+  // A Herdr app terminal wins over HERDR_ENV: when Herdr launched herdr-core,
+  // the app's terminals inherit Herdr's markers.
   if (isHerdrAppTerminal(environment)) return 'herdr-app';
+  if (environment.HERDR_ENV === '1') return 'herdr';
   return configured ?? 'herdr';
 }
 

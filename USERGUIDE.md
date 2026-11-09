@@ -995,7 +995,7 @@ If `XDG_CONFIG_HOME` is set, uses `$XDG_CONFIG_HOME/repos/config.json` instead.
 
 ### Workspace Manager selection
 
-The current managed environment takes precedence over `workspaceManager`: Herdr is selected when `HERDR_ENV=1`, then the Herdr app inside one of its terminals (`HC_TERMINAL_ID` is set and the open Herdr window on this computer shows that terminal). Outside these environments, the global setting selects the provider. If the setting is absent, repos selects Herdr.
+The current managed environment takes precedence over `workspaceManager`: the Herdr app is selected inside one of its terminals (`HC_TERMINAL_ID` is set and the open Herdr window on this computer shows that terminal), then Herdr when `HERDR_ENV=1`. The Herdr app comes first because its terminals inherit `HERDR_ENV` when Herdr launched herdr-core. Outside these environments, the global setting selects the provider. If the setting is absent, repos selects Herdr.
 
 Provider selection does not activate workspace management. It is automatic only inside Herdr or the Herdr app. Outside them, use `--tmux` or `--no-focus` to enable the selected provider. Use `--no-tmux` to disable it. These flags keep their historical names and apply to every provider.
 

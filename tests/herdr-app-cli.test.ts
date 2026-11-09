@@ -98,7 +98,7 @@ async function window(): Promise<
 const homeSpace = { id: 'sp0', name: 'home', folder: testDir };
 
 describe('Herdr app provider resolution', () => {
-  test('the Herdr app ranks below legacy Herdr, above config, and needs this window to show the terminal', async () => {
+  test('the Herdr app ranks above legacy Herdr and config, and needs this window to show the terminal', async () => {
     const remote = {
       ...fakeSpace('vps/sp1', 'remote', '/srv', 'vps/t2'),
       machine: 'vps',
@@ -114,7 +114,13 @@ describe('Herdr app provider resolution', () => {
       resolveWorkspaceManagerProvider('herdr', app),
       resolveWorkspaceManagerProvider('herdr-app', app),
       resolveWorkspaceManagerProvider('herdr-app', {}),
-      resolveWorkspaceManagerProvider('herdr-app', { ...app, HERDR_ENV: '1' }),
+      // Herdr launched herdr-core, so the app's terminal inherits HERDR_ENV.
+      resolveWorkspaceManagerProvider('herdr', { ...app, HERDR_ENV: '1' }),
+      resolveWorkspaceManagerProvider(undefined, {
+        ...app,
+        HC_TERMINAL_ID: 't2',
+        HERDR_ENV: '1',
+      }),
       // A terminal on another machine has the same markers; this window
       // shows it only under that machine.
       resolveWorkspaceManagerProvider('herdr', {
@@ -126,6 +132,7 @@ describe('Herdr app provider resolution', () => {
         PATH: '/nonexistent',
       }),
     ]).toEqual([
+      'herdr-app',
       'herdr-app',
       'herdr-app',
       'herdr-app',
