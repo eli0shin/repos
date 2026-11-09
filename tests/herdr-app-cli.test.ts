@@ -12,7 +12,7 @@ import {
   readFakeHerdrAppState,
   type FakeHerdrAppState,
 } from './fake-herdr-app.ts';
-import { createTestRepo, tmpRoot } from './helpers.ts';
+import { createTestRepo, matchString, tmpRoot } from './helpers.ts';
 
 const root = import.meta.dir.replace('/tests', '');
 const testDir = join(tmpRoot, `repos-test-herdr-app-cli-${process.pid}`);
@@ -25,6 +25,8 @@ const configPath = join(configHome, 'repos', 'config.json');
 const parentPath = join(testDir, 'repo-parent');
 const childPath = join(testDir, 'repo-child');
 const home = fakeSpace('sp0', 'home', testDir);
+// A space opened without focus gets an id repos chose, as Herdr's own ids look.
+const backgroundSpaceId = matchString(/^sp[0-9a-f]{32}$/);
 let statePath: string;
 
 async function setup(
@@ -82,7 +84,10 @@ async function runCli(
 }
 
 async function window(): Promise<
-  Pick<FakeHerdrAppState, 'selectedSpace' | 'focusedPane' | 'raised'> & {
+  Pick<
+    FakeHerdrAppState,
+    'selectedSpace' | 'focusedPane' | 'focusHistory' | 'raised'
+  > & {
     spaces: { id: string; name: string; folder: string }[];
   }
 > {
@@ -91,6 +96,7 @@ async function window(): Promise<
     spaces: state.spaces.map(({ id, name, folder }) => ({ id, name, folder })),
     selectedSpace: state.selectedSpace,
     focusedPane: state.focusedPane,
+    focusHistory: state.focusHistory,
     raised: state.raised,
   };
 }
@@ -156,7 +162,7 @@ describe.serial('Herdr app CLI worktree workflow', () => {
     await rm(testDir, { recursive: true, force: true });
   });
 
-  test('work and stack open spaces without moving focus, and show them on request', async () => {
+  test('work and stack open spaces without ever moving focus, and show them on request', async () => {
     await setup();
     expect(await runCli(['work', '--no-focus', 'parent', 'repo'])).toEqual({
       stdout: `${parentPath}\n`,
@@ -169,11 +175,16 @@ describe.serial('Herdr app CLI worktree workflow', () => {
       stderr: '',
       exitCode: 0,
     });
-    const parentSpace = { id: 'sp1', name: 'repo@parent', folder: parentPath };
+    const parentSpace = {
+      id: backgroundSpaceId,
+      name: 'repo@parent',
+      folder: parentPath,
+    };
     expect(await window()).toEqual({
       spaces: [homeSpace, parentSpace],
       selectedSpace: 'sp0',
       focusedPane: 'pa-sp0',
+      focusHistory: [],
       raised: 0,
     });
 
@@ -182,10 +193,12 @@ describe.serial('Herdr app CLI worktree workflow', () => {
       stderr: 'Showing existing Herdr app space "repo@parent"\n',
       exitCode: 0,
     });
+    const { spaces } = await window();
     expect(await window()).toEqual({
       spaces: [homeSpace, parentSpace],
-      selectedSpace: 'sp1',
+      selectedSpace: spaces[1]?.id ?? null,
       focusedPane: 'pa1',
+      focusHistory: ['pa1'],
       raised: 1,
     });
 
@@ -199,10 +212,11 @@ describe.serial('Herdr app CLI worktree workflow', () => {
       spaces: [
         homeSpace,
         parentSpace,
-        { id: 'sp2', name: 'repo@child', folder: childPath },
+        { id: backgroundSpaceId, name: 'repo@child', folder: childPath },
       ],
-      selectedSpace: 'sp1',
+      selectedSpace: spaces[1]?.id ?? null,
       focusedPane: 'pa1',
+      focusHistory: ['pa1'],
       raised: 1,
     });
   });
@@ -227,6 +241,7 @@ describe.serial('Herdr app CLI worktree workflow', () => {
       ],
       selectedSpace: 'sp1',
       focusedPane: 'pa1',
+      focusHistory: ['pa1'],
       raised: 0,
     });
     // A terminal this window doesn't show, such as one on another machine,
@@ -275,6 +290,7 @@ describe.serial('Herdr app CLI worktree workflow', () => {
       spaces: [homeSpace, { id: 'sp2', name: 'repo@main', folder: repoPath }],
       selectedSpace: 'sp2',
       focusedPane: 'pa2',
+      focusHistory: ['pa2'],
       raised: 0,
     });
   });
@@ -303,6 +319,7 @@ describe.serial('Herdr app CLI worktree workflow', () => {
       spaces: [homeSpace],
       selectedSpace: 'sp0',
       focusedPane: 'pa-sp0',
+      focusHistory: [],
       raised: 0,
     });
   });
@@ -330,13 +347,34 @@ describe.serial('Herdr app CLI worktree workflow', () => {
     });
     expect((await window()).spaces).toEqual([
       homeSpace,
-      { id: 'sp1', name: 'repo@feature-x', folder: repoPath },
+      { id: backgroundSpaceId, name: 'repo@feature-x', folder: repoPath },
       {
-        id: 'sp2',
+        id: backgroundSpaceId,
         name: getCollisionSafeManagedWorkspaceName('repo', 'feature/x'),
         folder: slashPath,
       },
     ]);
+  });
+
+  test('opening without focus fails clearly when herdr-core cannot start the terminal', async () => {
+    await setup({
+      failure: { command: 'hc run', error: 'hc: herdr-core is not running' },
+    });
+    expect(await runCli(['work', '--no-focus', 'parent', 'repo'])).toEqual({
+      stdout: '',
+      stderr:
+        'Creating worktree for "parent"...\n' +
+        'Created worktree "repo-parent"\n' +
+        'Error: hc: herdr-core is not running\n',
+      exitCode: 1,
+    });
+    expect(await window()).toEqual({
+      spaces: [homeSpace],
+      selectedSpace: 'sp0',
+      focusedPane: 'pa-sp0',
+      focusHistory: [],
+      raised: 0,
+    });
   });
 
   test('without a window, opening fails clearly and cleaning still removes the worktree', async () => {

@@ -1001,7 +1001,7 @@ Provider selection does not activate workspace management. It is automatic only 
 
 Repos creates and removes all Git worktrees. A Workspace Manager only opens, focuses, reuses, and closes the associated Managed Workspace. Managed Workspaces use the canonical `repo@branch` label; slashes in branch names become dashes. If that normalized Herdr label already belongs to a different worktree, repos adds a stable hash suffix to keep the labels distinct.
 
-The Herdr app provider manages spaces in the open Herdr window through the `herdr-app` CLI. A space belongs to the worktree it was opened in. The app shows every new space, so `--no-focus` returns focus to the pane that had it. From outside the app, a focused command also brings the window forward. Repos does not open the window. When `workspaceManager` selects the Herdr app and its window is closed, commands that open a space fail until it is open, and closing commands warn and close nothing. Only spaces on this computer are managed.
+The Herdr app provider manages spaces in the open Herdr window through the `herdr-app` CLI. A space belongs to the worktree it was opened in. With `--no-focus`, the space's shell is started through herdr-core (`hc`), and the app adds the space without moving focus. From outside the app, a focused command also brings the window forward. Repos does not open the window. When `workspaceManager` selects the Herdr app and its window is closed, commands that open a space fail until it is open, and closing commands warn and close nothing. Only spaces on this computer are managed.
 
 ### Stacks
 
