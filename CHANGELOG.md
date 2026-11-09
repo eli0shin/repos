@@ -1,5 +1,11 @@
 # repos
 
+## 3.0.1
+
+### Patch Changes
+
+- [#128](https://github.com/eli0shin/repos/pull/128) [`4946c3f`](https://github.com/eli0shin/repos/commit/4946c3fb0f86c50dcb0af1c99fd294126a7f199b) Thanks [@eli0shin](https://github.com/eli0shin)! - Select the Herdr app before Herdr, so Herdr app terminals that inherited `HERDR_ENV` from Herdr open Herdr app spaces instead of Herdr workspaces
+
 ## 3.0.0
 
 ### Major Changes
