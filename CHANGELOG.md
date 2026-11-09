@@ -1,5 +1,11 @@
 # repos
 
+## 3.0.2
+
+### Patch Changes
+
+- [#130](https://github.com/eli0shin/repos/pull/130) [`772cb51`](https://github.com/eli0shin/repos/commit/772cb5193bddd974735f76afce45d5229a547fe2) Thanks [@eli0shin](https://github.com/eli0shin)! - Open Herdr app spaces with `--no-focus` without moving focus at all, instead of focusing the new space and then moving focus back. A focused command no longer selects a space it just opened, which `space.new` already shows.
+
 ## 3.0.1
 
 ### Patch Changes
