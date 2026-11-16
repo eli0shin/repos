@@ -24,7 +24,6 @@ type HerdrAppSpace = {
 
 type HerdrAppContext = {
   binary: string;
-  coreBinary: string;
   environment: Record<string, string>;
   currentTerminal?: string;
 };
@@ -39,24 +38,17 @@ type PlannedClosure = {
 
 export type HerdrAppAdapterDependencies = {
   binary?: string;
-  coreBinary?: string;
   environment?: NodeJS.ProcessEnv;
 };
 
 // `herdr-app` exits 2 with this message when no window is open.
 const WINDOW_NOT_OPEN = /no Herdr window/;
 
-// The window adopts a new herdr-core terminal within a few hundred
-// milliseconds; five seconds leaves room for a busy machine.
-const ADOPTION_ATTEMPTS = 50;
-const ADOPTION_INTERVAL_MS = 100;
-
 function commandContext(
   dependencies: HerdrAppAdapterDependencies = {}
 ): HerdrAppContext {
   const sourceEnvironment = dependencies.environment ?? process.env;
   const requestedBinary = dependencies.binary ?? 'herdr-app';
-  const requestedCoreBinary = dependencies.coreBinary ?? 'hc';
   const environment = Object.fromEntries(
     Object.entries(sourceEnvironment).filter(
       (entry): entry is [string, string] => entry[1] !== undefined
@@ -66,9 +58,6 @@ function commandContext(
     binary:
       Bun.which(requestedBinary, { PATH: sourceEnvironment.PATH }) ??
       requestedBinary,
-    coreBinary:
-      Bun.which(requestedCoreBinary, { PATH: sourceEnvironment.PATH }) ??
-      requestedCoreBinary,
     environment,
     currentTerminal: sourceEnvironment.HC_TERMINAL_ID || undefined,
   };
@@ -78,15 +67,8 @@ async function runHerdrApp(
   context: HerdrAppContext,
   args: string[]
 ): Promise<OperationResult<CommandResult>> {
-  return runProgram(context, [context.binary, ...args]);
-}
-
-async function runProgram(
-  context: HerdrAppContext,
-  argv: string[]
-): Promise<OperationResult<CommandResult>> {
   try {
-    const proc = Bun.spawn(argv, {
+    const proc = Bun.spawn([context.binary, ...args], {
       env: context.environment,
       stdin: 'ignore',
       stdout: 'pipe',
@@ -105,9 +87,7 @@ async function runProgram(
     return {
       success: false,
       error:
-        error instanceof Error
-          ? error.message
-          : `Failed to run ${argv[0] ?? 'the Herdr app'}`,
+        error instanceof Error ? error.message : 'Failed to run the Herdr app',
     };
   }
 }
@@ -282,61 +262,6 @@ async function matchSpace(
   );
 }
 
-function newHerdrAppId(prefix: 'sp' | 'tb'): string {
-  return `${prefix}${crypto.randomUUID().replaceAll('-', '')}`;
-}
-
-// `space.new` always shows the space it opens, and the app has no option to
-// open one in the background (herdr-app#447). The window does adopt a
-// herdr-core terminal labeled with a space and tab id it doesn't know as a
-// new space, without moving focus. So a space that must not take focus gets
-// its shell from herdr-core, the same login shell `space.new` would start.
-async function openSpaceInBackground(
-  context: HerdrAppContext,
-  target: ManagedWorkspaceTarget,
-  name: string
-): Promise<string> {
-  const spaceId = newHerdrAppId('sp');
-  const started = await runProgram(context, [
-    context.coreBinary,
-    'run',
-    '--bg',
-    '--keep',
-    '--no-parent',
-    '--json',
-    '--cwd',
-    target.worktreePath,
-    '--label',
-    `herdr.space=${spaceId}`,
-    '--label',
-    `herdr.tab=${newHerdrAppId('tb')}`,
-  ]);
-  if (!started.success) fail(started.error);
-  const { stdout, stderr, exitCode } = started.data;
-  if (exitCode !== 0) {
-    fail(stderr || stdout || 'herdr-core could not start a terminal');
-  }
-
-  for (let attempt = 0; attempt < ADOPTION_ATTEMPTS; attempt++) {
-    const spaces = await listSpacesOrFail(context);
-    if (spaces.some((space) => space.id === spaceId)) {
-      const renamed = await runCommand(context, 'space.rename', {
-        id: spaceId,
-        name,
-      });
-      if (!renamed.success) fail(renamed.error);
-      return spaceId;
-    }
-    await Bun.sleep(ADOPTION_INTERVAL_MS);
-  }
-
-  const parsed = parseJson(stdout);
-  if (isRecord(parsed) && typeof parsed.address === 'string') {
-    await runProgram(context, [context.coreBinary, 'kill', parsed.address]);
-  }
-  fail(`The Herdr app did not show the new space "${name}"`);
-}
-
 async function ensureSpace(
   context: HerdrAppContext,
   target: ManagedWorkspaceTarget,
@@ -372,20 +297,18 @@ async function ensureSpace(
     return { space: { ...matched, name }, existed: true };
   }
 
-  let spaceId: string;
-  if (options.keepFocus) {
-    spaceId = await openSpaceInBackground(context, target, name);
-  } else {
-    const created = await runCommand(context, 'space.new', {
-      name,
-      folder: target.worktreePath,
-    });
-    if (!created.success) fail(created.error);
-    if (typeof created.data.space !== 'string') {
-      fail('Herdr app returned invalid JSON');
-    }
-    spaceId = created.data.space;
+  // `focus: false` (Herdr app 0.1.16) adds the space without showing it or
+  // moving focus. Without it, space.new shows the space it opens.
+  const created = await runCommand(context, 'space.new', {
+    name,
+    folder: target.worktreePath,
+    ...(options.keepFocus ? { focus: false } : {}),
+  });
+  if (!created.success) fail(created.error);
+  if (typeof created.data.space !== 'string') {
+    fail('Herdr app returned invalid JSON');
   }
+  const spaceId = created.data.space;
   printStatus(`Opened Herdr app space "${name}"`);
   return {
     space: {

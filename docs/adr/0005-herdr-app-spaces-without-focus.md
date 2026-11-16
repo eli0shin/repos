@@ -1,6 +1,6 @@
 # Open Herdr app spaces without focus through herdr-core
 
-Supersedes the `--no-focus` behavior in [ADR 0002](./0002-herdr-app-workspace-manager.md).
+Supersedes the `--no-focus` behavior in [ADR 0002](./0002-herdr-app-workspace-manager.md). Superseded by [ADR 0006](./0006-herdr-app-space-new-without-focus.md): Herdr app 0.1.16's `space.new` opens a space without focus.
 
 The Herdr app's `space.new` always shows the space it opens and has no option to open one in the background ([herdr-app#447](https://github.com/herdrdev/herdr-app/issues/447)). Repos recorded the focused pane and focused it again, but focus still moved to the new space and back. A person typing in another session had keystrokes land in the wrong place, and agents opening worktrees pulled them out of their work several times a day.
 
