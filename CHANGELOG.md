@@ -1,5 +1,11 @@
 # repos
 
+## 3.0.3
+
+### Patch Changes
+
+- [#132](https://github.com/eli0shin/repos/pull/132) [`ebee4e9`](https://github.com/eli0shin/repos/commit/ebee4e9afc086b2e37955cc7a6e640959ac099c1) Thanks [@eli0shin](https://github.com/eli0shin)! - Open Herdr app spaces with `--no-focus` through `space.new`'s `focus: false` (Herdr app 0.1.16), instead of starting their shell through herdr-core and waiting for the window to adopt it.
+
 ## 3.0.2
 
 ### Patch Changes
