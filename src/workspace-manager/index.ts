@@ -14,7 +14,13 @@ export type ManagedWorkspaceTarget = {
 
 export type ClosureFocusIntent =
   | { kind: 'preserve'; destination: { path: string } }
-  | { kind: 'destination'; target: ManagedWorkspaceTarget }
+  | {
+      kind: 'destination';
+      target: ManagedWorkspaceTarget;
+      // Move to the destination only when the current workspace is among
+      // those closing; otherwise focus stays where it is.
+      onlyWhenLeaving?: boolean;
+    }
   | { kind: 'automatic'; candidates: ManagedWorkspaceTarget[] };
 
 export type WorkspaceManagerOptions = {

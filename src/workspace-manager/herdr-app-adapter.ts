@@ -1,5 +1,5 @@
 import { realpath } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { basename, resolve } from 'node:path';
 import { print, printError, printStatus } from '../output.ts';
 import type { OperationResult } from '../types.ts';
 import type {
@@ -262,6 +262,26 @@ async function matchSpace(
   );
 }
 
+// A space opened by hand keeps the folder it started in, and the app names it
+// after the checkout its first terminal works in, the way Herdr names
+// workspaces: the folder's last part. So the main worktree's own space is
+// often called just the repo's folder name.
+async function matchSpaceNamedAfterFolder(
+  spaces: HerdrAppSpace[],
+  target: ManagedWorkspaceTarget,
+  excludedSpaceIds: Set<string>
+): Promise<HerdrAppSpace | null> {
+  const names = new Set([
+    basename(target.worktreePath),
+    basename(await canonicalPath(target.worktreePath)),
+  ]);
+  return (
+    spaces.find(
+      (space) => !excludedSpaceIds.has(space.id) && names.has(space.name)
+    ) ?? null
+  );
+}
+
 async function ensureSpace(
   context: HerdrAppContext,
   target: ManagedWorkspaceTarget,
@@ -296,6 +316,14 @@ async function ensureSpace(
     }
     return { space: { ...matched, name }, existed: true };
   }
+
+  // Reused under the app's own name, which keeps following its checkout.
+  const namedAfterFolder = await matchSpaceNamedAfterFolder(
+    spaces,
+    target,
+    excluded
+  );
+  if (namedAfterFolder) return { space: namedAfterFolder, existed: true };
 
   // `focus: false` (Herdr app 0.1.16) adds the space without showing it or
   // moving focus. Without it, space.new shows the space it opens.
@@ -450,7 +478,13 @@ export async function planHerdrAppClosure(
             : focus.candidates[0]?.worktreePath;
       if (workingDirectory) process.chdir(workingDirectory);
 
-      if (focus.kind === 'destination') {
+      const leaving = executing.some(
+        (closure) => closure.spaceId === currentSpaceId
+      );
+      const moveFocus =
+        focus.kind === 'destination' && (!focus.onlyWhenLeaving || leaving);
+
+      if (focus.kind === 'destination' && moveFocus) {
         const destination = await ensureSpace(context, focus.target, {
           keepFocus: false,
           excludedSpaceIds: new Set(
@@ -479,7 +513,7 @@ export async function planHerdrAppClosure(
         }
       }
 
-      if (focus.kind === 'destination') await raiseWindow(context);
+      if (moveFocus) await raiseWindow(context);
     },
   };
 }

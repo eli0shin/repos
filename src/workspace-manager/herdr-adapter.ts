@@ -878,8 +878,16 @@ export async function planHerdrClosure(
             : focus.candidates[0]?.worktreePath;
       if (workingDirectory) process.chdir(workingDirectory);
 
+      const leaving =
+        currentWorkspaceId !== undefined &&
+        executingClosures.some(
+          (closure) => closure.workspaceId === currentWorkspaceId
+        );
+      const moveFocus =
+        focus.kind === 'destination' && (!focus.onlyWhenLeaving || leaving);
+
       if (
-        focus.kind === 'destination' &&
+        moveFocus &&
         executingClosures.length > 0 &&
         plannedServerIdentity &&
         !(await verifyServerIdentity(context, plannedServerIdentity))
@@ -887,7 +895,7 @@ export async function planHerdrClosure(
         return;
       }
 
-      if (focus.kind === 'destination') {
+      if (focus.kind === 'destination' && moveFocus) {
         const destination = await ensureWorkspace(
           context,
           focus.target,
@@ -914,7 +922,7 @@ export async function planHerdrClosure(
         }
       }
 
-      if (focus.kind === 'destination' && !context.insideHerdr) {
+      if (moveFocus && !context.insideHerdr) {
         await attachHerdr(context);
       }
     },

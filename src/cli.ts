@@ -278,7 +278,7 @@ program
   .option('--dry-run', 'Show what would be removed without removing')
   .option(
     '-i, --index <index>',
-    'Use a worktree index from repos list',
+    'Use a worktree index from repos list; focus moves only when closing the current Managed Workspace',
     parseWorktreeIndex
   )
   .addOption(

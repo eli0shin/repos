@@ -417,6 +417,83 @@ describe.serial('Herdr CLI focused clean destinations', () => {
     ]);
   });
 
+  test('an indexed clean moves focus only when it closes the current workspace', async () => {
+    const cloned = await cloneRepo(remotePath, repoPath);
+    if (!cloned.success) throw new Error(cloned.error);
+    await runGitCommand(
+      ['worktree', 'add', '-b', 'parent', parentPath],
+      repoPath
+    );
+    await runGitCommand(
+      ['worktree', 'add', '-b', 'child', childPath],
+      repoPath
+    );
+    await writeConfig(configPath, {
+      repos: [{ name: 'repo', url: remotePath, path: repoPath }],
+      config: { updateBehavior: 'off', workspaceManager: 'herdr' },
+    });
+    const notes = {
+      workspace_id: 'w1',
+      label: 'notes',
+      focused: true,
+      pane_count: 1,
+      tab_count: 1,
+      active_tab_id: 'w1:t1',
+      agent_status: 'unknown',
+    } satisfies FakeHerdrWorkspace;
+    const parentWorkspace = linkedWorkspace(
+      'w2',
+      'repo@parent',
+      parentPath,
+      repoPath
+    );
+    await configureFakeHerdr({
+      nextId: 4,
+      workspaces: [
+        notes,
+        parentWorkspace,
+        linkedWorkspace('w3', 'repo@child', childPath, repoPath),
+      ],
+      mainPaths: [repoPath],
+    });
+    const inWorkspace = (workspaceId: string) => ({
+      HERDR_ENV: '1',
+      HERDR_BIN_PATH: join(fakeDir, 'herdr'),
+      HERDR_SOCKET_PATH: join(testDir, 'herdr-test.sock'),
+      HERDR_SESSION: `repos-test-${process.pid}`,
+      HERDR_WORKSPACE_ID: workspaceId,
+    });
+
+    expect(
+      await runCli(['clean', '-i', '1', 'repo'], repoPath, inWorkspace('w1'))
+    ).toEqual({
+      stdout: '',
+      stderr:
+        'Removing worktree for "child"...\nRemoved worktree "repo-child"\n',
+      exitCode: 0,
+    });
+    expect((await readFakeHerdrState(statePath)).workspaces).toEqual([
+      notes,
+      parentWorkspace,
+    ]);
+
+    expect(
+      await runCli(['clean', '-i', '1', 'repo'], parentPath, inWorkspace('w2'))
+    ).toEqual({
+      stdout: '',
+      stderr:
+        'Removing worktree for "parent"...\nRemoved worktree "repo-parent"\nOpened Herdr workspace "repo@main"\n',
+      exitCode: 0,
+    });
+    expect((await readFakeHerdrState(statePath)).workspaces).toEqual([
+      { ...notes, focused: false },
+      {
+        ...linkedWorkspace('w4', 'repo@main', repoPath, repoPath, false),
+        focused: true,
+      },
+    ]);
+  });
+
   test('focuses a bare repository under its default branch', async () => {
     const barePath = join(testDir, 'repo.git');
     const cloned = await cloneBare(remotePath, barePath);
