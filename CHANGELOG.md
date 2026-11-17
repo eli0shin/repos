@@ -1,5 +1,11 @@
 # repos
 
+## 3.0.4
+
+### Patch Changes
+
+- [#134](https://github.com/eli0shin/repos/pull/134) [`a857d01`](https://github.com/eli0shin/repos/commit/a857d019c8bd50688714244e3b8ae0e01813f4c7) Thanks [@eli0shin](https://github.com/eli0shin)! - `repos clean --index` moves focus to the main worktree only when it closes the Managed Workspace it runs in. Herdr app spaces opened by hand, which the app names after their checkout's folder, are reused instead of opening a duplicate `repo@main` space.
+
 ## 3.0.3
 
 ### Patch Changes
