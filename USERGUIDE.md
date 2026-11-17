@@ -780,7 +780,7 @@ repos clean parent --force         # Discard changes or remove a parent with chi
 
 **Options:**
 
-- `-i, --index <index>` - Use a worktree index from `repos list` instead of a branch name
+- `-i, --index <index>` - Use a worktree index from `repos list` instead of a branch name. Focus moves to the main worktree only when the command runs in the Managed Workspace it closes; otherwise it stays where it is
 - `--force` - Force removal when the worktree has uncommitted changes or the branch has stacked children
 - `--no-focus` - Close the worktree's Managed Workspace without changing focus; prints the logical destination path
 - `--no-tmux` - Disable Workspace Manager behavior entirely
@@ -1001,7 +1001,7 @@ Provider selection does not activate workspace management. It is automatic only 
 
 Repos creates and removes all Git worktrees. A Workspace Manager only opens, focuses, reuses, and closes the associated Managed Workspace. Managed Workspaces use the canonical `repo@branch` label; slashes in branch names become dashes. If that normalized Herdr label already belongs to a different worktree, repos adds a stable hash suffix to keep the labels distinct.
 
-The Herdr app provider manages spaces in the open Herdr window through the `herdr-app` CLI. A space belongs to the worktree it was opened in. With `--no-focus`, the app adds the space without showing it or moving focus; this needs Herdr app 0.1.16 or newer. From outside the app, a focused command also brings the window forward. Repos does not open the window. When `workspaceManager` selects the Herdr app and its window is closed, commands that open a space fail until it is open, and closing commands warn and close nothing. Only spaces on this computer are managed.
+The Herdr app provider manages spaces in the open Herdr window through the `herdr-app` CLI. A space belongs to the worktree it was opened in. A space opened by hand keeps the folder it started in, and the app names it after the checkout its first terminal works in, so repos also reuses a space whose name is the worktree's folder name (often the repo's name for the main worktree) and leaves that name alone. With `--no-focus`, the app adds the space without showing it or moving focus; this needs Herdr app 0.1.16 or newer. From outside the app, a focused command also brings the window forward. Repos does not open the window. When `workspaceManager` selects the Herdr app and its window is closed, commands that open a space fail until it is open, and closing commands warn and close nothing. Only spaces on this computer are managed.
 
 ### Stacks
 

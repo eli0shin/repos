@@ -288,6 +288,62 @@ describe.serial('Herdr app CLI worktree workflow', () => {
     });
   });
 
+  // A space opened by hand keeps the folder it started in, and the app names
+  // it after the checkout its terminal works in.
+  const repoSpace = fakeSpace('sp9', 'repo', configHome, 't9');
+  const repoSpaceInWindow = { id: 'sp9', name: 'repo', folder: configHome };
+
+  test('an indexed clean from another space keeps focus where it is', async () => {
+    await setup({
+      spaces: [home, repoSpace],
+      selectedSpace: 'sp9',
+      focusedPane: 'pa-sp9',
+    });
+    await runCli(['work', '--no-focus', 'parent', 'repo']);
+
+    expect(
+      await runCli(['clean', '-i', '1', 'repo'], repoPath, {
+        HC_TERMINAL_ID: 't9',
+      })
+    ).toEqual({
+      stdout: '',
+      stderr:
+        'Removing worktree for "parent"...\nRemoved worktree "repo-parent"\n',
+      exitCode: 0,
+    });
+    expect(await Bun.file(join(parentPath, 'test.txt')).exists()).toBe(false);
+    expect(await window()).toEqual({
+      spaces: [homeSpace, repoSpaceInWindow],
+      selectedSpace: 'sp9',
+      focusedPane: 'pa-sp9',
+      focusHistory: [],
+      raised: 0,
+    });
+  });
+
+  test('leaving the cleaned space shows the space the app named after the main worktree', async () => {
+    await setup({ spaces: [home, repoSpace] });
+    await runCli(['work', '--no-focus', 'parent', 'repo']);
+
+    expect(
+      await runCli(['clean', '-i', '1', 'repo'], parentPath, {
+        HC_TERMINAL_ID: 't1',
+      })
+    ).toEqual({
+      stdout: '',
+      stderr:
+        'Removing worktree for "parent"...\nRemoved worktree "repo-parent"\nShowing existing Herdr app space "repo"\n',
+      exitCode: 0,
+    });
+    expect(await window()).toEqual({
+      spaces: [homeSpace, repoSpaceInWindow],
+      selectedSpace: 'sp9',
+      focusedPane: 'pa-sp9',
+      focusHistory: ['pa-sp9'],
+      raised: 0,
+    });
+  });
+
   test('cleanup previews and closes the stale-worktree space', async () => {
     await setup();
     await runCli(['work', '--no-focus', 'parent', 'repo']);

@@ -137,7 +137,8 @@ Options:
   --force              Force removal with uncommitted changes or stacked
                        children
   --dry-run            Show what would be removed without removing
-  -i, --index <index>  Use a worktree index from repos list
+  -i, --index <index>  Use a worktree index from repos list; focus moves only
+                       when closing the current Managed Workspace
   -t, --tmux           Close the Managed Workspace and focus the main worktree
                        (default: false)
   --no-tmux            Disable the Workspace Manager, even inside a managed

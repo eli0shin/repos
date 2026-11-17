@@ -156,6 +156,9 @@ export async function cleanCommand(
             branch: destinationWorktree?.branch || defaultBranch,
             worktreePath: destinationWorktree?.path ?? repo.path,
           },
+          // An index names a worktree from `repos list`, usually not the
+          // one this command runs in.
+          onlyWhenLeaving: options.index !== undefined,
         },
         { provider: config.config?.workspaceManager }
       );
