@@ -1003,7 +1003,7 @@ Repos creates and removes all Git worktrees. A Workspace Manager only opens, foc
 
 The Herdr app provider manages spaces in the open Herdr window through the `herdr-app` CLI. A space belongs to the worktree it was opened in. A space opened by hand keeps the folder it started in, and the app names it after the checkout its first terminal works in, so repos also reuses a space whose name is the worktree's folder name (often the repo's name for the main worktree) and leaves that name alone. With `--no-focus`, the app adds the space without showing it or moving focus; this needs Herdr app 0.1.16 or newer. From outside the app, a focused command also brings the window forward. Repos does not open the window. When `workspaceManager` selects the Herdr app and its window is closed, commands that open a space fail until it is open, and closing commands warn and close nothing. Only spaces on this computer are managed.
 
-The Herdr app provider drives either Herdr app or herdr-frontend, which serve the same CLI. The plain text file `~/.config/herdr/frontend` selects the app: `herdr-frontend` runs `herdr-frontend`, and anything else, including a missing or unreadable file, runs `herdr-app`. The selected app's window also decides whether a terminal is one of its terminals.
+The Herdr app provider drives either Herdr app or herdr-frontend, which serve the same CLI. The plain text file `$XDG_CONFIG_HOME/herdr/frontend` (`~/.config/herdr/frontend` when `XDG_CONFIG_HOME` is unset or empty) selects the app: `herdr-frontend` runs `herdr-frontend`, and anything else, including a missing or unreadable file, runs `herdr-app`. The selected app's window also decides whether a terminal is one of its terminals.
 
 ### Stacks
 

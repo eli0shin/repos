@@ -22,9 +22,8 @@ const remotePath = join(testDir, 'remote.git');
 const repoPath = join(testDir, 'repo');
 const configHome = join(testDir, 'config');
 const configPath = join(configHome, 'repos', 'config.json');
-// HOME for the CLI, which holds the frontend setting.
-const userHome = join(testDir, 'home');
-const frontendPath = join(userHome, '.config', 'herdr', 'frontend');
+// The frontend setting lives in the test's XDG_CONFIG_HOME.
+const frontendPath = join(configHome, 'herdr', 'frontend');
 const parentPath = join(testDir, 'repo-parent');
 const childPath = join(testDir, 'repo-child');
 const home = fakeSpace('sp0', 'home', testDir);
@@ -63,7 +62,6 @@ async function runCli(
     Object.entries({
       ...process.env,
       XDG_CONFIG_HOME: configHome,
-      HOME: userHome,
       PATH: `${fakeDir}:${process.env.PATH}`,
       HERDR_ENV: undefined,
       HC_TERMINAL_ID: undefined,
@@ -112,7 +110,11 @@ describe('Herdr app provider resolution', () => {
     };
     const spaces = [fakeSpace('sp0', 'home', testDir, 't1'), remote];
     await createFakeHerdrApp(fakeDir, { spaces });
-    const app = { HC_TERMINAL_ID: 't1', PATH: fakeDir, HOME: userHome };
+    const app = {
+      HC_TERMINAL_ID: 't1',
+      PATH: fakeDir,
+      XDG_CONFIG_HOME: configHome,
+    };
     expect([
       resolveWorkspaceManagerProvider('herdr', app),
       resolveWorkspaceManagerProvider('herdr-app', app),
@@ -158,13 +160,15 @@ describe('Herdr app provider resolution', () => {
       { spaces: [fakeSpace('sp0', 'home', testDir, 'in-frontend')] },
       'herdr-frontend'
     );
-    const managedTerminals = (): string[] =>
+    const managedTerminals = (
+      location: NodeJS.ProcessEnv = { XDG_CONFIG_HOME: configHome }
+    ): string[] =>
       ['in-app', 'in-frontend'].filter(
         (terminal) =>
           resolveWorkspaceManagerProvider('herdr', {
             HC_TERMINAL_ID: terminal,
             PATH: fakeDir,
-            HOME: userHome,
+            ...location,
           }) === 'herdr-app'
       );
     const select = async (setting: string): Promise<string[]> => {
@@ -181,12 +185,27 @@ describe('Herdr app provider resolution', () => {
     await rm(frontendPath, { force: true });
     await mkdir(frontendPath, { recursive: true });
     const unreadable = managedTerminals();
-    expect({ missing, frontend, app, unrecognized, unreadable }).toEqual({
+    // An empty XDG_CONFIG_HOME counts as unset, so HOME's .config holds it.
+    const userHome = join(testDir, 'home');
+    await Bun.write(
+      join(userHome, '.config', 'herdr', 'frontend'),
+      'herdr-frontend'
+    );
+    const emptyXdg = managedTerminals({ XDG_CONFIG_HOME: '', HOME: userHome });
+    expect({
+      missing,
+      frontend,
+      app,
+      unrecognized,
+      unreadable,
+      emptyXdg,
+    }).toEqual({
       missing: ['in-app'],
       frontend: ['in-frontend'],
       app: ['in-app'],
       unrecognized: ['in-app'],
       unreadable: ['in-app'],
+      emptyXdg: ['in-frontend'],
     });
     await rm(testDir, { recursive: true, force: true });
   });
@@ -497,7 +516,7 @@ describe.serial('Herdr app CLI worktree workflow', () => {
 describe.serial('herdr-frontend CLI worktree workflow', () => {
   let frontendStatePath: string;
 
-  // Both apps are installed and `~/.config/herdr/frontend` selects
+  // Both apps are installed and `$XDG_CONFIG_HOME/herdr/frontend` selects
   // herdr-frontend.
   async function setupFrontend(
     initial: Partial<FakeHerdrAppState> = {},

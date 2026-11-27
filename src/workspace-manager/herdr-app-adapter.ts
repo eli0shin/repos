@@ -15,7 +15,7 @@ import {
 } from './name.ts';
 
 // A Herdr app space. Its terminals run in herdr-core (`hc`); the CLI of the
-// app `~/.config/herdr/frontend` selects, `herdr-app` or `herdr-frontend`,
+// app `${XDG_CONFIG_HOME:-~/.config}/herdr/frontend` selects, `herdr-app` or `herdr-frontend`,
 // drives the open window that arranges them.
 type HerdrAppSpace = {
   id: string;

@@ -28,11 +28,15 @@ export function getConfigPath(): string {
 }
 
 // Shared by Eli's Herdr tools: it names the app they drive, `herdr-app` or
-// `herdr-frontend`.
+// `herdr-frontend`. It sits in herdr-core's config directory, where an empty
+// XDG_CONFIG_HOME counts as unset.
 export function getHerdrFrontendPath(
   environment: NodeJS.ProcessEnv = process.env
 ): string {
-  return join(environment.HOME || homedir(), '.config', 'herdr', 'frontend');
+  const configHome =
+    environment.XDG_CONFIG_HOME ||
+    join(environment.HOME || homedir(), '.config');
+  return join(configHome, 'herdr', 'frontend');
 }
 
 // A missing, unreadable or unrecognized setting means the Herdr app.
