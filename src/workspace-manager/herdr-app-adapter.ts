@@ -1,5 +1,6 @@
 import { realpath } from 'node:fs/promises';
 import { basename, resolve } from 'node:path';
+import { readHerdrFrontend } from '../config.ts';
 import { print, printError, printStatus } from '../output.ts';
 import type { OperationResult } from '../types.ts';
 import type {
@@ -13,8 +14,9 @@ import {
   getManagedWorkspaceName,
 } from './name.ts';
 
-// A Herdr app space. Its terminals run in herdr-core (`hc`); the `herdr-app`
-// CLI drives the open window that arranges them.
+// A Herdr app space. Its terminals run in herdr-core (`hc`); the CLI of the
+// app `${XDG_CONFIG_HOME:-~/.config}/herdr/frontend` selects, `herdr-app` or `herdr-frontend`,
+// drives the open window that arranges them.
 type HerdrAppSpace = {
   id: string;
   name: string;
@@ -41,14 +43,16 @@ export type HerdrAppAdapterDependencies = {
   environment?: NodeJS.ProcessEnv;
 };
 
-// `herdr-app` exits 2 with this message when no window is open.
+// `herdr-app` and `herdr-frontend` exit 2 with this message when no window is
+// open.
 const WINDOW_NOT_OPEN = /no Herdr window/;
 
 function commandContext(
   dependencies: HerdrAppAdapterDependencies = {}
 ): HerdrAppContext {
   const sourceEnvironment = dependencies.environment ?? process.env;
-  const requestedBinary = dependencies.binary ?? 'herdr-app';
+  const requestedBinary =
+    dependencies.binary ?? readHerdrFrontend(sourceEnvironment);
   const environment = Object.fromEntries(
     Object.entries(sourceEnvironment).filter(
       (entry): entry is [string, string] => entry[1] !== undefined
@@ -119,12 +123,14 @@ function terminalsOf(space: Record<string, unknown>): string[] {
 }
 
 // herdr-core also runs terminals on machines the app reaches over SSH. Those
-// carry the same markers and may have their own `herdr-app`, so only this
-// computer's open window showing the terminal makes it a Herdr app terminal.
+// carry the same markers and may have their own app, so only this computer's
+// open window showing the terminal makes it a Herdr app terminal.
 export function isHerdrAppTerminal(environment: NodeJS.ProcessEnv): boolean {
   const terminal = environment.HC_TERMINAL_ID;
   if (!terminal) return false;
-  const binary = Bun.which('herdr-app', { PATH: environment.PATH });
+  const binary = Bun.which(readHerdrFrontend(environment), {
+    PATH: environment.PATH,
+  });
   if (!binary) return false;
   try {
     const listed = Bun.spawnSync([binary, 'ls'], {

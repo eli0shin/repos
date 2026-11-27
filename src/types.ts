@@ -13,6 +13,9 @@ export type RepoEntry = {
 
 export type UpdateBehavior = 'auto' | 'notify' | 'off';
 export type WorkspaceManagerProvider = 'herdr' | 'herdr-app';
+// The app whose window the `herdr-app` provider drives. Both serve the same
+// `ls | do | status` CLI.
+export type HerdrFrontend = 'herdr-app' | 'herdr-frontend';
 
 export type ReposConfigSettings = {
   updateBehavior?: UpdateBehavior;

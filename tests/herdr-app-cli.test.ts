@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { rm } from 'node:fs/promises';
+import { mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { writeConfig } from '../src/config.ts';
 import { cloneRepo, runGitCommand } from '../src/git/index.ts';
@@ -22,6 +22,8 @@ const remotePath = join(testDir, 'remote.git');
 const repoPath = join(testDir, 'repo');
 const configHome = join(testDir, 'config');
 const configPath = join(configHome, 'repos', 'config.json');
+// The frontend setting lives in the test's XDG_CONFIG_HOME.
+const frontendPath = join(configHome, 'herdr', 'frontend');
 const parentPath = join(testDir, 'repo-parent');
 const childPath = join(testDir, 'repo-child');
 const home = fakeSpace('sp0', 'home', testDir);
@@ -60,7 +62,6 @@ async function runCli(
     Object.entries({
       ...process.env,
       XDG_CONFIG_HOME: configHome,
-      FAKE_HERDR_APP_STATE: statePath,
       PATH: `${fakeDir}:${process.env.PATH}`,
       HERDR_ENV: undefined,
       HC_TERMINAL_ID: undefined,
@@ -81,7 +82,7 @@ async function runCli(
   return { stdout, stderr, exitCode };
 }
 
-async function window(): Promise<
+async function window(path = statePath): Promise<
   Pick<
     FakeHerdrAppState,
     'selectedSpace' | 'focusedPane' | 'focusHistory' | 'raised'
@@ -89,7 +90,7 @@ async function window(): Promise<
     spaces: { id: string; name: string; folder: string }[];
   }
 > {
-  const state = await readFakeHerdrAppState(statePath);
+  const state = await readFakeHerdrAppState(path);
   return {
     spaces: state.spaces.map(({ id, name, folder }) => ({ id, name, folder })),
     selectedSpace: state.selectedSpace,
@@ -108,11 +109,11 @@ describe('Herdr app provider resolution', () => {
       machine: 'vps',
     };
     const spaces = [fakeSpace('sp0', 'home', testDir, 't1'), remote];
-    const fake = await createFakeHerdrApp(fakeDir, { spaces });
+    await createFakeHerdrApp(fakeDir, { spaces });
     const app = {
       HC_TERMINAL_ID: 't1',
       PATH: fakeDir,
-      FAKE_HERDR_APP_STATE: fake.statePath,
+      XDG_CONFIG_HOME: configHome,
     };
     expect([
       resolveWorkspaceManagerProvider('herdr', app),
@@ -148,6 +149,65 @@ describe('Herdr app provider resolution', () => {
     await createFakeHerdrApp(fakeDir, { spaces, window: false });
     expect(resolveWorkspaceManagerProvider(undefined, app)).toBe('herdr');
     await rm(fakeDir, { recursive: true, force: true });
+  });
+
+  test('the frontend setting picks the window that must show the terminal', async () => {
+    await createFakeHerdrApp(fakeDir, {
+      spaces: [fakeSpace('sp0', 'home', testDir, 'in-app')],
+    });
+    await createFakeHerdrApp(
+      fakeDir,
+      { spaces: [fakeSpace('sp0', 'home', testDir, 'in-frontend')] },
+      'herdr-frontend'
+    );
+    const managedTerminals = (
+      location: NodeJS.ProcessEnv = { XDG_CONFIG_HOME: configHome }
+    ): string[] =>
+      ['in-app', 'in-frontend'].filter(
+        (terminal) =>
+          resolveWorkspaceManagerProvider('herdr', {
+            HC_TERMINAL_ID: terminal,
+            PATH: fakeDir,
+            ...location,
+          }) === 'herdr-app'
+      );
+    const select = async (setting: string): Promise<string[]> => {
+      await rm(frontendPath, { recursive: true, force: true });
+      await Bun.write(frontendPath, setting);
+      return managedTerminals();
+    };
+
+    const missing = managedTerminals();
+    const frontend = await select('herdr-frontend\n');
+    const app = await select('herdr-app');
+    const unrecognized = await select('herdr-frontend-nightly');
+    // A directory where the file should be can't be read.
+    await rm(frontendPath, { force: true });
+    await mkdir(frontendPath, { recursive: true });
+    const unreadable = managedTerminals();
+    // An empty XDG_CONFIG_HOME counts as unset, so HOME's .config holds it.
+    const userHome = join(testDir, 'home');
+    await Bun.write(
+      join(userHome, '.config', 'herdr', 'frontend'),
+      'herdr-frontend'
+    );
+    const emptyXdg = managedTerminals({ XDG_CONFIG_HOME: '', HOME: userHome });
+    expect({
+      missing,
+      frontend,
+      app,
+      unrecognized,
+      unreadable,
+      emptyXdg,
+    }).toEqual({
+      missing: ['in-app'],
+      frontend: ['in-frontend'],
+      app: ['in-app'],
+      unrecognized: ['in-app'],
+      unreadable: ['in-app'],
+      emptyXdg: ['in-frontend'],
+    });
+    await rm(testDir, { recursive: true, force: true });
   });
 });
 
@@ -450,5 +510,128 @@ describe.serial('Herdr app CLI worktree workflow', () => {
       exitCode: 0,
     });
     expect(await Bun.file(join(parentPath, 'test.txt')).exists()).toBe(false);
+  });
+});
+
+describe.serial('herdr-frontend CLI worktree workflow', () => {
+  let frontendStatePath: string;
+
+  // Both apps are installed and `$XDG_CONFIG_HOME/herdr/frontend` selects
+  // herdr-frontend.
+  async function setupFrontend(
+    initial: Partial<FakeHerdrAppState> = {},
+    workspaceManager: WorkspaceManagerProvider = 'herdr-app'
+  ): Promise<void> {
+    await setup({}, workspaceManager);
+    ({ statePath: frontendStatePath } = await createFakeHerdrApp(
+      fakeDir,
+      {
+        spaces: [home],
+        selectedSpace: 'sp0',
+        focusedPane: 'pa-sp0',
+        ...initial,
+      },
+      'herdr-frontend'
+    ));
+    await Bun.write(frontendPath, 'herdr-frontend\n');
+  }
+
+  async function herdrAppCalls(): Promise<string[][]> {
+    return (await readFakeHerdrAppState(statePath)).calls;
+  }
+
+  beforeEach(async () => {
+    await rm(testDir, { recursive: true, force: true });
+  });
+
+  afterEach(async () => {
+    await rm(testDir, { recursive: true, force: true });
+  });
+
+  test('inside herdr-frontend, work and clean drive its window and leave the Herdr app alone', async () => {
+    await setupFrontend({}, 'herdr');
+    expect(
+      await runCli(['work', 'parent', 'repo'], root, {
+        HC_TERMINAL_ID: 't-sp0',
+      })
+    ).toEqual({
+      stdout: '',
+      stderr:
+        'Creating worktree for "parent"...\nCreated worktree "repo-parent"\nOpened Herdr app space "repo@parent"\n',
+      exitCode: 0,
+    });
+    expect(await window(frontendStatePath)).toEqual({
+      spaces: [
+        homeSpace,
+        { id: 'sp1', name: 'repo@parent', folder: parentPath },
+      ],
+      selectedSpace: 'sp1',
+      focusedPane: 'pa1',
+      focusHistory: ['pa1'],
+      raised: 0,
+    });
+
+    expect(
+      await runCli(['clean', 'parent', 'repo'], parentPath, {
+        HC_TERMINAL_ID: 't1',
+      })
+    ).toEqual({
+      stdout: '',
+      stderr:
+        'Removing worktree for "parent"...\nRemoved worktree "repo-parent"\nOpened Herdr app space "repo@main"\n',
+      exitCode: 0,
+    });
+    expect(await window(frontendStatePath)).toEqual({
+      spaces: [homeSpace, { id: 'sp2', name: 'repo@main', folder: repoPath }],
+      selectedSpace: 'sp2',
+      focusedPane: 'pa2',
+      focusHistory: ['pa1', 'pa2'],
+      raised: 0,
+    });
+    expect(await herdrAppCalls()).toEqual([]);
+  });
+
+  test('from outside, a focused work brings the herdr-frontend window forward', async () => {
+    await setupFrontend();
+    expect(await runCli(['work', '-t', 'parent', 'repo'])).toEqual({
+      stdout: '',
+      stderr:
+        'Creating worktree for "parent"...\nCreated worktree "repo-parent"\nOpened Herdr app space "repo@parent"\n',
+      exitCode: 0,
+    });
+    expect(await window(frontendStatePath)).toEqual({
+      spaces: [
+        homeSpace,
+        { id: 'sp1', name: 'repo@parent', folder: parentPath },
+      ],
+      selectedSpace: 'sp1',
+      focusedPane: 'pa1',
+      focusHistory: ['pa1'],
+      raised: 1,
+    });
+    expect(await herdrAppCalls()).toEqual([]);
+  });
+
+  test('without a herdr-frontend window, opening fails clearly though the Herdr app is open', async () => {
+    await setupFrontend({ window: false });
+    expect(await runCli(['work', '--no-focus', 'parent', 'repo'])).toEqual({
+      stdout: '',
+      stderr:
+        'Creating worktree for "parent"...\n' +
+        'Created worktree "repo-parent"\n' +
+        'Error: The Herdr app is not open. Open it and retry (herdr-frontend: no Herdr window at /fake/herdr-frontend.sock: No such file or directory (os error 2))\n',
+      exitCode: 1,
+    });
+
+    expect(
+      await runCli(['clean', '--no-focus', 'parent', 'repo'], parentPath)
+    ).toEqual({
+      stdout: `${repoPath}\n`,
+      stderr:
+        'Warning: the Herdr app is not open, so no Herdr app spaces were closed\n' +
+        'Removing worktree for "parent"...\nRemoved worktree "repo-parent"\n',
+      exitCode: 0,
+    });
+    expect(await herdrAppCalls()).toEqual([]);
   });
 });
