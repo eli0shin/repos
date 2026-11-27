@@ -1,5 +1,6 @@
 import { chmod, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
+import type { HerdrFrontend } from '../src/types.ts';
 
 export type FakeHerdrAppSpace = {
   id: string;
@@ -26,9 +27,9 @@ export type FakeHerdrAppState = {
   failure?: { command: string; error: string };
 };
 
-const FAKE_HERDR_APP_SOURCE = String.raw`#!/usr/bin/env bun
-const statePath = process.env.FAKE_HERDR_APP_STATE;
-if (!statePath) process.exit(3);
+// Runs after `const name` and `const statePath`, which createFakeHerdrApp
+// writes above it.
+const FAKE_HERDR_APP_SOURCE = String.raw`
 const args = process.argv.slice(2);
 const state = await Bun.file(statePath).json();
 state.calls.push(args);
@@ -49,7 +50,7 @@ const select = (space) => {
 
 if (!state.window) {
   await save();
-  console.error('herdr-app: no Herdr window at /fake/herdr-app.sock: No such file or directory (os error 2)');
+  console.error(name + ': no Herdr window at /fake/' + name + '.sock: No such file or directory (os error 2)');
   process.exit(2);
 }
 if (args.length === 0) {
@@ -112,13 +113,16 @@ if (command === 'pane.focus') {
 await reply({ error: 'unsupported: ' + command }, 1);
 `;
 
+// `herdr-frontend` serves the same CLI as `herdr-app`, so the fake plays
+// either one, each with its own state.
 export async function createFakeHerdrApp(
   directory: string,
-  initial: Partial<FakeHerdrAppState> = {}
+  initial: Partial<FakeHerdrAppState> = {},
+  name: HerdrFrontend = 'herdr-app'
 ): Promise<{ binary: string; statePath: string }> {
   await mkdir(directory, { recursive: true });
-  const binary = join(directory, 'herdr-app');
-  const statePath = join(directory, 'herdr-app-state.json');
+  const binary = join(directory, name);
+  const statePath = join(directory, `${name}-state.json`);
   const state = {
     window: initial.window ?? true,
     nextId: initial.nextId ?? 1,
@@ -132,7 +136,10 @@ export async function createFakeHerdrApp(
   } satisfies FakeHerdrAppState;
   await Bun.write(
     binary,
-    FAKE_HERDR_APP_SOURCE.replace('#!/usr/bin/env bun', `#!${process.execPath}`)
+    `#!${process.execPath}\n` +
+      `const name = ${JSON.stringify(name)};\n` +
+      `const statePath = ${JSON.stringify(statePath)};` +
+      FAKE_HERDR_APP_SOURCE
   );
   await chmod(binary, 0o755);
   await Bun.write(statePath, JSON.stringify(state));

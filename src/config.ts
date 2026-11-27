@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { mkdir, realpath } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
@@ -10,6 +11,7 @@ import {
 } from './git/index.ts';
 import { printError, printStatus } from './output.ts';
 import type {
+  HerdrFrontend,
   RepoEntry,
   ReposConfig,
   OperationResult,
@@ -23,6 +25,29 @@ export function getConfigPath(): string {
     ? join(xdgConfigHome, 'repos')
     : join(homedir(), '.config', 'repos');
   return join(configDir, 'config.json');
+}
+
+// Shared by Eli's Herdr tools: it names the app they drive, `herdr-app` or
+// `herdr-frontend`.
+export function getHerdrFrontendPath(
+  environment: NodeJS.ProcessEnv = process.env
+): string {
+  return join(environment.HOME || homedir(), '.config', 'herdr', 'frontend');
+}
+
+// A missing, unreadable or unrecognized setting means the Herdr app.
+export function readHerdrFrontend(
+  environment: NodeJS.ProcessEnv = process.env
+): HerdrFrontend {
+  try {
+    const setting = readFileSync(
+      getHerdrFrontendPath(environment),
+      'utf8'
+    ).trim();
+    return setting === 'herdr-frontend' ? 'herdr-frontend' : 'herdr-app';
+  } catch {
+    return 'herdr-app';
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
