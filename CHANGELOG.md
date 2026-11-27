@@ -1,5 +1,11 @@
 # repos
 
+## 3.1.0
+
+### Minor Changes
+
+- [#136](https://github.com/eli0shin/repos/pull/136) [`c46635c`](https://github.com/eli0shin/repos/commit/c46635c8bd892d1c0ccc4fa7696ab40e5e5423dd) Thanks [@eli0shin](https://github.com/eli0shin)! - The Herdr app provider drives herdr-frontend when `${XDG_CONFIG_HOME:-~/.config}/herdr/frontend` holds `herdr-frontend`. Without that file, repos runs `herdr-app` as before.
+
 ## 3.0.4
 
 ### Patch Changes
